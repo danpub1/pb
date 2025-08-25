@@ -27,15 +27,22 @@ If a line does not look like an image file name, it should be treated as text to
     Old-Faithful.jpeg The most famous geyser!
 
 In case there is any ambiguity, a line starting with an exclamation point followed by a space should be treated as an image.
-If the file name contains spaces or single quotes, it should be wrapped in single quotes to remove ambiguity.  Any
-single quotes in the file name would then need to be doubled. 
+If the file name contains spaces or backticks (\`), it may be wrapped in backticks to remove ambiguity.  Any
+backticks or backslashes in the file name would then need to be escaped by preceding them with a backslash. 
 
 Similarly, a line starting with a hash or pound sign (#) followed by a space
 should be treated as a line of text.
 
-    ! 'Old Faithful''s Erupting.jpeg'
+    ! `Old Faithful's Erupting.jpeg`
     ! Steamboat Geyser.jpg
     # Two of the famous geysers in Yellowstone.
+
+### Captions
+
+Normally, a block of text goes all the way across the page. To make a text that corresponds to an image, include it on the same line:
+
+    `Steamboat Geyser.jpg` Steamboat Geyser is one of the famous ones in Yellowstone.
+    ! Old Faithful's Erupting.jpeg # Old Faithful's Erupting!
 
 ### Wildcards
 
@@ -43,12 +50,9 @@ Multiple images can be specified with wildcards (asterisks and question marks). 
 
     ! Vacation*.jpg
 
-### Captions
+Recursion into subdirectories may also be specified:
 
-Normally, a block of text goes all the way across the page. To make a text that corresponds to an image, include it on the same line:
-
-    'Steamboat Geyser.jpg' Steamboat Geyser is one of the famous ones in Yellowstone.
-    ! 'Old Faithful''s Erupting.jpeg' # Old Faithful's Erupting!
+    ! *.jpg recurse:true # {{FileName}}
 
 ### Blank Lines 
 
@@ -76,42 +80,40 @@ Any line beginning with two forward slashes should be ignored, so it can be used
 `$` = style  
 `!` = image  
 `#` = text  
-`>` = child  
 `@` = include  
-`|` = column
 
 Given a list of images and text, pb will arrange them into rows and pages. How it does that can be controlled
-with directives, which are additional lines starting with -, --, ---, etc.
+with directives, which are additional lines starting with ---, +++, ***, etc.
 
-    *** size:621x810 margins:45,45,45,54
+    *** size:621x810 margin:36
 
-    ! 'Old Faithful''s Erupting.jpeg'
+    ! `Old Faithful's Erupting.jpeg`
     ! Steamboat Geyser.jpg
     # Two of the famous geysers in Yellowstone.
 
-Directives have settings (in the example above, size and margins are the settings), and settings have names and values 
-(the value of the size setting above is 621x810).  Settings have default values, which are used if the directive is not
+Directives have settings (in the example above, size and margin are the settings), and settings have names and values 
+(the value of the size setting above is 621x810).  Settings have default values, which are used if the setting is not
 specified.  For example, the setting 'units' has a default value of 'pt' (points).  Since it was not specified in the book directive,
 the size is assumed to be in points, 621 points wide by 810 points tall (or 8.625 x 11.25 inches).  If a value 
-needs to have a space, wrap it in single quotes like you would with an image name.
+needs to have a space, wrap it in backticks like you would with an image name.
 
 Images and text have directives also, ! and #, respectively, so that the following is equivalent to 
 the previous example:
 
     *** size:621x810
           margins:54,45,45,45
-    ! image:'Old Faithful''s Erupting.jpeg'
-    ! image:'Steamboat Geyser.jpg'
-    # text:'Two of the famous geysers in Yellowstone.'
+    ! image:`Old Faithful's Erupting.jpeg`
+    ! image:`Steamboat Geyser.jpg`
+    # text:`Two of the famous geysers in Yellowstone.`
 
 Like other directives, images can have settings (a full list will follow).  The following are equivalent to each other:
 
-    ! image:'Old Faithful''s Erupting.jpeg' straighten:1 frame:4,#FF0000
-    'Old Faithful''s Erupting.jpeg' straighten:1 frame:4,#FF0000
+    ! image:`Old Faithful's Erupting.jpeg` straighten:1 frame:4,#FF0000
+    `Old Faithful's Erupting.jpeg` straighten:1 frame:4,#FF0000
 
 Text can also have settings.  The following are equivalent:
 
-    # content:'Two of the famous geysers in Yellowstone.' padding:1
+    # text:`Two of the famous geysers in Yellowstone.` padding:1
     # padding:1 Two of the famous geysers in Yellowstone.
 
 Note that without an explicit 'image' setting, image settings come after the image name.  Without an explicit 'text' setting,
@@ -148,12 +150,12 @@ The following lines are all equivalent:
     #3C Two of the famous geysers in Yellowstone.
     ###C Two of the famous geysers in Yellowstone.
 
-Text without a leading # uses style 1 and the default alignment.  A typical setup is to use style 1 for body text, 
-style 2 for sub headings, and style 3 for main-headings.
+Text without a leading # uses style 1 and the default alignment.  A typical setup would be to use style 1 for body text, 
+style 2 for sub headings, and style 3 for main-headings. Note that this makes the usage of multiple #'s kind of the opposite of Markdown.
 
 Styles are defined using $ followed by a space, the name of the style, and the settings being defined:
 
-    $ 1 align:center font:'Fira Code Medium'
+    $ 1 align:center font:`Fira Code Medium`
 
 Although particularly useful with text, styles can be defined and applied to other directives also.
 The easiest way to understand styles is that {{name}} is simply replaced with everything that was defined for it.
@@ -165,11 +167,11 @@ Similar replacement is made within a text.
 
 There are several pre-defined styles, useful as part of texts in headers and footers:
 
-{{Date}}
-{{Year}}
-{{FileName}}
-{{PageNumber}}
-{{TotalPages}}
+{{Date}} (Current date, not the date of the image file)  
+{{Year}}  
+{{FileName}} (the name of an image file, useful with wildcards)  
+{{PageNumber}}  
+{{TotalPages}}  
 
 ## Special Texts
 
@@ -192,7 +194,7 @@ An image with a setting `name` is not part of the layout, but is used for a page
 
 ## Nested Layout
 
-TODO
+FUTURE THOUGHT
 
 A nested layout is a set of lines starting with >.
 The first line in the section must either specify the aspect ratio and size settings, 
