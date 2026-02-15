@@ -1,6 +1,7 @@
 package main
 
 import (
+	"image/color"
 	"log"
 	"math"
 	"regexp"
@@ -15,10 +16,18 @@ const (
 	MillimetersPerInch = 25.4
 )
 
+func VerboseLog(message string) {
+	if *verboseFlag {
+		log.Print(message)
+	}
+}
+
 func Atof(astring string) float64 {
 	avalue, err := strconv.ParseFloat(astring, 64)
 	if err != nil {
-		log.Fatal(err)
+		avalue = 0.0
+		log.Print("Error converting \"" + astring + "\" to float64")
+		log.Print(err)
 	}
 	return avalue
 }
@@ -26,17 +35,24 @@ func Atof(astring string) float64 {
 func Atoi(astring string) int {
 	avalue, err := strconv.ParseInt(astring, 10, 0)
 	if err != nil {
-		log.Fatal(err)
+		avalue = 0
+		log.Print("Error converting \"" + astring + "\" to int64")
+		log.Print(err)
 	}
 	return int(avalue)
 }
 
-func dotsFromUnitsFloat(length float64, density float64) float64 {
-	return length * density
-}
+func Atob(astring string) bool {
+	if astring == "false" || astring == "no" || astring == "0" || len(strings.TrimSpace(astring)) == 0 {
+		return false
+	}
 
-func unitsFromDots(dots float64, density float64) float64 {
-	return dots / density
+	if astring == "true" || astring == "yes" || astring == "1" {
+		return true
+	}
+
+	log.Print("Error converting \"" + astring + "\" to bool")
+	return false
 }
 
 // W(%)[:x]H(%)[+-]X(%)[+-]Y(%),
@@ -59,82 +75,160 @@ func unitsFromDots(dots float64, density float64) float64 {
 //     pageWidth, pageHeight := SizeDots(sPageSize, sDensity)
 // }
 
-func MaxWidth(sPageSize string, margin string) float64 {
-	_, mr, _, ml := FourTwoOne(margin)
-	pw, _ := Size(sPageSize)
-
-	return pw - mr - ml
+type TRBL struct {
+	top    float64
+	right  float64
+	bottom float64
+	left   float64
 }
 
-func MaxHeight(sPageSize string, margin string) float64 {
-	mt, _, mb, _ := FourTwoOne(margin)
-	_, ph := Size(sPageSize)
-
-	return ph - mt - mb
+type FrameInfo struct {
+	size  TRBL
+	color color.NRGBA
 }
 
-var rxRelativeSize, _ = regexp.Compile(`^(much-smaller$|smaller$|normal$|larger$|much-larger$|scale:)`)
-
-func ParseImageWidth(widthName string, item PbItem) float64 {
-	maxWidth := MaxWidth(item.Setting("page-size"), item.Setting("margin"))
-	sWidth := item.Setting(widthName)
-
-	width := 0.0
-
-	if rxRelativeSize.MatchString(sWidth) {
-		sBaseWidth := item.RowSetting(widthName)
-		if rxRelativeSize.MatchString(sBaseWidth) {
-			sBaseWidth = item.PageSetting(widthName)
-			if rxRelativeSize.MatchString(sBaseWidth) {
-				sBaseWidth = item.BookSetting(widthName)
-				if rxRelativeSize.MatchString(sBaseWidth) {
-					sBaseWidth = item.DefaultSetting((widthName))
-				}
-			}
-		}
-
-		baseWidth := 0.0
-		if !strings.HasSuffix(sBaseWidth, "%") {
-			baseWidth = Atof(sBaseWidth)
-		} else {
-			sBaseWidth, _ = strings.CutSuffix(sBaseWidth, "%")
-			baseWidth = Atof(sBaseWidth) / 100 * maxWidth
-		}
-		switch sWidth {
-		case "much-smaller":
-			width = baseWidth / 1.25 / 1.25
-		case "smaller":
-			width = baseWidth / 1.25
-		case "normal":
-			width = baseWidth
-		case "larger":
-			width = baseWidth * 1.25
-		case "much-larger":
-			width = baseWidth * 1.25 * 1.25
-		default: // scale:
-			sWidth, _ = strings.CutPrefix(sWidth, "scale:")
-			width = baseWidth * Atof(sWidth)
-		}
-	} else if !strings.HasSuffix(sWidth, "%") {
-		width = Atof(sWidth)
-	} else {
-		sWidth = strings.TrimSuffix(sWidth, "%")
-		width = Atof(sWidth) / 100 * maxWidth
+// margins: t,r,b,l / tb,rl / tbrl -> t, r, b, l
+func FourTwoOne(sFourTwoOne string) (float64, float64, float64, float64) {
+	parts := strings.SplitN(sFourTwoOne, ",", 4)
+	if len(parts) == 1 {
+		val := Atof(parts[0])
+		return val, val, val, val
 	}
 
-	return math.Min(width, maxWidth)
+	if len(parts) == 2 {
+		val1 := Atof(parts[0])
+		val2 := Atof(parts[1])
+		return val1, val2, val1, val2
+	}
+
+	if len(parts) == 4 {
+		val1 := Atof(parts[0])
+		val2 := Atof(parts[1])
+		val3 := Atof(parts[2])
+		val4 := Atof(parts[3])
+		return val1, val2, val3, val4
+	}
+
+	return 0, 0, 0, 0
 }
 
-func ParseWidth(sWidth string, sPageSize string, margin string) float64 {
-	maxWidth := MaxWidth(sPageSize, margin)
+func FourTwoOneTRBL(sFourTwoOne string) *TRBL {
+	val1, val2, val3, val4 := FourTwoOne(sFourTwoOne)
+	return &TRBL{val1, val2, val3, val4}
+}
+
+// WxH
+func FloatSize(sSize string) (float64, float64) {
+	w, h := Size(sSize)
+	return Atof(w), Atof(h)
+}
+
+func Size(sSize string) (string, string) {
+	if len(sSize) == 0 {
+		return "0", "0"
+	}
+
+	parts := strings.SplitN(sSize, "x", 2)
+	if len(parts) == 2 {
+		sWidth := parts[0]
+		sHeight := parts[1]
+		return sWidth, sHeight
+	} else {
+		return sSize, sSize
+	}
+}
+
+// e.g. text box minus margins, page minus margins
+func ContainerWidth(sItemSize string, margin string) float64 {
+	w, _ := ContainerSize(sItemSize, margin)
+	return w
+}
+
+func ContainerHeight(sItemSize string, margin string) float64 {
+	_, h := ContainerSize(sItemSize, margin)
+	return h
+}
+
+func ContainerSize(sItemSize string, margin string) (float64, float64) {
+	mt, mr, mb, ml := FourTwoOne(margin)
+	pw, ph := FloatSize(sItemSize)
+
+	return pw - mr - ml, ph - mt - mb
+}
+
+func WidthForContainer(sSize string, sContainerSize string, margin string) float64 {
+	w, _ := SizeForContainer(sSize, sContainerSize, margin)
+	return w
+}
+
+func HeightForContainer(sSize string, sContainerSize string, margin string) float64 {
+	_, h := SizeForContainer(sSize, sContainerSize, margin)
+	return h
+}
+
+// This could be a "size" setting or a "max-size" setting
+func SizeForContainer(sSize string, sContainerSize string, margin string) (float64, float64) {
+	sWidth, sHeight := Size(sSize)
+	width := 0.0
+	height := 0.0
+
+	maxWidth, maxHeight := ContainerSize(sContainerSize, margin)
 
 	if !strings.HasSuffix(sWidth, "%") {
-		return math.Min(Atof(sWidth), maxWidth)
+		width = math.Min(Atof(sWidth), maxWidth)
+	} else {
+		sWidth = strings.TrimSuffix(sWidth, "%")
+		width = math.Min(Atof(sWidth), 100) / 100 * maxWidth
 	}
 
-	sWidth = strings.TrimSuffix(sWidth, "%")
+	if !strings.HasSuffix(sHeight, "%") {
+		height = math.Min(Atof(sHeight), maxHeight)
+	} else {
+		sHeight = strings.TrimSuffix(sHeight, "%")
+		height = math.Min(Atof(sHeight), 100) / 100 * maxHeight
+	}
 
-	return math.Min(Atof(sWidth), 100) / 100 * maxWidth
+	return width, height
+}
+
+var rxValidColor, _ = regexp.Compile("^#([[:xdigit:]]{1,4}|[[:xdigit:]]{6}|[[:xdigit:]]{8})$")
+
+func colorToNRGBA(text string) color.NRGBA {
+	rr, gg, bb, aa := int64(0), int64(0), int64(0), int64(255)
+
+	if rxValidColor.MatchString(text) {
+		text, _ = strings.CutPrefix(text, "#")
+		switch len(text) {
+		case 1:
+			rr, _ = strconv.ParseInt(text+text, 16, 0)
+			gg = rr
+			bb = rr
+		case 2:
+			rr, _ = strconv.ParseInt(text, 16, 0)
+			gg = rr
+			bb = rr
+		case 3:
+			rr, _ = strconv.ParseInt(text[0:1]+text[0:1], 16, 0)
+			gg, _ = strconv.ParseInt(text[1:2]+text[1:2], 16, 0)
+			bb, _ = strconv.ParseInt(text[2:3]+text[2:3], 16, 0)
+		case 4:
+			rr, _ = strconv.ParseInt(text[0:1]+text[0:1], 16, 0)
+			gg, _ = strconv.ParseInt(text[1:2]+text[1:2], 16, 0)
+			bb, _ = strconv.ParseInt(text[2:3]+text[2:3], 16, 0)
+			aa, _ = strconv.ParseInt(text[3:4]+text[3:4], 16, 0)
+		case 6:
+			rr, _ = strconv.ParseInt(text[0:2], 16, 0)
+			gg, _ = strconv.ParseInt(text[2:4], 16, 0)
+			bb, _ = strconv.ParseInt(text[4:6], 16, 0)
+		case 8:
+			rr, _ = strconv.ParseInt(text[0:2], 16, 0)
+			gg, _ = strconv.ParseInt(text[2:4], 16, 0)
+			bb, _ = strconv.ParseInt(text[4:6], 16, 0)
+			aa, _ = strconv.ParseInt(text[6:8], 16, 0)
+		}
+	}
+
+	return color.NRGBA{uint8(rr), uint8(gg), uint8(bb), uint8(aa)}
 }
 
 func lengthToPoints(length float64, units int) float64 {

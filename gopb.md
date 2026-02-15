@@ -9,55 +9,54 @@ is to support enough formatting to make that possible.
 
 ## Introduction
 
-### Simple Images and Text
+### Content: Images and Text
 
-If a line  looks like it starts with the name of a image file name
-(i.e. there is something that ends with .jpg, .jpeg, .tif, .tiff, .bmp or .png), it should be treated as such and the image
-laid out on the current page.
+A line with the name of an image file causes the image to be laid out on the current page.
 
-If the whole line does not look like the name of an image file name, 
-then the first part should treated as an image file name and the image is laid out on the current page,
-and the text following the image file name should be treated as a caption for the image.
-
-If a line does not look like an image file name, it should be treated as text to be included. 
+A line starting with a `#` (hash or pound sign) is text that will be laid out on the current page.
 
     Old Faithful.jpeg
     Steamboat Geyser.jpg
-    Two of the famous geysers in Yellowstone.
-    Old-Faithful.jpeg The most famous geyser!
-
-In case there is any ambiguity, a line starting with an exclamation point followed by a space should be treated as an image.
-If the file name contains spaces or backticks (\`), it may be wrapped in backticks to remove ambiguity.  Any
-backticks or backslashes in the file name would then need to be escaped by preceding them with a backslash. 
-
-Similarly, a line starting with a hash or pound sign (#) followed by a space
-should be treated as a line of text.
-
-    ! `Old Faithful's Erupting.jpeg`
-    ! Steamboat Geyser.jpg
     # Two of the famous geysers in Yellowstone.
 
 ### Captions
 
 Normally, a block of text goes all the way across the page. To make a text that corresponds to an image, include it on the same line:
 
-    `Steamboat Geyser.jpg` Steamboat Geyser is one of the famous ones in Yellowstone.
-    ! Old Faithful's Erupting.jpeg # Old Faithful's Erupting!
+    Steamboat Geyser.jpg # Steamboat Geyser is one of the famous ones in Yellowstone.
+    Old Faithful's Erupting.jpeg # Old Faithful's Erupting!
+
+### Settings
+
+For an image with a caption, settings come between the image and the caption:
+
+    Old Faithful's Erupting.jpeg $ straighten:1.0 font:name # Old Faithful's Erupting!
+
+For an image without a caption, settings come after the image:
+
+    Old Faithful's Erupting.jpeg $ straighten:1.0
+
+For a text without an image, settings come before:
+
+    $ font:name # Old Faithful's Erupting!
 
 ### Wildcards
 
 Multiple images can be specified with wildcards (asterisks and question marks).  All images matching the names will be included. 
 
-    ! Vacation*.jpg
+    Vacation*.jpg
 
-Recursion into subdirectories may also be specified:
+Recursion into subdirectories may also be specified
 
-    ! *.jpg recurse:true # {{FileName}}
+    *.jpg $ recurse:true # {{FileName}}
 
 ### Blank Lines 
 
-To make the text file easier to read, blank lines may be included and they should be ignored.
-Any line that begins with one or more spaces should be treated as a continuation of the previous line.
+To make the text file easier to read, blank lines are ignored.
+
+### Continuation of Lines 
+
+Any line that begins with one or more spaces is treated as a continuation of the previous line.
 
 ### Comments
 
@@ -66,104 +65,140 @@ Any line beginning with two forward slashes should be ignored, so it can be used
     Old Faithful.jpeg
     Steamboat Geyser.jpg
 
-    Two of the famous geysers in Yellowstone.
+    # Two of the famous geysers in Yellowstone.
        I saw both of these erupting during my visit.
     // TODO: go back and figure out what the dates were!
 
-    Old-Faithful.jpeg The most famous geyser!
+    Old-Faithful.jpeg # The most famous geyser!
 
-## Directives
+### Escaping special characters
 
-`***` = book  
-`+++` = page  
-`---` = row  
-`$` = style  
-`!` = image  
-`#` = text  
-`@` = include  
+* An image filename starting with directive, add a `\` before the first character (Unlikely)
+* A space in an image filename before `$` or `#` must be replaced with `\_` (Unlikely)
+* A space in a setting value  must be replaced with `\_` (Possible in font name.)
+* Backslash must be replaced with two backslashes `\\` in image filenames or settings. (Likely in file paths on Windows)
+* Internally, `\_` is replaced with space. Anything else after a slash is replaced with that thing.
+* Only image filenames and setting values need to be escaped, not text after a `#`
+
+Example, first without escaping, then with escaping:
+```
+---images---\image #.jpg $ font:\folder\Wierd # Name # Old Faithful's #$!@% Erupting
+\---images---\\image\_#.jpg $ font:\\folder\\Wierd\_#\_Name # Old Faithful's #$!@% Erupting
+```
+
+### Character Set
+
+A pb file is assumed to be UTF-8.
+
+## Directives: Formatting & Styling Content
+
+`***` = starts a new book, defines settings for the book
+`+++` = starts a new page, defines settings for the page  
+`---` = starts a new row, defines settings for the row
+`...` = starts a new column, defines settings for the column  
+`$$$` = define style
+`@@@` = include another pb file
 
 Given a list of images and text, pb will arrange them into rows and pages. How it does that can be controlled
-with directives, which are additional lines starting with ---, +++, ***, etc.
+with directives, which are additional lines starting with ..., ---, +++, ***, etc.
 
     *** size:621x810 margin:36
 
-    ! `Old Faithful's Erupting.jpeg`
-    ! Steamboat Geyser.jpg
+    Old Faithful's Erupting.jpeg
+    Steamboat Geyser.jpg
     # Two of the famous geysers in Yellowstone.
 
 Directives have settings (in the example above, size and margin are the settings), and settings have names and values 
 (the value of the size setting above is 621x810).  Settings have default values, which are used if the setting is not
 specified.  For example, the setting 'units' has a default value of 'pt' (points).  Since it was not specified in the book directive,
-the size is assumed to be in points, 621 points wide by 810 points tall (or 8.625 x 11.25 inches).  If a value 
-needs to have a space, wrap it in backticks like you would with an image name.
-
-Images and text have directives also, ! and #, respectively, so that the following is equivalent to 
-the previous example:
-
-    *** size:621x810
-          margins:54,45,45,45
-    ! image:`Old Faithful's Erupting.jpeg`
-    ! image:`Steamboat Geyser.jpg`
-    # text:`Two of the famous geysers in Yellowstone.`
-
-Like other directives, images can have settings (a full list will follow).  The following are equivalent to each other:
-
-    ! image:`Old Faithful's Erupting.jpeg` straighten:1 frame:4,#FF0000
-    `Old Faithful's Erupting.jpeg` straighten:1 frame:4,#FF0000
-
-Text can also have settings.  The following are equivalent:
-
-    # text:`Two of the famous geysers in Yellowstone.` padding:1
-    # padding:1 Two of the famous geysers in Yellowstone.
-
-Note that without an explicit 'image' setting, image settings come after the image name.  Without an explicit 'text' setting,
-text settings come before the text.
+the size is assumed to be in points, 621 points wide by 810 points tall (or 8.625 x 11.25 inches).
 
 ## Styles
 
-Most of the settings for text are specified via a style, which can be applied in three ways:
+Styles are defined using $$$ followed by a space, the name of the style, and the settings being defined:
 
-1. {{style-name}}
-1. Starting the text with #<number\>
-1. Starting the text with multiple #'s
+    $$$ 1 font:Arial.ttf size:9
+    $$$ 3 font:Arial.ttf size:11
+    $$$ bold font:Arial-Bold.ttf
+    $$$ copyright , (C) 2026, John Smith. All rights reserved.
 
-The following lines are all equivalent:
+Styles are applied by replacing a reference to the style with the defined value of the style.
+There are three ways to reference a style:
+1. `{{style-name}}` in the settings section or text section of a content line
+1. $style-name - equivalent to `$ {{style-name}}`
+1. #<number\> or ### (a specific number of hashes)
 
-    # {{3}} Two of the famous geysers in Yellowstone.
+Styles can reference other styles, as long as they have been defined previously
+
+    $$$ bold3 {{3}} {{bold}}
+
+Examples:
+
+    image.jpg $ {{bold}} size:larger # Caption{{copyright}}
+    image.jpg $bold size:larger # Caption{{copyright}}
+    image.jpg $bold size:larger #3 Caption{{copyright}}
+    image.jpg $bold size:larger ### Caption{{copyright}}
+
+The three sources of settings in the above content lines have the following priority from highest to lowest:
+1. The explicit settings in the $ section
+1. The settings applied by #number
+1. The settings applied by $name
+
+Example:
+    $$$ 1 size:11pt
+    $$$ 2 font:Arial-Italic.ttf
+    $$$ 3 font:Arial-Bold.ttf
+    $$$ 4 font:Arial.ttf
+
+    $2 {{3}} # This text is in Arial-Bold.ttf.  The explicit style takes precedence over both the # and $ styles.
+    $ {{2}} {{1}} {{3}} # This text is in Arial-Bold.ttf.  Equivalent of above.
+    $2 #4 This text is in Arial.ttf.  The style for # takes precedence over the style for $
+    $2 # This text is in Arial-Italic.ttf. Style 1 is applied but doesn't specify a font
+    # This text is in whatever font is specified for the row, page, or book.  Style 1 is applied but doesn't specify a font
+
+Because styles replace reference to themselves, styles that have settings values need to escape those values as needed. Styles used to replace text do not need escaping.
+
+    $$$ 1 font:Neon\_Sans.ttf
+
+The following lines are equivalent:
+
     #3 Two of the famous geysers in Yellowstone.
     ### Two of the famous geysers in Yellowstone.
 
-Styles with a number for the name can be applied right in the leading #.  
-
-Alignment may also be applied in the leading #, by appending:
+Alignment may also be applied in the #, by appending:
 
 * C for Center
 * R for Right
 * L for Left
 * J for Justified
-* B for Binding
+* B for Bindingtitle Yellowstone Vacation Photos
 * E for Edge
 
-The following lines are all equivalent:
+The following lines are roughly equivalent (assuming that what's in style 1 and style 3 are for different settings)
 
-    # {{3}} align:center Two of the famous geysers in Yellowstone.
+    $3 align:center # Two of the famous geysers in Yellowstone.
+    $ {{3}} align:center # Two of the famous geysers in Yellowstone.
+    $ align:center #3 Two of the famous geysers in Yellowstone.
     #3C Two of the famous geysers in Yellowstone.
     ###C Two of the famous geysers in Yellowstone.
 
-Text without a leading # uses style 1 and the default alignment.  A typical setup would be to use style 1 for body text, 
-style 2 for sub headings, and style 3 for main-headings. Note that this makes the usage of multiple #'s kind of the opposite of Markdown.
+Since # is by definition style 1, a typical setup would be to use style 1 for body text, 
+style 2 for sub headings, and style 3 for main-headings. Note that this makes the usage of multiple #'s the opposite of Markdown.
 
-Styles are defined using $ followed by a space, the name of the style, and the settings being defined:
+Although particularly useful with text, styles can be defined and applied to other directives also, because {{name}} is replaced with everything that was defined for it.
 
-    $ 1 align:center font:`Fira Code Medium`
+    $$$ book-defaults size:610x820 margin:36
+    *** {{book-defaults}}
 
-Although particularly useful with text, styles can be defined and applied to other directives also.
-The easiest way to understand styles is that {{name}} is simply replaced with everything that was defined for it.
-Similar replacement is made within a text.
+Styles are just replacement text, and can be used in image filenames as well:
 
-    $ title Yellowstone Vacation Photos
+    $$$ dan /home/photos/australia/dan
+    $$$ amie /home/photos/australia/amie
 
-## Special Style Names
+    {{dan}}/IMG12345.jpg # Sydney Harbour
+    {{amie}}/IMAGE12345.jpg # Koala Bear
+
+### Built-in Styles
 
 There are several pre-defined styles, useful as part of texts in headers and footers:
 
@@ -180,8 +215,6 @@ A text with a setting `name` is not part of the layout, but is used for various 
     #1E name:header-first {{title}}\t{{Date}}\t{{PageNumber}}
     #1E name:footer-first Copyright {{Year}}, All rights reserved.
 
-The predefined names are `header-` and `footer-` along with `first`, `last`, `even`, `odd`, and/or `any`.
-
 ## Tabs
 
 `\t` in a text is a tab.  Two tabs are pre-defined: the first is a center tab, and the second is a right tab.
@@ -191,31 +224,6 @@ However, as shown in the example above, tabs are most useful when there is text 
 ## Special Images
 
 An image with a setting `name` is not part of the layout, but is used for a page background or image frame.
-
-## Nested Layout
-
-FUTURE THOUGHT
-
-A nested layout is a set of lines starting with >.
-The first line in the section must either specify the aspect ratio and size settings, 
-or size and offset settings to specify a floating
-layout.  Page-level directives in a nested layout only
-apply to the nested layout.
-
-When an image and a text are specified on the same line together
-(or, equivalently, when an image has a content setting),
-this is considered a caption.
-Captions are treated as a nested layout,
-where the aspect ratio of the layout is calculated based on the aspect 
-ratio of the image plus a pre-defined number of caption lines,
-plus gutters.
-So the following are roughly equivalent:
-
-    ! Old Faithful's Erupting.jpeg # Old Faithful's Erupting!
-    
-    | 50% 
-    > Old Faithful's Erupting.jpeg
-    > Old Faithful's Erupting!
 
 # Settings
 
@@ -230,10 +238,14 @@ Setting values that are colors may be specified as:
 * \#ABCDEF - An RGB triple with 100% opacity
 * \#89ABCDEF - An RGB triple with opacity EF
 
+Settings specified at the book level apply to all the content in the book.  
+Settings specified at the page level apply to all the content of the page.  
+Settings specified at the row level apply to all the content in the row.  
+Settings specified for an individual image or text apply only to that content.  
+But some settings only apply at a higher level, so it doesn't make sense to specify them lower down.
+
 Book-Level Settings
 -------------------
-
-The following settings only apply at the book level.
 
 * `units:pt`: the units of measure used in laying out the book.  One of `in`, `cm`, `mm`, `pt`
 * `density:2`: pixels per unit when converting the content to a final bitmap.  2 pixels per pt (144 ppi) could be considered for a preview quality, and 5 pixels per pt (360 ppi) could be appropriate for printing.
@@ -242,29 +254,22 @@ The following settings only apply at the book level.
 * `output-mozjpeg:yes`: use the mozjpeg compressor to create the final bitmap.
 * `output-compression:97`: define the jpeg compression level when creating the final bitmap
 * `binding:side`: define the binding location, one of `side`, `top`, `none`.  Controls if margins are alternated by even/odd pages, and how the UI displays spreads
-* `background-first`
-* `background-even`
-* `background-odd`
-* `background-last`
-* `background-any` ?
-* `filename`
+* `background-first`, `background-even`, `background-odd`, `background-last`
+* `header-first`, `header-even`, `header-odd`, `header-last`
+* `footer-first`, `footer-even`, `footer-odd`, `footer-last`
+* `filename` ?
 
-Book- or Page-Level Settings
-----------------------------
+Page-Level Settings
+-------------------
+
 * `size:576x576`: Page size, width x height, in units.
 * `margin:0,0,0,0`: Margins in the order Top, Right, Bottom, Left (binding:none), Top, Binding, Bottom, Edge (for binding:side), or Binding Right Edge Left (binding:top).  In units or percent.
 * `margin:0,0`: Margins in the order Top/Bottom, Right/Left
 * `margin:0`: Margins, all the same
 * `textAlign:left`: Alignment of non-specified text, equivalent to `#L`
-* `background:color:#F,image:name,stretch:no,trim:x%,fit:x%,ninepatch:border,gradient:#F-#F`
-
-QUESTION
---------
-* `background:tile`
-
-Book-, Page-, or Nested Page-Level Settings
--------------------------------------------
-* `minsize:0`: Minimum size in units of any dimension of image, used during layout
+* `background:color:#F,image:name,stretch:no,trim:x%,fit:x%,ninepatch:border,gradient:#F-#F,tile:?`
+* `header`
+* `footer`
 * `gutter:0,0`, `gutter:0%,0%`: vertical space (between rows), horizontal space (between images) (or percent of page)
 * `valign:spreadmiddle`: vertical spacing of rows in a layout.  Specifies how extra space is distributed after rows are laid out.  One of:
   * `middle`: gutter is placed between rows, any extra is divided equally between the top and bottom
@@ -277,12 +282,8 @@ Book-, Page-, or Nested Page-Level Settings
   * `spreadbottom`: extra is distributed between rows and at the top
   * `spreadmiddle`: extra is distributed between rows and at the top and bottom
 
-QUESTION
---------
-* `minsize:0%`: Minimum size in percentage of shorter dimension
-
-Book-, Page-, Nested Page-, or Row-Level Settings
--------------------------------------------------
+Row-Level Settings
+------------------
 * `minsize:0`, `minsize:0%`: Minimum size in units (or in percent of shorter dimension of page) of any dimension of image, used during layout
 * `row-weight:1`: Make rows bigger to fill the page.
 * `halign:spreadcenter`: horizontal spacing of images in a row.  Specifies how extra space is distributed after images are laid out.
@@ -296,8 +297,8 @@ Book-, Page-, Nested Page-, or Row-Level Settings
   * `spreadright`: extra is distributed between pictures and at the left
   * `spreadcenter`: extra is distributed between pictures and at the right and left
 
-Image-Level Settings
---------------------
+Image Settings
+--------------
 * `straighten` degrees (Rotate Image)
 * `brightness`: Amount
 * `contrast`: Amount
@@ -309,11 +310,13 @@ Image-Level Settings
 * `trim:#:#,#%`: Trim & Crop to fit in aspect ratio (Center, Left/Top, Right/Bottom, 0-100% [50%])
 * `fit:#:#,#%`: Shrink to fit in aspect ratio (Center, Left/Top, Right/Bottom, 0-100% [50%]))
 * `frame:size:#,name:image,color:#F,border-size:#px,ninepatch:#px`
+* `sorted-by:name`: identifies the sort order for images with wildcards
+  * `name`
+  * `date`
 
-Image-Level Settings Affecting Layout
--------------------------------------
+Image Settings Affecting Layout
+-------------------------------
 * `weight:1` - when laying out, resize this image to use this proportion of remaining space 
-* `name`: - image can be referred to for frames, not included in layout or floated
 * `size` - indicates size before Layout
   * `normal` - minimum size (default) = scale:1
   * `larger` - minimum size * 1.25 = scale:1.25
@@ -327,17 +330,11 @@ Image-Level Settings Affecting Layout
   * `height:#` - specific height
   * `height:#%` - % of total height
   * `height:#%%` - % of remaining height
-
-Book-, Page-, Nested Page-, Row-, or Image-Level Settings
----------------------------------------------------------
 * `caption-position:below`: `above` or `below`
 * `caption-squareness:100`: percentage of the weight of the actual image aspect ratio and square to give portrait images more space for captions.  0 means lay the caption out as if the image was square, and 100 means lay the caption out with the image's actual aspect ratio.
-* `sorted-by:name`: identifies the sort order for images with wildcards
-  * `name`
-  * `date`
-  
-Text-Level Settings
--------------------
+
+Text Settings
+-------------
 * `textAlign:left,right,center,justified,binding,edge` (binding & edge allowed if binding:side)
 * `font:name`: font name
 * `size:11`: font size in units
@@ -349,11 +346,14 @@ Text-Level Settings
 * `text-wrap:balanced,unbalanced`: do not break lines to make lines equal in length
 * `width:`: width of text block in units, percent, or percent of remainder
 
-Text- or Image-Level Settings
------------------------------
+Text or Image Settings
+----------------------
+* `name`
+* `column-break:yes,no`
+* `row-break:yes,no`
+* `page-break:yes,no`
 * `float:WxH+X+Y` - takes image / text out of layout
 * `rotate`: after layout or float
-
 
 ## Design
 

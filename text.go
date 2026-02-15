@@ -5,8 +5,6 @@ import (
 	"image"
 	"image/color"
 	"image/draw"
-	"image/png"
-	"io/ioutil"
 	"log"
 	"math"
 	"os"
@@ -49,6 +47,14 @@ type TextBlockLayout struct {
 	height float64
 }
 
+func dotsFromUnitsFloat(length float64, density float64) float64 {
+	return length * density
+}
+
+func unitsFromDots(dots float64, density float64) float64 {
+	return dots / density
+}
+
 func fixedFromFloat64(f float64) fixed.Int26_6 {
 	return fixed.Int26_6(int(math.Round(f * 64.0)))
 }
@@ -67,7 +73,7 @@ func openFont(textInfo *TextInfo) (font.Face, float64, float64) {
 	var face font.Face
 	var exists bool
 	if face, exists = fontCache[key]; !exists {
-		fontData, err := ioutil.ReadFile(textInfo.font)
+		fontData, err := os.ReadFile(textInfo.font)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -94,8 +100,8 @@ func openFont(textInfo *TextInfo) (font.Face, float64, float64) {
 	return face, fontAscent, lineHeight
 }
 
-// DrawString draws s at the dot and advances the dot's location.
-func DrawString(d *font.Drawer, s string, letterSpacing fixed.Int26_6, wordSpacing fixed.Int26_6) []fixed.Int26_6 {
+// drawString draws s at the dot and advances the dot's location.
+func drawString(d *font.Drawer, s string, letterSpacing fixed.Int26_6, wordSpacing fixed.Int26_6) []fixed.Int26_6 {
 	var prevC rune
 	advances := make([]fixed.Int26_6, utf8.RuneCountInString(s))
 	ii := 0
@@ -171,19 +177,19 @@ func TextToImage(TextBlockLayout *TextBlockLayout, textInfo *TextInfo) *image.RG
 		case TextAlignRight:
 			d.Dot.X += widthFixed - TextBlockLayout.lines[ii].advance
 		}
-		DrawString(d, TextBlockLayout.lines[ii].line, letterSpacing, wordSpacing)
+		drawString(d, TextBlockLayout.lines[ii].line, letterSpacing, wordSpacing)
 		d.Dot.X = fixedFromFloat64(leftEdge)
 		d.Dot.Y += fixedFromFloat64(lineHeight)
 	}
 
-	out, err := os.Create("out.png")
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer out.Close()
-	if err := png.Encode(out, dst); err != nil {
-		log.Fatal(err)
-	}
+	// out, err := os.Create("out.png")
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	// defer out.Close()
+	// if err := png.Encode(out, dst); err != nil {
+	// 	log.Fatal(err)
+	// }
 
 	return dst
 }
@@ -289,7 +295,7 @@ func MeasureText(text string, maxWidth float64, maxHeight float64, textInfo *Tex
 	// Collapse whitespace
 	text = strings.Trim(rxSpace.ReplaceAllString(text, " "), " ")
 
-	advances := DrawString(d, text, letterSpacing, wordSpacing)
+	advances := drawString(d, text, letterSpacing, wordSpacing)
 
 	// Calculate the TextBlockLayout for a specific maxWidth
 	if maxHeight == 0 && textInfo.textWrap != TextWrapBalanced {
