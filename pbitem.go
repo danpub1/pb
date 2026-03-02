@@ -361,13 +361,14 @@ func (item *PbItem) Binding() int {
 func (item *PbItem) Align(whichAlign string) int {
 	settingVal := ""
 
-	if whichAlign == "column-distribute" || whichAlign == "column-align" {
+	switch whichAlign {
+	case "column-distribute", "column-align":
 		settingVal = item.ColumnSetting(whichAlign)
-	} else if whichAlign == "row-distribute" || whichAlign == "row-align" {
+	case "row-distribute", "row-align":
 		settingVal = item.RowSetting(whichAlign)
-	} else if whichAlign == "page-distribute" {
+	case "page-distribute":
 		settingVal = item.PageSetting(whichAlign)
-	} else {
+	default:
 		settingVal = item.Setting(whichAlign)
 	}
 
