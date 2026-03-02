@@ -204,6 +204,22 @@ func layoutForWidth(text string, advances []fixed.Int26_6, width float64, lineHe
 	stringRunes := strings.Split(text, "")
 	widthDots := fixedFromFloat64(dotsFromUnitsFloat(width-textInfo.padding.left-textInfo.padding.right-textInfo.frameSize.left-textInfo.frameSize.right, textInfo.density))
 
+	longestBlock := fixed.Int26_6(0)
+	blockLength := fixed.Int26_6(0)
+	for idx := 0; idx < len(advances); idx++ {
+		if stringRunes[idx] == " " {
+			if longestBlock < blockLength {
+				longestBlock = blockLength
+			}
+			blockLength = 0
+		} else {
+			blockLength += advances[idx]
+		}
+	}
+	if longestBlock < blockLength {
+		longestBlock = blockLength
+	}
+
 	breakWidth := fixed.Int26_6(0)
 	for idx := 0; idx < len(advances); idx++ {
 		if curWidth+advances[idx] > widthDots {
@@ -250,8 +266,13 @@ func layoutForWidth(text string, advances []fixed.Int26_6, width float64, lineHe
 	height := math.Ceil(float64(len(layout.lines)) * lineHeight)
 	layout.height = unitsFromDots(height, textInfo.density) + textInfo.padding.top + textInfo.padding.bottom + textInfo.frameSize.top + textInfo.frameSize.bottom
 
+	// First time through, lastSpace is the curWidth
 	if len(layout.lines) == 1 && curWidth < widthDots {
 		lastSpace = curWidth
+	} else {
+		if longestBlock > lastSpace {
+			lastSpace = longestBlock
+		}
 	}
 	return &layout, unitsFromDots(floatFromFixed(lastSpace), textInfo.density)
 }

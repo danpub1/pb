@@ -281,6 +281,8 @@ Page-Level Settings
   * `spreadtop`: extra is distributed between rows and at the bottom
   * `spreadbottom`: extra is distributed between rows and at the top
   * `spreadmiddle`: extra is distributed between rows and at the top and bottom
+  * `spreadedge`
+  * `spreadbinding`
 
 Row-Level Settings
 ------------------

@@ -59,10 +59,16 @@ const (
 	AlignSpreadEdge
 	AlignLeft         = AlignTop
 	AlignCenter       = AlignMiddle
-	AlighRight        = AlignBottom
+	AlignRight        = AlignBottom
 	AlignSpreadLeft   = AlignSpreadTop
 	AlignSpreadCenter = AlignSpreadMiddle
 	AlignSpreadRight  = AlignSpreadBottom
+)
+
+const (
+	BindingUnknown = iota
+	BindingSide
+	BindingTop
 )
 
 const (
@@ -71,6 +77,187 @@ const (
 	RowAlignMiddle
 	RowAlignBottom
 )
+
+type PbColumnItem struct {
+	item   *PbItem
+	weight float64
+}
+
+type PbColumn struct {
+	xOffset float64
+	weight  float64
+	items   []PbColumnItem
+}
+
+func (theColumn *PbColumn) width() float64 {
+	width := 0.0
+	for ii := range theColumn.items {
+		itemWidth, _ := theColumn.items[ii].item.Size()
+		width = math.Max(width, itemWidth)
+	}
+	return width
+}
+
+func (theColumn *PbColumn) height() float64 {
+	height := 0.0
+	for ii := range theColumn.items {
+		_, itemHeight := theColumn.items[ii].item.Size()
+		height = math.Max(height, theColumn.items[ii].item.yOffset-theColumn.items[0].item.yOffset+itemHeight)
+	}
+	return height
+}
+
+type PbRow struct {
+	yOffset float64
+	weight  float64
+	columns []PbColumn
+}
+
+func (theRow *PbRow) width() float64 {
+	width := 0.0
+	for ii := range theRow.columns {
+		width = math.Max(width, theRow.columns[ii].xOffset-theRow.columns[0].xOffset+theRow.columns[ii].width())
+	}
+	return width
+}
+
+func (theRow *PbRow) height() float64 {
+	height := 0.0
+	for ii := range theRow.columns {
+		height = math.Max(height, theRow.columns[ii].height())
+	}
+	return height
+}
+
+type PbPage struct {
+	availableWidth  float64
+	availableHeight float64
+	rows            []PbRow
+}
+
+func (thePage *PbPage) updateOffsets() {
+	for row := range thePage.rows {
+		setRowOffset := false
+		for column := range thePage.rows[row].columns {
+			setColumnOffset := false
+			for item := range thePage.rows[row].columns[column].items {
+				if !setColumnOffset {
+					thePage.rows[row].columns[column].xOffset = thePage.rows[row].columns[column].items[item].item.xOffset
+					setColumnOffset = true
+				}
+				if !setRowOffset {
+					thePage.rows[row].yOffset = thePage.rows[row].columns[column].items[item].item.yOffset
+					setRowOffset = true
+				}
+			}
+		}
+	}
+}
+
+func (thePage *PbPage) width() float64 {
+	width := 0.0
+	for ii := range thePage.rows {
+		width = math.Max(width, thePage.rows[ii].width())
+	}
+	return width
+}
+
+func (thePage *PbPage) height() float64 {
+	height := 0.0
+	for ii := range thePage.rows {
+		height = math.Max(height, thePage.rows[ii].yOffset-thePage.rows[0].yOffset+thePage.rows[ii].height())
+	}
+	return height
+}
+
+type PbBook struct {
+	pages []PbPage
+}
+
+func ToPbBook(items []PbItem) *PbBook {
+	book := PbBook{}
+	book.pages = make([]PbPage, 0)
+
+	curPage := -1
+	curRow := -1
+	curColumn := -1
+	curItem := -1
+
+	for ii, item := range items {
+		if item.page != curPage {
+			curPage = item.page
+			book.pages = append(book.pages, PbPage{})
+			book.pages[curPage].rows = make([]PbRow, 0)
+			book.pages[curPage].availableWidth, book.pages[curPage].availableHeight = item.pageDimensions()
+			curRow = -1
+			curColumn = -1
+			curItem = -1
+		}
+
+		if item.row != curRow {
+			curRow = item.row
+			curColumn = -1
+			curItem = -1
+
+			book.pages[curPage].rows = append(book.pages[curPage].rows, PbRow{})
+			book.pages[curPage].rows[curRow].columns = make([]PbColumn, 0)
+			book.pages[curPage].rows[curRow].yOffset = item.yOffset
+			book.pages[curPage].rows[curRow].weight = item.FloatSetting("row-weight")
+		}
+
+		if item.column != curColumn {
+			curColumn = item.column
+			curItem = -1
+
+			book.pages[curPage].rows[curRow].columns = append(book.pages[curPage].rows[curRow].columns, PbColumn{})
+			book.pages[curPage].rows[len(book.pages[curPage].rows)-1].columns[curColumn].items = make([]PbColumnItem, 0)
+			book.pages[curPage].rows[curRow].columns[curColumn].xOffset = item.xOffset
+			book.pages[curPage].rows[curRow].columns[curColumn].weight = item.FloatSetting("column-weight")
+		}
+
+		if (item.itemType == ItemTypeImage || item.itemType == ItemTypeText) && len(item.Setting("name")) == 0 {
+			curItem++
+
+			book.pages[curPage].rows[curRow].columns[curColumn].items = append(book.pages[curPage].rows[curRow].columns[curColumn].items, PbColumnItem{})
+			book.pages[curPage].rows[curRow].columns[curColumn].items[curItem].item = &items[ii]
+
+			if curItem == 0 && curColumn == 0 {
+				book.pages[curPage].rows[curRow].yOffset = items[ii].yOffset
+			}
+
+			if item.itemType == ItemTypeImage {
+				book.pages[curPage].rows[curRow].columns[curColumn].items[curItem].weight = item.FloatSetting("image-weight")
+			} else {
+				book.pages[curPage].rows[curRow].columns[curColumn].items[curItem].weight = 1
+			}
+		}
+	}
+
+	for _, page := range book.pages {
+		maxWeight := 0.0
+		for _, row := range page.rows {
+			for _, column := range row.columns {
+				for _, item := range column.items {
+					aWeight := row.weight * column.weight * item.weight
+					if aWeight > maxWeight {
+						maxWeight = aWeight
+					}
+				}
+			}
+		}
+		for _, row := range page.rows {
+			for _, column := range row.columns {
+				for _, item := range column.items {
+					item.weight = row.weight * column.weight * item.weight / maxWeight
+				}
+				column.weight = 1
+			}
+			row.weight = 1
+		}
+	}
+
+	return &book
+}
 
 type PbItem struct {
 	itemType int
@@ -94,6 +281,23 @@ type PbItem struct {
 	imageHeight         float64
 	xOffset             float64
 	yOffset             float64
+}
+
+func (item *PbItem) CaptionGutter() float64 {
+	captionGutter := item.FloatSetting("caption-gutter")
+	if item.imageHeight == 0 || item.textHeight == 0 {
+		captionGutter = 0
+	}
+	return captionGutter
+}
+
+func (item *PbItem) Size() (float64, float64) {
+
+	if (item.itemType == ItemTypeImage || item.itemType == ItemTypeText) && len(item.Setting("name")) == 0 {
+		return math.Max(item.imageWidth, item.textWidth), item.imageHeight + item.CaptionGutter() + item.textHeight
+	}
+
+	return 0, 0
 }
 
 func (item *PbItem) Units() int {
@@ -137,8 +341,37 @@ func (item *PbItem) TextWrap() int {
 	}
 }
 
+func (item *PbItem) Binding() int {
+	switch strings.ToLower(item.BookSetting("binding")) {
+	case "side":
+		return BindingSide
+	case "left":
+		return BindingSide
+	case "right":
+		return BindingSide
+	case "top":
+		return BindingTop
+	case "bottom":
+		return BindingTop
+	default:
+		return BindingUnknown
+	}
+}
+
 func (item *PbItem) Align(whichAlign string) int {
-	switch item.Setting(whichAlign) {
+	settingVal := ""
+
+	if whichAlign == "column-distribute" || whichAlign == "column-align" {
+		settingVal = item.ColumnSetting(whichAlign)
+	} else if whichAlign == "row-distribute" || whichAlign == "row-align" {
+		settingVal = item.RowSetting(whichAlign)
+	} else if whichAlign == "page-distribute" {
+		settingVal = item.PageSetting(whichAlign)
+	} else {
+		settingVal = item.Setting(whichAlign)
+	}
+
+	switch strings.ToLower(settingVal) {
 	case "top":
 		return AlignTop
 	case "middle":
@@ -166,7 +399,7 @@ func (item *PbItem) Align(whichAlign string) int {
 	case "center":
 		return AlignCenter
 	case "right":
-		return AlighRight
+		return AlignRight
 	case "spreadleft":
 		return AlignSpreadLeft
 	case "spreadcenter":
@@ -221,7 +454,7 @@ func (item *PbItem) Aspect() float64 {
 }
 
 func (item *PbItem) Density() float64 {
-	return item.FloatSetting("density")
+	return item.FloatBookSetting("density")
 }
 
 func (item *PbItem) TextInfo() *TextInfo {
@@ -262,33 +495,77 @@ func (item *PbItem) BestTextBlockLayout(targetTextWidth float64) int {
 	return best
 }
 
+func (item *PbItem) textForImageDimensions(w float64, h float64) (float64, float64, int) {
+	if len(item.textBlockLayouts) == 0 {
+		return 0, 0, -1
+	}
+
+	squareness := Atof(item.Setting("caption-squareness")) / 100.0
+	largerSize := math.Max(w, h)
+	targetTextWidth := w*squareness + largerSize*(1-squareness)
+
+	best := item.BestTextBlockLayout(targetTextWidth)
+
+	textBlockLayout := TextBlockLayout{}
+	if best >= 0 {
+		textBlockLayout = item.textBlockLayouts[best]
+	}
+
+	return textBlockLayout.width, textBlockLayout.height, best
+}
+
+func (item *PbItem) enlargeImage(amount float64) (float64, float64) {
+	if item.itemType == ItemTypeText && len(item.textBlockLayouts) == 1 {
+		return 0, 0
+	}
+
+	if item.itemType != ItemTypeImage {
+		return 0, 0
+	}
+
+	oldWidth, oldHeight := item.Size()
+
+	maxWidth, maxHeight := item.ImageSizeForPage("max-size")
+	aspect := float64(item.imageWidthPx) / float64(item.imageHeightPx)
+
+	if aspect >= 1 {
+		amount = math.Min(amount, math.Max(maxWidth-item.imageWidth, 0))
+		item.imageWidth += amount
+		item.imageHeight = item.imageWidth / aspect
+		if item.imageHeight > maxHeight {
+			item.imageHeight = maxHeight
+			item.imageWidth = item.imageHeight * aspect
+		}
+	} else {
+		amount = math.Min(amount, math.Max(maxHeight-item.imageHeight, 0))
+		item.imageHeight += amount
+		item.imageWidth = item.imageHeight * aspect
+		if item.imageWidth > maxWidth {
+			item.imageWidth = maxWidth
+			item.imageHeight = item.imageWidth / aspect
+		}
+	}
+
+	item.textWidth, item.textHeight, item.bestTextBlockLayout = item.textForImageDimensions(item.imageWidth, item.imageHeight)
+
+	newWidth, newHeight := item.Size()
+
+	return newWidth - oldWidth, newHeight - oldHeight
+}
+
 func (item *PbItem) baseDimensions() (float64, float64, float64, float64, int) {
 	if item.itemType == ItemTypeText && len(item.textBlockLayouts) == 1 {
 		return item.textBlockLayouts[0].width, item.textBlockLayouts[0].height, 0, 0, -1
 	}
 
-	if item.itemType == ItemTypeImage {
-		w, h := item.ImageSizeForPage("size")
-
-		if len(item.textBlockLayouts) == 0 {
-			return 0, 0, w, h, -1
-		}
-
-		squareness := Atof(item.Setting("caption-squareness")) / 100.0
-		largerSize := math.Max(w, h)
-		targetTextWidth := w*squareness + largerSize*(1-squareness)
-
-		best := item.BestTextBlockLayout(targetTextWidth)
-
-		textBlockLayout := TextBlockLayout{}
-		if best >= 0 {
-			textBlockLayout = item.textBlockLayouts[best]
-		}
-
-		return textBlockLayout.width, textBlockLayout.height, w, h, best
+	if item.itemType != ItemTypeImage {
+		return 0, 0, 0, 0, -1
 	}
 
-	return 0, 0, 0, 0, -1
+	w, h := item.ImageSizeForPage("size")
+	tw, th, best := item.textForImageDimensions(w, h)
+
+	return tw, th, w, h, best
 }
 
 func (item *PbItem) GetImage() *image.Image {
@@ -345,7 +622,7 @@ func (item *PbItem) ImageRectSetting() (float64, float64, int, int) {
 var rxRelativeSize, _ = regexp.Compile(`^(much-smaller$|smaller$|normal$|larger$|much-larger$|scale:)`)
 
 func (item *PbItem) ImageSizeForPage(sizeName string) (float64, float64) {
-	maxWidth, maxHeight := ContainerSize(item.Setting("page-size"), item.Setting("margin"))
+	maxWidth, maxHeight := ContainerSize(item.PageSetting("page-size"), item.PageSetting("margin"))
 	sSize := item.Setting(sizeName)
 
 	width := 0.0
@@ -448,22 +725,19 @@ var defaultSettings = map[string]string{
 
 	// page
 	"page-size":       "576x576",
-	"margin":          "36",
+	"margin":          "24",
 	"background":      "#F",
-	"page-distribute": "spreadmiddle", // how
+	"page-distribute": "spreadmiddle", // how rows are distributed vertically on the page
 	"page-row-gutter": "6",            // gutter between rows
-	"interleave-rows": "true",
 
 	// row
-	"row-distribute":    "spreadcenter", // how things are distributed horizontally in a row
-	"column-align":      "middle",       // top middle bottom - how columns of different height are aligned in a row
+	"row-distribute":    "spreadcenter", // how columns are distributed horizontally in a row
 	"row-column-gutter": "6",            // gutter between columns
 	"row-weight":        "1",
 	"page-break":        "false",
 
 	// column
-	"column-distribute":     "spreadmiddle", // how things are distributed horizontally in a row
-	"item-align":            "center",       // left center right - how things of different height are aligned in a row
+	"column-distribute":     "spreadmiddle", // how images or text are distributed vertically in a column
 	"column-item-gutter":    "6",
 	"column-weight":         "1",
 	"row-break":             "false",
@@ -471,10 +745,11 @@ var defaultSettings = map[string]string{
 
 	// image or text
 	"column-break": "true",
+	"item-align":   "center", // left center right - how images or text of different width are aligned in a column
 
 	// image
-	"max-size":     "100%x100%",
-	"size":         "25%x25%",
+	"max-size":     "100%",
+	"size":         "25%",
 	"rect":         "1", // fit,3:2,50  trim,3:2,50  #,x:y,50,50  #=zoom level where 1=fit, Missing aspect=image aspect, Missing position=50
 	"image-weight": "1",
 	"image-frame":  "#0000,0",

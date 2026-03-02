@@ -6,5 +6,6 @@ js
 legacy
 test
 out.png
+out-*.png
 pb
 settings.pdf

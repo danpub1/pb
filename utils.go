@@ -17,7 +17,7 @@ const (
 )
 
 func VerboseLog(message string) {
-	if *verboseFlag {
+	if globalVerboseFlag&2 != 0 {
 		log.Print(message)
 	}
 }
@@ -242,9 +242,9 @@ func lengthToPoints(length float64, units int) float64 {
 	case UnitsMm:
 		return length / MillimetersPerInch * PointsPerInch
 	default:
-		log.Fatalf("Unexpected units %v", units)
+		log.Printf("Unexpected units %v\n", units)
+		return length
 	}
-	return 0
 }
 
 func dpi(units int, density float64) float64 {
@@ -258,7 +258,7 @@ func dpi(units int, density float64) float64 {
 	case UnitsMm:
 		return MillimetersPerInch * density
 	default:
-		log.Fatalf("Unexpected units %v", units)
+		log.Printf("Unexpected units %v\n", units)
+		return PointsPerInch * density
 	}
-	return 0
 }

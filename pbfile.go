@@ -13,8 +13,8 @@ import (
 )
 
 func escapeValue(s string) string {
-	s = strings.ReplaceAll(s, "\\", "\\\\")
-	s = strings.ReplaceAll(s, " ", "\\_")
+	s = strings.ReplaceAll(s, "`", "``")
+	s = strings.ReplaceAll(s, " ", "`_")
 	return s
 }
 
@@ -129,8 +129,8 @@ func decodeTextDirective(directive string) string {
 	return "{{" + styleNum + "}}" + textAlign
 }
 
-var rxEscapeSpace, _ = regexp.Compile(`\\_`)
-var rxEscape, _ = regexp.Compile(`\\(.)`)
+var rxEscapeSpace, _ = regexp.Compile("`_")
+var rxEscape, _ = regexp.Compile("`(.)")
 
 func unescape(line string) string {
 	line = rxEscapeSpace.ReplaceAllString(line, " ")
@@ -246,25 +246,26 @@ func parse(line string, styles map[string]string) PbItem {
 	return theItem
 }
 
-func processAsLinesFromBasePath(lines []string, basePath string, styles map[string]string) ([]PbItem, map[string]string) {
+func processAsLinesFromBasePath(lines []string, basePath string, styles map[string]string, options map[string]string) ([]PbItem, map[string]string, map[string]string) {
 	var items []PbItem
 	for _, s := range lines {
 		if strings.HasPrefix(s, "$$$ ") {
 			style := strings.Replace(s, "$$$ ", "", 1)
 			styles = defineStyle(style, styles)
+		} else if strings.HasPrefix(s, ">>> ") {
+			option := strings.Replace(s, ">>> ", "", 1)
+			options = defineOption(option, options)
 		} else if strings.HasPrefix(s, "@@@ ") {
 			file2 := strings.Replace(s, "@@@ ", "", 1)
 			var includedItems []PbItem
-			includedItems, styles = readInputFile(localizePath(file2, basePath), styles)
+			includedItems, styles, options = readInputFile(localizePath(file2, basePath), styles, options)
 			for _, includedItem := range includedItems {
-				includedItem.pb = items
 				items = append(items, includedItem)
 			}
 		} else {
 			s = applyStyles(s, styles)
 			theItem := parse(s, styles)
 			theItem = localizePaths(theItem, basePath)
-			theItem.pb = items
 			newItems := expandWild(theItem)
 			if newItems != nil {
 				items = append(items, newItems...)
@@ -273,7 +274,8 @@ func processAsLinesFromBasePath(lines []string, basePath string, styles map[stri
 			}
 		}
 	}
-	return items, styles
+
+	return items, styles, options
 }
 
 func expandWild(item PbItem) []PbItem {
@@ -301,6 +303,12 @@ func expandWild(item PbItem) []PbItem {
 	}
 
 	return newItems
+}
+
+func defineOption(line string, options map[string]string) map[string]string {
+	parts := strings.SplitN(line, " ", 2)
+	options[parts[0]] = parts[1]
+	return options
 }
 
 func defineStyle(line string, styles map[string]string) map[string]string {
@@ -373,7 +381,7 @@ func ApplyItemSpecificStyles(items []PbItem) {
 	}
 }
 
-func readInputFile(inFile string, styles map[string]string) ([]PbItem, map[string]string) {
+func readInputFile(inFile string, styles map[string]string, options map[string]string) ([]PbItem, map[string]string, map[string]string) {
 	var inBytes []byte
 	var err error
 
@@ -393,10 +401,10 @@ func readInputFile(inFile string, styles map[string]string) ([]PbItem, map[strin
 	inStrings = makeIntoLines(inStrings)
 
 	var items []PbItem
-	items, styles = processAsLinesFromBasePath(inStrings, basePath, styles)
+	items, styles, options = processAsLinesFromBasePath(inStrings, basePath, styles, options)
 	ApplyItemSpecificStyles(items)
 
-	return items, styles
+	return items, styles, options
 }
 
 func BasePath(fileName string) string {
@@ -407,9 +415,12 @@ func BasePath(fileName string) string {
 	return basePath
 }
 
-func ReadPbFile(inFileFlag string) []PbItem {
-	styles := map[string]string{}
-	items, _ := readInputFile(inFileFlag, styles)
+func ReadPbFile(inFileFlag string) ([]PbItem, map[string]string) {
+	items, _, options := readInputFile(inFileFlag, map[string]string{}, map[string]string{})
 
-	return items
+	for ii := range items {
+		items[ii].pb = items
+	}
+
+	return items, options
 }
