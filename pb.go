@@ -2,13 +2,15 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"image"
 	"image/color"
 	"image/draw"
-	_ "image/jpeg"
+	"image/jpeg"
 	"image/png"
+	"io"
 	"log"
 	"math"
 	"os"
@@ -19,31 +21,88 @@ import (
 	"github.com/disintegration/imaging"
 )
 
+type ImageCacheEntry struct {
+	Filedate      int64
+	ImageWidthPx  int
+	ImageHeightPx int
+}
+
+func loadImageCache() map[string]ImageCacheEntry {
+	cache := map[string]ImageCacheEntry{}
+
+	bytes, err := os.ReadFile(".pbimagecache")
+	if err == nil {
+		json.Unmarshal(bytes, &cache)
+	}
+
+	return cache
+}
+
+func saveImageCache(cache *map[string]ImageCacheEntry) {
+	bytes, err := json.Marshal(cache)
+	if err == nil {
+		os.WriteFile(".pbimagecache", bytes, 0666)
+	}
+}
+
+func checkCacheEntry(cache *map[string]ImageCacheEntry, filename string) (int, int, bool) {
+	if entry, exists := (*cache)[filename]; exists {
+		filedate := fileDate(filename)
+		if entry.Filedate == filedate {
+			return entry.ImageWidthPx, entry.ImageHeightPx, true
+		}
+	}
+	return 0, 0, false
+}
+
+func updateCacheEntry(cache *map[string]ImageCacheEntry, filename string, imageWidthPx int, imageHeightPx int) {
+	(*cache)[filename] = ImageCacheEntry{fileDate(filename), imageWidthPx, imageHeightPx}
+}
+
 func getImageDimensions(items []PbItem) {
 	if len(items) == 0 {
 		return
 	}
 
+	cache := loadImageCache()
+
 	for ii, theItem := range items {
 		if theItem.itemType == ItemTypeImage {
-			imageFile, err := os.Open(theItem.Setting("image"))
+			items[ii].imageWidthPx = 1
+			items[ii].imageHeightPx = 1
+
+			filename := theItem.Setting("image")
+			if imageWidthPx, imageHeightPx, exists := checkCacheEntry(&cache, filename); exists {
+				items[ii].imageWidthPx = imageWidthPx
+				items[ii].imageHeightPx = imageHeightPx
+				continue
+			}
+
+			imageFile, err := os.Open(filename)
 			if err != nil {
-				log.Fatal(err)
+				log.Print(err)
+				continue
 			}
 			imageReader := bufio.NewReader(imageFile)
 			config, _, err := image.DecodeConfig(imageReader)
 			if err != nil {
 				imageFile.Close()
-				log.Fatal(err)
+				log.Print(err)
+				continue
 			}
 			if err := imageFile.Close(); err != nil {
-				log.Fatal(err)
+				log.Print(err)
+				continue
 			}
 
 			items[ii].imageWidthPx = config.Width
 			items[ii].imageHeightPx = config.Height
+
+			updateCacheEntry(&cache, filename, config.Width, config.Height)
 		}
 	}
+
+	saveImageCache(&cache)
 }
 
 func getTextDimensions(items []PbItem) {
@@ -316,24 +375,194 @@ func breakIntoPages(items []PbItem) *PbBook {
 	return ToPbBook(items)
 }
 
-func writePage(img image.Image, curPage int, outPageNumber int, outFilename string) {
-	if outPageNumber == -1 {
-		ext := filepath.Ext(outFilename)
+func writeHeader(outFilename string) (int, error) {
+	ext := filepath.Ext(outFilename)
+	format := strings.ToLower(ext)
+
+	if format == ".pdf" {
+		bytes := []byte("%PDF-1.7\n")
+		err := os.WriteFile(outFilename, bytes, 0666)
+		if err != nil {
+			log.Print(err)
+		}
+		return len(bytes), err
+	}
+
+	return 0, nil
+}
+
+type PageInfo struct {
+	offset int
+	width  int
+	height int
+}
+
+func writeFooter(outFilename string, bytesWritten int, pageInfo []PageInfo) (int, error) {
+	ext := filepath.Ext(outFilename)
+	format := strings.ToLower(ext)
+
+	if format == ".pdf" {
+		buffer := strings.Builder{}
+		numPages := len(pageInfo)
+		pageInfo = append(pageInfo, PageInfo{bytesWritten, 0, 0})
+		n, err := buffer.WriteString(fmt.Sprintf("%v 0 obj\n<</Type/Catalog/Pages %v 0 R>>\nendobj\n", numPages+1, numPages+2))
+		bytesWritten += n
+		pageInfo = append(pageInfo, PageInfo{bytesWritten, 0, 0})
+		n, err = buffer.WriteString(fmt.Sprintf("%v 0 obj\n<</Type/Pages/Count %v/Kids[", numPages+2, numPages))
+		bytesWritten += n
+		for ii := range numPages {
+			space := " "
+			if ii == 0 {
+				space = ""
+			}
+			n, err = buffer.WriteString(fmt.Sprintf("%v%v 0 R", space, ii*3+numPages+3+2))
+			bytesWritten += n
+		}
+		n, err = buffer.WriteString("]>>\nendobj\n")
+		bytesWritten += n
+
+		for ii := range numPages {
+			pageInfo = append(pageInfo, PageInfo{bytesWritten, 0, 0})
+			n, err = buffer.WriteString(fmt.Sprintf("%v 0 obj\n<</XObject<</I%v %v 0 R>>>>\nendobj\n", ii*3+numPages+3+0, ii+1, ii+1))
+			bytesWritten += n
+			pageInfo = append(pageInfo, PageInfo{bytesWritten, 0, 0})
+			cmd := fmt.Sprintf("q %v 0 0 %v 0 0 cm /I%v Do Q", pageInfo[ii].width, pageInfo[ii].height, ii+1)
+			n, err = buffer.WriteString(fmt.Sprintf("%v 0 obj\n<</Length %v>>\nstream\n%v\nendstream\nendobj\n", ii*3+numPages+3+1, len(cmd), cmd))
+			bytesWritten += n
+			pageInfo = append(pageInfo, PageInfo{bytesWritten, 0, 0})
+			n, err = buffer.WriteString(fmt.Sprintf("%v 0 obj\n<</Type/Page/MediaBox[0 0 %v %v]/Rotate 0/Resources %v 0 R/Contents %v 0 R/Parent %v 0 R>>\nendobj\n", ii*3+numPages+3+2, pageInfo[ii].width, pageInfo[ii].height, ii*3+numPages+3+0, ii*3+numPages+3+1, numPages+2))
+			bytesWritten += n
+		}
+
+		startOfXref := bytesWritten
+
+		n, err = buffer.WriteString(fmt.Sprintf("xref\n0 %v\n0000000000 00001 f\n", numPages*4+3))
+		for ii := range pageInfo {
+			n, err = buffer.WriteString(fmt.Sprintf("%010d 00000 n\n", pageInfo[ii].offset))
+		}
+
+		n, err = buffer.WriteString(fmt.Sprintf("trailer\n<</Size %v/Root %v 0 R>>\nstartxref\n%v\n%%%%EOF", len(pageInfo)+1, numPages+1, startOfXref))
+		out, err := os.OpenFile(outFilename, os.O_WRONLY|os.O_APPEND, 0666)
+		if err != nil {
+			log.Print(err)
+			return 0, err
+		}
+		defer out.Close()
+		n, err = out.Write([]byte(buffer.String()))
+		if err != nil {
+			log.Print(err)
+			return 0, err
+		}
+		return n, nil
+	}
+
+	return 0, nil
+}
+
+type PdfJpegObjectWriter struct {
+	out    io.Writer
+	mem    *[]byte
+	objNum int
+	width  int
+	height int
+}
+
+// Write implements [io.Writer].
+func (writer PdfJpegObjectWriter) Write(p []byte) (int, error) {
+	*writer.mem = append(*writer.mem, p...)
+	return len(p), nil
+}
+
+func (writer *PdfJpegObjectWriter) Start(out io.Writer, objNum int, width int, height int) {
+	writer.out = out
+	writer.objNum = objNum
+	writer.width = width
+	writer.height = height
+	writer.mem = &[]byte{}
+}
+
+func (writer *PdfJpegObjectWriter) Finish() (int, error) {
+	text := fmt.Sprintf("%v 0 obj\n<</Filter[/DCTDecode]/Type/XObject/Subtype/Image/BitsPerComponent 8/Width %v/Height %v/ColorSpace/DeviceRGB/Length %v>>\nstream\n", writer.objNum, writer.width, writer.height, len(*writer.mem))
+	bytesWritten := 0
+	n, err := writer.out.Write([]byte(text))
+	if err != nil {
+		log.Print(err)
+		return bytesWritten, err
+	}
+	bytesWritten += n
+	n, err = writer.out.Write(*writer.mem)
+	if err != nil {
+		log.Print(err)
+		return bytesWritten, err
+	}
+	bytesWritten += n
+	n, err = writer.out.Write([]byte("\nendstream\nendobj\n"))
+	if err != nil {
+		log.Print(err)
+		return bytesWritten, err
+	}
+	bytesWritten += n
+	return bytesWritten, err
+}
+
+func writePage(img image.Image, objNum int, curPage int, outPageNumber int, outFilename string) (int, error) {
+	ext := filepath.Ext(outFilename)
+	format := strings.ToLower(ext)
+	if outPageNumber == -1 && format != ".pdf" {
 		outFilename = strings.TrimSuffix(outFilename, ext)
 		outFilename = fmt.Sprintf(outFilename+"-%v"+ext, curPage)
 	}
 
-	out, err := os.Create(outFilename)
+	var out *os.File
+	var err error
+	if format != ".pdf" {
+		out, err = os.Create(outFilename)
+	} else {
+		out, err = os.OpenFile(outFilename, os.O_WRONLY|os.O_APPEND, 0666)
+	}
 	if err != nil {
-		log.Fatal(err)
+		log.Print(err)
+		return 0, err
 	}
 	defer out.Close()
-	if err := png.Encode(out, img); err != nil {
-		log.Fatal(err)
+	switch format {
+	case ".png":
+		if err := png.Encode(out, img); err != nil {
+			log.Print(err)
+			return 0, err
+		}
+		return 0, nil
+	case ".jpg", ".jpeg":
+		options := jpeg.Options{Quality: 92}
+		if err := jpeg.Encode(out, img, &options); err != nil {
+			log.Print(err)
+			return 0, err
+		}
+		return 0, nil
+	case ".pdf":
+		writer := PdfJpegObjectWriter{}
+		writer.Start(out, objNum, img.Bounds().Dx(), img.Bounds().Dy())
+
+		options := jpeg.Options{Quality: 92}
+		if err := jpeg.Encode(writer, img, &options); err != nil {
+			log.Print(err)
+			return 0, err
+		}
+
+		return writer.Finish()
 	}
+
+	return 0, nil
 }
 
 func renderPages(pbBook *PbBook, outPageNumber int, outFilename string) {
+	n, err := writeHeader(outFilename)
+	if err != nil {
+		return
+	}
+
+	offsets := []PageInfo{}
+	objNum := 1
 	for pp := range pbBook.pages {
 		page := &pbBook.pages[pp]
 		if outPageNumber < 0 || pp == outPageNumber {
@@ -342,7 +571,9 @@ func renderPages(pbBook *PbBook, outPageNumber int, outFilename string) {
 			var dst *image.RGBA = nil
 			density := 1.0
 
-			// No such thing as a blank page - this item always exists
+			if len(page.rows[0].columns[0].items) == 0 {
+				continue
+			}
 			item := page.rows[0].columns[0].items[0].item
 
 			pageWidth, pageHeight := FloatSize(item.Setting("page-size"))
@@ -371,7 +602,8 @@ func renderPages(pbBook *PbBook, outPageNumber int, outFilename string) {
 						if item.itemType == ItemTypeImage && len(item.Setting("name")) == 0 {
 							picture, err := imaging.Open(item.Setting("image"))
 							if err != nil {
-								log.Fatalf("failed to open image: %v", err)
+								log.Printf("failed to open image: %v", err)
+								continue
 							}
 							// Resize the cropped image to width = 200px preserving the aspect ratio.
 							imageWidthDots := int(math.Round(dotsFromUnitsFloat(item.imageWidth, density)))
@@ -412,8 +644,20 @@ func renderPages(pbBook *PbBook, outPageNumber int, outFilename string) {
 				}
 			}
 
-			writePage(dst, pp, outPageNumber, outFilename)
+			w, h := item.PageSizePts()
+			offsets = append(offsets, PageInfo{n, w, h})
+			thisn, thisErr := writePage(dst, objNum, pp, outPageNumber, outFilename)
+			if thisErr != nil {
+				return
+			}
+
+			n += thisn
+			objNum++
 		}
+	}
+	_, endErr := writeFooter(outFilename, n, offsets)
+	if endErr != nil {
+		return
 	}
 }
 
@@ -560,7 +804,10 @@ func layoutPages(pbBook *PbBook, outPageNumber int) {
 					}
 					extraColumnHeight := rowHeight - page.rows[row].columns[column].height() // distribute items across this height
 					if extraColumnHeight > 0 {
-						columnDistribute := page.rows[row].columns[column].items[0].item.Align("column-distribute")
+						columnDistribute := AlignTop
+						if len(page.rows[row].columns[column].items) > 0 {
+							columnDistribute = page.rows[row].columns[column].items[0].item.Align("column-distribute")
+						}
 						switch BindingAlign(columnDistribute, binding, pp) {
 						case AlignBottom:
 							for item := range page.rows[row].columns[column].items {
@@ -600,7 +847,10 @@ func layoutPages(pbBook *PbBook, outPageNumber int) {
 
 				extraRowWidth := page.availableWidth - page.rows[row].width()
 				if extraRowWidth > 0 {
-					rowDistribute := page.rows[row].columns[0].items[0].item.Align("row-distribute")
+					rowDistribute := AlignLeft
+					if len(page.rows[row].columns[0].items) > 0 {
+						rowDistribute = page.rows[row].columns[0].items[0].item.Align("row-distribute")
+					}
 					switch BindingAlign(rowDistribute, binding, pp) {
 					case AlignRight:
 						for column := range page.rows[row].columns {
@@ -654,7 +904,10 @@ func layoutPages(pbBook *PbBook, outPageNumber int) {
 
 			extraPageHeight := page.availableHeight - page.height()
 			if extraPageHeight > 0 {
-				pageDistribute := page.rows[0].columns[0].items[0].item.Align("page-distribute")
+				pageDistribute := AlignTop
+				if len(page.rows[0].columns[0].items) > 0 {
+					pageDistribute = page.rows[0].columns[0].items[0].item.Align("page-distribute")
+				}
 				switch BindingAlign(pageDistribute, binding, pp) {
 				case AlignBottom:
 					for row := range page.rows {
@@ -722,6 +975,17 @@ func layoutPages(pbBook *PbBook, outPageNumber int) {
 			page.updateOffsets()
 		}
 	}
+}
+
+func fileDate(filename string) int64 {
+	rv := time.Time{}.Unix()
+
+	fi, err := os.Stat(filename)
+	if err == nil {
+		rv = fi.ModTime().Unix()
+	}
+
+	return rv
 }
 
 func fileChanged(filename string, lastModTime time.Time) (bool, time.Time) {

@@ -1,7 +1,6 @@
 # pb
 
-pb is a text-to-photo book conversion tool for photographers.
-It allows focusing on the content of a book rather than layout and formatting.
+pb is a text-to-photo book conversion tool which allows focusing on the content of a book rather than layout and formatting.
 The first design goal is to be able to simply list photos interspersed with text,
 and convert that to a nicely formatted photo book.
 But a photo book should also be a nice finished product, so the second design goal
@@ -30,7 +29,7 @@ Normally, a block of text goes all the way across the page. To make a text that 
 
 For an image with a caption, settings come between the image and the caption:
 
-    Old Faithful's Erupting.jpeg $ straighten:1.0 font:name # Old Faithful's Erupting!
+    Old Faithful's Erupting.jpeg $ straighten:1.0 font:Times.ttf # Old Faithful's Erupting!
 
 For an image without a caption, settings come after the image:
 
@@ -38,7 +37,7 @@ For an image without a caption, settings come after the image:
 
 For a text without an image, settings come before:
 
-    $ font:name # Old Faithful's Erupting!
+    $ font:Times.ttf # Old Faithful's Erupting!
 
 ### Wildcards
 
@@ -60,30 +59,31 @@ Any line that begins with one or more spaces is treated as a continuation of the
 
 ### Comments
 
-Any line beginning with two forward slashes should be ignored, so it can be used for notes.
+Any line beginning with three forward slashes should be ignored, so it can be used for notes.
 
     Old Faithful.jpeg
     Steamboat Geyser.jpg
 
     # Two of the famous geysers in Yellowstone.
        I saw both of these erupting during my visit.
-    // TODO: go back and figure out what the dates were!
+    /// TODO: go back and figure out what the dates were!
 
     Old-Faithful.jpeg # The most famous geyser!
 
 ### Escaping special characters
 
-* An image filename starting with directive, add a `\` before the first character (Unlikely)
-* A space in an image filename before `$` or `#` must be replaced with `\_` (Unlikely)
-* A space in a setting value  must be replaced with `\_` (Possible in font name.)
-* Backslash must be replaced with two backslashes `\\` in image filenames or settings. (Likely in file paths on Windows)
-* Internally, `\_` is replaced with space. Anything else after a slash is replaced with that thing.
+The backtick or grave accent is used to escape a few special cases:
+* If an image filename starts with a directive (`***`, `+++`, `---`, `...`, `$$$`, `@@@`, `///`), add a `` ` `` before the first character
+* A space in an image filename before `$` or `#` must be replaced with `` `_ ``
+* A space in a setting value  must be replaced with `` `_ `` (Possible in font name.)
+* Backtick must be replaced with two backticks ``` `` ``` in image filenames or settings.
+* Internally, `` `_ `` is replaced with space. Anything else after a backtick is replaced with that thing.
 * Only image filenames and setting values need to be escaped, not text after a `#`
 
 Example, first without escaping, then with escaping:
 ```
 ---images---\image #.jpg $ font:\folder\Wierd # Name # Old Faithful's #$!@% Erupting
-\---images---\\image\_#.jpg $ font:\\folder\\Wierd\_#\_Name # Old Faithful's #$!@% Erupting
+`---images---\image`_#.jpg $ font:\folder\Wierd`_#`_Name # Old Faithful's #$!@% Erupting
 ```
 
 ### Character Set
@@ -92,12 +92,13 @@ A pb file is assumed to be UTF-8.
 
 ## Directives: Formatting & Styling Content
 
-`***` = starts a new book, defines settings for the book
+`***` = defines settings for the book  
 `+++` = starts a new page, defines settings for the page  
-`---` = starts a new row, defines settings for the row
+`---` = starts a new row, defines settings for the row  
 `...` = starts a new column, defines settings for the column  
 `$$$` = define style
 `@@@` = include another pb file
+`///` = comment
 
 Given a list of images and text, pb will arrange them into rows and pages. How it does that can be controlled
 with directives, which are additional lines starting with ..., ---, +++, ***, etc.
@@ -120,7 +121,7 @@ Styles are defined using $$$ followed by a space, the name of the style, and the
     $$$ 1 font:Arial.ttf size:9
     $$$ 3 font:Arial.ttf size:11
     $$$ bold font:Arial-Bold.ttf
-    $$$ copyright , (C) 2026, John Smith. All rights reserved.
+    $$$ copyright (C) 2026, John Smith. All rights reserved.
 
 Styles are applied by replacing a reference to the style with the defined value of the style.
 There are three ways to reference a style:
@@ -156,7 +157,7 @@ Example:
     $2 # This text is in Arial-Italic.ttf. Style 1 is applied but doesn't specify a font
     # This text is in whatever font is specified for the row, page, or book.  Style 1 is applied but doesn't specify a font
 
-Because styles replace reference to themselves, styles that have settings values need to escape those values as needed. Styles used to replace text do not need escaping.
+Because styles replace references to themselves, styles that have settings values need to escape those values as needed. Styles used to replace text do not need escaping because text does not need escaping
 
     $$$ 1 font:Neon\_Sans.ttf
 
@@ -266,7 +267,7 @@ Page-Level Settings
 * `margin:0,0,0,0`: Margins in the order Top, Right, Bottom, Left (binding:none), Top, Binding, Bottom, Edge (for binding:side), or Binding Right Edge Left (binding:top).  In units or percent.
 * `margin:0,0`: Margins in the order Top/Bottom, Right/Left
 * `margin:0`: Margins, all the same
-* `textAlign:left`: Alignment of non-specified text, equivalent to `#L`
+* ???? `textAlign:left`: Alignment of non-specified text, equivalent to `#L`
 * `background:color:#F,image:name,stretch:no,trim:x%,fit:x%,ninepatch:border,gradient:#F-#F,tile:?`
 * `header`
 * `footer`

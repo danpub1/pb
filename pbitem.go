@@ -22,12 +22,13 @@ const (
 	ItemTypeAny
 )
 
+// order Left < Center < Right
 const (
 	TextAlignUnknown = iota
+	TextAlignJustified
 	TextAlignLeft
 	TextAlignCenter
 	TextAlignRight
-	TextAlignJustified
 )
 
 const (
@@ -690,17 +691,33 @@ func (item *PbItem) ImageSizeForPage(sizeName string) (float64, float64) {
 
 	_, aspect, _, _ := item.ImageRectSetting()
 
-	if aspect >= 1 {
-		height = height / aspect
-	} else {
-		width = width * aspect
+	if aspect >= 1 { // width > height
+		width = math.Min(width, maxWidth)
+		height = width / aspect
+		if height > maxHeight {
+			height = maxHeight
+			width = height * aspect
+		}
+	} else { // height > width
+		height = math.Min(height, maxHeight)
+		width = height * aspect
+		if width > maxWidth {
+			width = maxWidth
+			height = width / aspect
+		}
 	}
 
-	return math.Min(width, maxWidth), math.Min(height, maxHeight)
+	return width, height
 }
 
 func (item *PbItem) pageDimensions() (float64, float64) {
 	return ContainerSize(item.PageSetting("page-size"), item.PageSetting("margin"))
+}
+
+func (item *PbItem) PageSizePts() (int, int) {
+	units := item.Units()
+	w, h := ContainerSize(item.PageSetting("page-size"), "0")
+	return int(lengthToPoints(w, units)), int(lengthToPoints(h, units))
 }
 
 func (source *PbItem) DeepCopy() PbItem {
@@ -768,7 +785,7 @@ var defaultSettings = map[string]string{
 	"caption-gutter":     "2",
 	"text-align":         "left",
 	"text-frame":         "#0000,0",
-	"font":               "times.ttf",
+	"font":               "",
 	"font-size":          "14",
 	"linespacing":        "1",
 	"letterspacing":      "0",
@@ -890,10 +907,14 @@ func (item *PbItem) DefaultSetting(setting string) string {
 }
 
 func (item *PbItem) SettingInt(setting string, itemType int) string {
-	var book PbItem
-	var page PbItem
-	var row PbItem
-	var column PbItem
+	var book *PbItem
+	var page *PbItem
+	var row *PbItem
+	var column *PbItem
+	bookIdx := -1
+	pageIdx := -1
+	rowIdx := -1
+	columnIdx := -1
 
 	var settingValue string
 	var exists bool
@@ -905,39 +926,53 @@ func (item *PbItem) SettingInt(setting string, itemType int) string {
 		}
 	}
 
-	for _, anItem := range item.pb {
-		if &anItem == item {
+	for ii, anItem := range item.pb {
+		if &item.pb[ii] == item {
 			break
 		} else if anItem.itemType == ItemTypeBook {
-			book = anItem
+			book = &anItem
+			bookIdx = ii
 		} else if anItem.itemType == ItemTypePage {
-			page = anItem
+			page = &anItem
+			pageIdx = ii
 		} else if anItem.itemType == ItemTypeRow {
-			row = anItem
+			row = &anItem
+			rowIdx = ii
 		} else if anItem.itemType == ItemTypeColumn {
-			column = anItem
+			column = &anItem
+			columnIdx = ii
 		}
 	}
 
-	if itemType == ItemTypeAny || itemType == ItemTypeColumn {
+	if columnIdx < rowIdx {
+		column = nil
+	}
+	if rowIdx < pageIdx {
+		row = nil
+	}
+	if pageIdx < bookIdx {
+		page = nil
+	}
+
+	if column != nil && (itemType == ItemTypeAny || itemType == ItemTypeColumn) {
 		if settingValue, exists = column.settings[setting]; exists {
 			return settingValue
 		}
 	}
 
-	if itemType == ItemTypeAny || itemType == ItemTypeColumn || itemType == ItemTypeRow {
+	if row != nil && (itemType == ItemTypeAny || itemType == ItemTypeColumn || itemType == ItemTypeRow) {
 		if settingValue, exists = row.settings[setting]; exists {
 			return settingValue
 		}
 	}
 
-	if itemType == ItemTypeAny || itemType == ItemTypeColumn || itemType == ItemTypeRow || itemType == ItemTypePage {
+	if page != nil && (itemType == ItemTypeAny || itemType == ItemTypeColumn || itemType == ItemTypeRow || itemType == ItemTypePage) {
 		if settingValue, exists = page.settings[setting]; exists {
 			return settingValue
 		}
 	}
 
-	if itemType == ItemTypeAny || itemType == ItemTypeColumn || itemType == ItemTypeRow || itemType == ItemTypePage || itemType == ItemTypeBook {
+	if book != nil && (itemType == ItemTypeAny || itemType == ItemTypeColumn || itemType == ItemTypeRow || itemType == ItemTypePage || itemType == ItemTypeBook) {
 		if settingValue, exists = book.settings[setting]; exists {
 			return settingValue
 		}

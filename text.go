@@ -75,15 +75,18 @@ func openFont(textInfo *TextInfo) (font.Face, float64, float64) {
 	if face, exists = fontCache[key]; !exists {
 		fontData, err := os.ReadFile(textInfo.font)
 		if err != nil {
+			log.Print("Error opening font \"" + textInfo.font + "\"")
 			log.Fatal(err)
 		}
 		fnt, err := sfnt.Parse(fontData)
 		if err != nil {
+			log.Print("Error parsing font \"" + textInfo.font + "\"")
 			log.Fatal(err)
 		}
 
 		face, err = opentype.NewFace(fnt, &opentype.FaceOptions{Size: size, DPI: dpi, Hinting: font.HintingFull})
 		if err != nil {
+			log.Print("Error initializing font \"" + textInfo.font + "\"")
 			log.Fatal(err)
 		}
 
@@ -168,17 +171,37 @@ func TextToImage(TextBlockLayout *TextBlockLayout, textInfo *TextInfo) *image.RG
 	widthFixed := fixedFromFloat64(dotsFromUnitsFloat(TextBlockLayout.width-textInfo.padding.left-textInfo.padding.right-textInfo.frameSize.left-textInfo.frameSize.right, textInfo.density))
 
 	leftEdge := dotsFromUnitsFloat(textInfo.frameSize.left+textInfo.padding.left, textInfo.density)
-	d.Dot.X = fixedFromFloat64(leftEdge)
 	d.Dot.Y = fixedFromFloat64(fontAscent + dotsFromUnitsFloat(textInfo.frameSize.top+textInfo.padding.top, textInfo.density))
 	for ii := range TextBlockLayout.lines {
-		switch textInfo.textAlign {
-		case TextAlignCenter:
-			d.Dot.X += (widthFixed - TextBlockLayout.lines[ii].advance) / 2
-		case TextAlignRight:
-			d.Dot.X += widthFixed - TextBlockLayout.lines[ii].advance
+		parts := strings.SplitN(TextBlockLayout.lines[ii].line, "\t", 3)
+		for jj := range parts {
+			textAlign := textInfo.textAlign
+			thisAdvance := TextBlockLayout.lines[ii].advance
+			line := TextBlockLayout.lines[ii].line
+			if len(parts) > 1 {
+				thisAdvance = advance(parts[jj], face, letterSpacing, wordSpacing)
+				line = parts[jj]
+				switch jj {
+				case 0:
+					textAlign = TextAlignLeft
+				case 1:
+					textAlign = TextAlignCenter
+				case 2:
+					textAlign = TextAlignRight
+				}
+			}
+
+			switch textAlign {
+			case TextAlignLeft, TextAlignJustified:
+				d.Dot.X = fixedFromFloat64(leftEdge)
+			case TextAlignCenter:
+				d.Dot.X = fixedFromFloat64(leftEdge) + (widthFixed-thisAdvance)/2
+			case TextAlignRight:
+				d.Dot.X = fixedFromFloat64(leftEdge) + widthFixed - thisAdvance
+			}
+
+			drawString(d, line, letterSpacing, wordSpacing)
 		}
-		drawString(d, TextBlockLayout.lines[ii].line, letterSpacing, wordSpacing)
-		d.Dot.X = fixedFromFloat64(leftEdge)
 		d.Dot.Y += fixedFromFloat64(lineHeight)
 	}
 
@@ -192,6 +215,15 @@ func TextToImage(TextBlockLayout *TextBlockLayout, textInfo *TextInfo) *image.RG
 	// }
 
 	return dst
+}
+
+func advance(text string, face font.Face, letterSpacing fixed.Int26_6, wordSpacing fixed.Int26_6) fixed.Int26_6 {
+	advances := drawString(&font.Drawer{Face: face}, text, letterSpacing, wordSpacing)
+	advance := fixed.Int26_6(0)
+	for _, anAdvance := range advances {
+		advance += anAdvance
+	}
+	return advance
 }
 
 func layoutForWidth(text string, advances []fixed.Int26_6, width float64, lineHeight float64, textInfo *TextInfo) (*TextBlockLayout, float64) {
@@ -306,6 +338,53 @@ func layoutForBalanced(text string, advances []fixed.Int26_6, width float64, lin
 var rxSpace, _ = regexp.Compile("([[:space:]]+)")
 
 func MeasureText(text string, maxWidth float64, maxHeight float64, textInfo *TextInfo) []TextBlockLayout {
+	if strings.ContainsRune(text, '\t') {
+		parts := strings.Split(text, "\t")
+		var layout1, layout2, layout3, destLayout []TextBlockLayout
+		maxLines := 0
+		if len(parts) > 0 {
+			textInfo.textAlign = TextAlignLeft
+			layout1 = MeasureText(parts[0], maxWidth, 0, textInfo)
+			maxLines = len(layout1[0].lines)
+			destLayout = layout1
+		}
+		if len(parts) > 1 {
+			textInfo.textAlign = TextAlignCenter
+			layout2 = MeasureText(parts[1], maxWidth, 0, textInfo)
+			if len(layout2[0].lines) > maxLines {
+				maxLines = len(layout2[0].lines)
+				destLayout = layout2
+			}
+		}
+		if len(parts) > 2 {
+			textInfo.textAlign = TextAlignRight
+			layout3 = MeasureText(parts[2], maxWidth, 0, textInfo)
+			if len(layout3[0].lines) > maxLines {
+				maxLines = len(layout3[0].lines)
+				destLayout = layout3
+			}
+		}
+
+		for ii := range maxLines {
+			var aline strings.Builder
+			if layout1 != nil && len(layout1[0].lines) > ii {
+				aline.WriteString(layout1[0].lines[ii].line)
+			}
+			aline.WriteString("\t")
+			if layout2 != nil && len(layout2[0].lines) > ii {
+				aline.WriteString(layout2[0].lines[ii].line)
+			}
+			aline.WriteString("\t")
+			if layout3 != nil && len(layout3[0].lines) > ii {
+				aline.WriteString(layout3[0].lines[ii].line)
+			}
+			destLayout[0].lines[ii].line = aline.String()
+			destLayout[0].lines[ii].advance = fixed.Int26_6(0)
+		}
+
+		return destLayout
+	}
+
 	face, _, lineHeight := openFont(textInfo)
 
 	letterSpacing := fixedFromFloat64(textInfo.letterSpacing)

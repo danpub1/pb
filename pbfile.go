@@ -18,7 +18,13 @@ func escapeValue(s string) string {
 	return s
 }
 
-func printSettings(theItem PbItem, o *strings.Builder) {
+func escapeText(s string) string {
+	s = strings.ReplaceAll(s, "\\", "\\\\")
+	s = strings.ReplaceAll(s, "\t", "\\t")
+	return s
+}
+
+func printSettings(theItem *PbItem, o *strings.Builder) {
 	var keys []string
 	for ss := range theItem.settings {
 		keys = append(keys, ss)
@@ -34,7 +40,7 @@ func printSettings(theItem PbItem, o *strings.Builder) {
 	}
 }
 
-func hasSettingsToPrint(theItem PbItem) bool {
+func hasSettingsToPrint(theItem *PbItem) bool {
 	for ss, vv := range theItem.settings {
 		if len(ss) > 0 && ss != "image" && ss != "text" && len(vv) > 0 {
 			return true
@@ -51,38 +57,38 @@ func printItems(items []PbItem) string {
 		switch theItem.itemType {
 		case ItemTypeBook:
 			o.WriteString("*** ")
-			printSettings(theItem, &o)
+			printSettings(&theItem, &o)
 			o.WriteString("\n")
 		case ItemTypePage:
 			o.WriteString("+++ ")
-			printSettings(theItem, &o)
+			printSettings(&theItem, &o)
 			o.WriteString("\n")
 		case ItemTypeRow:
 			o.WriteString("--- ")
-			printSettings(theItem, &o)
+			printSettings(&theItem, &o)
 			o.WriteString("\n")
 		case ItemTypeColumn:
 			o.WriteString("... ")
-			printSettings(theItem, &o)
+			printSettings(&theItem, &o)
 			o.WriteString("\n")
 		case ItemTypeText:
-			if hasSettingsToPrint(theItem) {
+			if hasSettingsToPrint(&theItem) {
 				o.WriteString("$ ")
-				printSettings(theItem, &o)
+				printSettings(&theItem, &o)
 			}
 			o.WriteString("# ")
-			o.WriteString(theItem.Setting("text"))
+			o.WriteString(escapeText(theItem.Setting("text")))
 			o.WriteString("\n")
 		case ItemTypeImage:
 			o.WriteString(theItem.Setting("image"))
 			o.WriteString(" ")
-			if hasSettingsToPrint(theItem) {
+			if hasSettingsToPrint(&theItem) {
 				o.WriteString("$ ")
-				printSettings(theItem, &o)
+				printSettings(&theItem, &o)
 			}
 			if len(theItem.Setting("text")) > 0 {
 				o.WriteString(" # ")
-				o.WriteString(theItem.Setting("text"))
+				o.WriteString(escapeText(theItem.Setting("text")))
 			}
 			o.WriteString("\n")
 			o.WriteString(fmt.Sprintf("/// ImageWidth:%v, ImageHeight:%v\n", theItem.imageWidthPx, theItem.imageHeightPx))
@@ -100,6 +106,10 @@ var rxTextStyle, _ = regexp.Compile("^(#{1,9}|#[0-9])([CRLJBE]?)$")
 
 func decodeTextDirective(directive string) string {
 	parts := rxTextStyle.FindStringSubmatch(directive)
+	if len(parts) < 2 {
+		log.Print("Error parsing text directive \"" + directive + "\"")
+		return ""
+	}
 	styleNum := ""
 	if len(parts[1]) == 1 || len(parts[1]) > 2 || parts[1] == "##" {
 		styleNum = fmt.Sprintf("%v", len(parts[1]))
@@ -135,6 +145,11 @@ var rxEscape, _ = regexp.Compile("`(.)")
 func unescape(line string) string {
 	line = rxEscapeSpace.ReplaceAllString(line, " ")
 	return rxEscape.ReplaceAllString(line, "$1")
+}
+
+func unescapeText(text string) string {
+	text = strings.ReplaceAll(text, "\\t", "\t")
+	return strings.ReplaceAll(text, "\\\\", "\\")
 }
 
 // ***|+++|---|... [Settings]
@@ -225,7 +240,7 @@ func parse(line string, styles map[string]string) PbItem {
 			parts := strings.SplitN(line, " ", 2)
 			textStyle = decodeTextDirective(parts[0])
 			if len(parts) > 1 {
-				theItem.Set("text", parts[1])
+				theItem.Set("text", unescapeText(parts[1]))
 			} else {
 				theItem.Set("text", "")
 			}
@@ -265,8 +280,8 @@ func processAsLinesFromBasePath(lines []string, basePath string, styles map[stri
 		} else {
 			s = applyStyles(s, styles)
 			theItem := parse(s, styles)
-			theItem = localizePaths(theItem, basePath)
-			newItems := expandWild(theItem)
+			localizePaths(&theItem, basePath)
+			newItems := expandWild(&theItem)
 			if newItems != nil {
 				items = append(items, newItems...)
 			} else {
@@ -278,7 +293,7 @@ func processAsLinesFromBasePath(lines []string, basePath string, styles map[stri
 	return items, styles, options
 }
 
-func expandWild(item PbItem) []PbItem {
+func expandWild(item *PbItem) []PbItem {
 	var newItems []PbItem
 
 	if item.itemType == ItemTypeImage {
@@ -336,14 +351,13 @@ func localizePath(path string, basePath string) string {
 	return path
 }
 
-func localizePaths(theItem PbItem, basePath string) PbItem {
+func localizePaths(theItem *PbItem, basePath string) {
 	if image, imageExists := theItem.settings["image"]; imageExists {
 		theItem.Set("image", localizePath(image, basePath))
 	}
 	if font, fontExists := theItem.settings["font"]; fontExists {
 		theItem.Set("font", localizePath(font, basePath))
 	}
-	return theItem
 }
 
 func makeIntoLines(lines []string) []string {
@@ -356,7 +370,7 @@ func makeIntoLines(lines []string) []string {
 			if continuation {
 				s = strings.TrimLeft(s, " ")
 			}
-			if !strings.HasPrefix(s, "// ") && s != "//" && !(ii == 0 && !continuation && strings.HasPrefix(s, "#!")) {
+			if !strings.HasPrefix(s, "/// ") && s != "///" && !(ii == 0 && !continuation && strings.HasPrefix(s, "#!")) {
 				if continuation {
 					if len(f) > 0 {
 						f[len(f)-1] += " " + s
