@@ -2,6 +2,8 @@ package main
 
 import (
 	"bufio"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -25,6 +27,7 @@ type ImageCacheEntry struct {
 	Filedate      int64
 	ImageWidthPx  int
 	ImageHeightPx int
+	Rotation      int
 }
 
 func loadImageCache() map[string]ImageCacheEntry {
@@ -45,18 +48,18 @@ func saveImageCache(cache *map[string]ImageCacheEntry) {
 	}
 }
 
-func checkCacheEntry(cache *map[string]ImageCacheEntry, filename string) (int, int, bool) {
+func checkCacheEntry(cache *map[string]ImageCacheEntry, filename string) (int, int, int, bool) {
 	if entry, exists := (*cache)[filename]; exists {
 		filedate := fileDate(filename)
 		if entry.Filedate == filedate {
-			return entry.ImageWidthPx, entry.ImageHeightPx, true
+			return entry.ImageWidthPx, entry.ImageHeightPx, entry.Rotation, true
 		}
 	}
-	return 0, 0, false
+	return 0, 0, 0, false
 }
 
-func updateCacheEntry(cache *map[string]ImageCacheEntry, filename string, imageWidthPx int, imageHeightPx int) {
-	(*cache)[filename] = ImageCacheEntry{fileDate(filename), imageWidthPx, imageHeightPx}
+func updateCacheEntry(cache *map[string]ImageCacheEntry, filename string, imageWidthPx int, imageHeightPx int, rotation int) {
+	(*cache)[filename] = ImageCacheEntry{fileDate(filename), imageWidthPx, imageHeightPx, rotation}
 }
 
 func getImageDimensions(items []PbItem) {
@@ -72,9 +75,14 @@ func getImageDimensions(items []PbItem) {
 			items[ii].imageHeightPx = 1
 
 			filename := theItem.Setting("image")
-			if imageWidthPx, imageHeightPx, exists := checkCacheEntry(&cache, filename); exists {
-				items[ii].imageWidthPx = imageWidthPx
-				items[ii].imageHeightPx = imageHeightPx
+			if imageWidthPx, imageHeightPx, rotation, exists := checkCacheEntry(&cache, filename); exists {
+				if rotation == 90 || rotation == -90 || rotation == 270 || rotation == -270 {
+					items[ii].imageWidthPx = imageHeightPx
+					items[ii].imageHeightPx = imageWidthPx
+				} else {
+					items[ii].imageWidthPx = imageWidthPx
+					items[ii].imageHeightPx = imageHeightPx
+				}
 				continue
 			}
 
@@ -95,10 +103,17 @@ func getImageDimensions(items []PbItem) {
 				continue
 			}
 
-			items[ii].imageWidthPx = config.Width
-			items[ii].imageHeightPx = config.Height
+			rotation := Atoi(items[ii].Setting("rotate"))
 
-			updateCacheEntry(&cache, filename, config.Width, config.Height)
+			if rotation == 90 || rotation == -90 || rotation == 270 || rotation == -270 {
+				items[ii].imageWidthPx = config.Height
+				items[ii].imageHeightPx = config.Width
+			} else {
+				items[ii].imageWidthPx = config.Width
+				items[ii].imageHeightPx = config.Height
+			}
+
+			updateCacheEntry(&cache, filename, config.Width, config.Height, rotation)
 		}
 	}
 
@@ -505,10 +520,10 @@ func (writer *PdfJpegObjectWriter) Finish() (int, error) {
 	return bytesWritten, err
 }
 
-func writePage(img image.Image, objNum int, curPage int, outPageNumber int, outFilename string) (int, error) {
+func writePage(img image.Image, objNum int, curPage int, outPageRange string, outFilename string) (int, error) {
 	ext := filepath.Ext(outFilename)
 	format := strings.ToLower(ext)
-	if outPageNumber == -1 && format != ".pdf" {
+	if isPageRangeMulti(outPageRange) && format != ".pdf" {
 		outFilename = strings.TrimSuffix(outFilename, ext)
 		outFilename = fmt.Sprintf(outFilename+"-%v"+ext, curPage)
 	}
@@ -555,7 +570,7 @@ func writePage(img image.Image, objNum int, curPage int, outPageNumber int, outF
 	return 0, nil
 }
 
-func renderPages(pbBook *PbBook, outPageNumber int, outFilename string) {
+func renderPages(pbBook *PbBook, outPageRange string, outFilename string) {
 	n, err := writeHeader(outFilename)
 	if err != nil {
 		return
@@ -564,8 +579,12 @@ func renderPages(pbBook *PbBook, outPageNumber int, outFilename string) {
 	offsets := []PageInfo{}
 	objNum := 1
 	for pp := range pbBook.pages {
+		changed := false
+		if changed, _ = fileChanged(*inFileFlag, lastModTime); changed {
+			break
+		}
 		page := &pbBook.pages[pp]
-		if outPageNumber < 0 || pp == outPageNumber {
+		if isPageInRange(outPageRange, pp) {
 			var top float64
 			var left float64
 			var dst *image.RGBA = nil
@@ -608,6 +627,15 @@ func renderPages(pbBook *PbBook, outPageNumber int, outFilename string) {
 							// Resize the cropped image to width = 200px preserving the aspect ratio.
 							imageWidthDots := int(math.Round(dotsFromUnitsFloat(item.imageWidth, density)))
 							imageHeightDots := int(math.Round(dotsFromUnitsFloat(item.imageHeight, density)))
+							rotation := Atoi(item.Setting("rotate"))
+							switch rotation {
+							case -90, 270:
+								picture = imaging.Rotate90(picture)
+							case 90, -270:
+								picture = imaging.Rotate270(picture)
+							case 180, -180:
+								picture = imaging.Rotate180(picture)
+							}
 							picture = imaging.Resize(picture, imageWidthDots, imageHeightDots, imaging.Lanczos)
 							textWidthDots := int(math.Round(dotsFromUnitsFloat(item.textWidth, density)))
 							textHeightDots := int(math.Round(dotsFromUnitsFloat(item.textHeight, density)))
@@ -646,9 +674,13 @@ func renderPages(pbBook *PbBook, outPageNumber int, outFilename string) {
 
 			w, h := item.PageSizePts()
 			offsets = append(offsets, PageInfo{n, w, h})
-			thisn, thisErr := writePage(dst, objNum, pp, outPageNumber, outFilename)
+			thisn, thisErr := writePage(dst, objNum, pp, outPageRange, outFilename)
 			if thisErr != nil {
 				return
+			}
+
+			if globalVerboseFlag&4 != 0 {
+				log.Printf("Rendered Page %v", pp+1)
 			}
 
 			n += thisn
@@ -659,6 +691,37 @@ func renderPages(pbBook *PbBook, outPageNumber int, outFilename string) {
 	if endErr != nil {
 		return
 	}
+}
+
+func loadResizeCache() map[string]string {
+	cache := map[string]string{}
+
+	bytes, err := os.ReadFile(".pbresizecache")
+	if err == nil {
+		json.Unmarshal(bytes, &cache)
+	}
+
+	return cache
+}
+
+func saveResizeCache(cache *map[string]string) {
+	bytes, err := json.Marshal(cache)
+	if err == nil {
+		os.WriteFile(".pbresizecache", bytes, 0666)
+	}
+}
+
+func checkResizeCacheEntry(cache *map[string]string, jsonValue string) (string, string) {
+	hashbytes := sha256.Sum256([]byte(jsonValue))
+	jsonhash := hex.EncodeToString(hashbytes[:])
+	if entry, exists := (*cache)[jsonhash]; exists {
+		return entry, jsonhash
+	}
+	return "", jsonhash
+}
+
+func updateResizeCacheEntry(cache *map[string]string, jsonValue string, jsonhash string) {
+	(*cache)[jsonhash] = jsonValue
 }
 
 func spaceToDistribute(page *PbPage, row *PbRow, column *PbColumn) bool {
@@ -724,27 +787,152 @@ func resizeItem(itemColumnItemNum int, itemColumnNum int, itemRowNum int, pbPage
 	return true
 }
 
-func resizePages(pb *PbBook, outPageNumber int) {
-	for pp := range pb.pages {
-		if outPageNumber < 0 || pp == outPageNumber {
-			page := &pb.pages[pp]
-			for {
-				resized := false
-				for row := range page.rows {
-					for column := range page.rows[row].columns {
-						for item := range page.rows[row].columns[column].items {
-							if spaceToDistribute(page, &page.rows[row], &page.rows[row].columns[column]) {
-								resized = resizeItem(item, column, row, page) || resized
-							}
-						}
-					}
+func isPageInRange(pageRange string, pageNum int) bool {
+	if len(pageRange) == 0 || pageRange == "-" {
+		return true
+	}
+
+	// internally the page numbering is zero based, the external page number is one based
+	pageNum += 1
+
+	pageRanges := strings.Split(pageRange, ",")
+
+	for _, aRange := range pageRanges {
+		if strings.HasPrefix(aRange, "-") {
+			if end, _ := strings.CutPrefix(aRange, "-"); pageNum <= Atoi(end) {
+				return true
+			}
+		} else if strings.HasSuffix(aRange, "-") {
+			if start, _ := strings.CutSuffix(aRange, "-"); pageNum >= Atoi(start) {
+				return true
+			}
+		} else {
+			parts := strings.SplitN(aRange, "-", 2)
+			switch len(parts) {
+			case 1:
+				if Atoi(parts[0]) == pageNum {
+					return true
 				}
-				if !resized {
-					break
+			case 2:
+				start := Atoi(parts[0])
+				end := Atoi(parts[1])
+
+				if pageNum >= start && pageNum <= end {
+					return true
 				}
 			}
 		}
 	}
+	return false
+}
+
+func isPageRangeMulti(pageRange string) bool {
+	return len(pageRange) == 0 || strings.ContainsAny(pageRange, "-,")
+}
+
+type ResizeCacheEntryItem struct {
+	TextWidth           float64
+	TextHeight          float64
+	BestTextBlockLayout int
+	ImageWidth          float64
+	ImageHeight         float64
+	XOffset             float64
+	YOffset             float64
+}
+
+type ResizeCacheEntryColumn struct {
+	Items []ResizeCacheEntryItem
+}
+
+type ResizeCacheEntryRow struct {
+	Columns []ResizeCacheEntryColumn
+}
+
+type ResizeCacheEntry struct {
+	Rows []ResizeCacheEntryRow
+}
+
+func serializePage(page *PbPage) string {
+	entry := ResizeCacheEntry{}
+
+	for row := range page.rows {
+		entry.Rows = append(entry.Rows, ResizeCacheEntryRow{})
+		for column := range page.rows[row].columns {
+			entry.Rows[row].Columns = append(entry.Rows[row].Columns, ResizeCacheEntryColumn{})
+			for ii, columnItem := range page.rows[row].columns[column].items {
+				entry.Rows[row].Columns[column].Items = append(entry.Rows[row].Columns[column].Items, ResizeCacheEntryItem{})
+				entry.Rows[row].Columns[column].Items[ii].TextWidth = columnItem.item.textWidth
+				entry.Rows[row].Columns[column].Items[ii].TextHeight = columnItem.item.textHeight
+				entry.Rows[row].Columns[column].Items[ii].BestTextBlockLayout = columnItem.item.bestTextBlockLayout
+				entry.Rows[row].Columns[column].Items[ii].ImageWidth = columnItem.item.imageWidth
+				entry.Rows[row].Columns[column].Items[ii].ImageHeight = columnItem.item.imageHeight
+				entry.Rows[row].Columns[column].Items[ii].XOffset = columnItem.item.xOffset
+				entry.Rows[row].Columns[column].Items[ii].YOffset = columnItem.item.yOffset
+			}
+		}
+	}
+
+	bytes, _ := json.Marshal(&entry)
+	return string(bytes[:])
+}
+
+func deserializePage(jsonValue string, page *PbPage) {
+	var entry ResizeCacheEntry
+	json.Unmarshal([]byte(jsonValue), &entry)
+
+	for row := range page.rows {
+		for column := range page.rows[row].columns {
+			for ii := range page.rows[row].columns[column].items {
+				page.rows[row].columns[column].items[ii].item.textWidth = entry.Rows[row].Columns[column].Items[ii].TextWidth
+				page.rows[row].columns[column].items[ii].item.textHeight = entry.Rows[row].Columns[column].Items[ii].TextHeight
+				page.rows[row].columns[column].items[ii].item.bestTextBlockLayout = entry.Rows[row].Columns[column].Items[ii].BestTextBlockLayout
+				page.rows[row].columns[column].items[ii].item.imageWidth = entry.Rows[row].Columns[column].Items[ii].ImageWidth
+				page.rows[row].columns[column].items[ii].item.imageHeight = entry.Rows[row].Columns[column].Items[ii].ImageHeight
+				page.rows[row].columns[column].items[ii].item.xOffset = entry.Rows[row].Columns[column].Items[ii].XOffset
+				page.rows[row].columns[column].items[ii].item.yOffset = entry.Rows[row].Columns[column].Items[ii].YOffset
+			}
+		}
+	}
+}
+
+func resizePages(pb *PbBook, outPageRange string) {
+	resizeCache := loadResizeCache()
+
+	for pp := range pb.pages {
+		if isPageInRange(outPageRange, pp) {
+			page := &pb.pages[pp]
+			sPage := serializePage(page)
+			if newSPage, jsonhash := checkResizeCacheEntry(&resizeCache, sPage); newSPage != "" {
+				deserializePage(newSPage, page)
+				page.updateOffsets()
+			} else {
+				for {
+					resized := false
+					for row := range page.rows {
+						for column := range page.rows[row].columns {
+							for item := range page.rows[row].columns[column].items {
+								if spaceToDistribute(page, &page.rows[row], &page.rows[row].columns[column]) {
+									resized = resizeItem(item, column, row, page) || resized
+								}
+							}
+						}
+					}
+					if !resized {
+						break
+					}
+				}
+
+				sPage = serializePage(page)
+				updateResizeCacheEntry(&resizeCache, sPage, jsonhash)
+
+				if globalVerboseFlag&4 != 0 {
+					log.Printf("Resized Page %v", pp+1)
+				}
+			}
+		}
+	}
+
+	saveResizeCache(&resizeCache)
 }
 
 func BindingAlign(align int, binding int, pageNum int) int {
@@ -775,14 +963,14 @@ func BindingAlign(align int, binding int, pageNum int) int {
 	return align
 }
 
-func layoutPages(pbBook *PbBook, outPageNumber int) {
+func layoutPages(pbBook *PbBook, outPageRange string) {
 	binding := BindingUnknown
 	if len(pbBook.pages) > 0 {
 		binding = pbBook.pages[0].rows[0].columns[0].items[0].item.Binding()
 	}
 
 	for pp := range pbBook.pages {
-		if outPageNumber < 0 || pp == outPageNumber {
+		if isPageInRange(outPageRange, pp) {
 			page := &pbBook.pages[pp]
 			// pageHeight := page.height()
 			for row := range page.rows {
@@ -1000,15 +1188,18 @@ func fileChanged(filename string, lastModTime time.Time) (bool, time.Time) {
 }
 
 var globalVerboseFlag = 0
+var lastModTime time.Time
+var inFileFlag *string
 
 func main() {
 	var (
-		inFileFlag  = flag.String("i", "", "input filename")
-		pageFlag    = flag.Int("p", -1, "page number")
+		pageFlag    = flag.String("p", "", "page range")
 		verboseFlag = flag.Int("v", 0, "verbose")
 		watchFlag   = flag.Bool("w", false, "watch")
 		outFileFlag = flag.String("o", "out.png", "output filename")
 	)
+
+	inFileFlag = flag.String("i", "", "input filename")
 
 	flag.Parse()
 	globalVerboseFlag = *verboseFlag
@@ -1018,7 +1209,7 @@ func main() {
 		log.Fatal("no input file specified")
 	}
 
-	_, lastModTime := fileChanged(*inFileFlag, time.Time{})
+	_, lastModTime = fileChanged(*inFileFlag, time.Time{})
 
 	for {
 		items, options := ReadPbFile(*inFileFlag)
@@ -1033,9 +1224,9 @@ func main() {
 			bWatch = Atob(val)
 		}
 
-		outputPageNumber := *pageFlag
+		outputPageRange := *pageFlag
 		if val, exists := options["p"]; exists {
-			outputPageNumber = Atoi(val)
+			outputPageRange = val
 		}
 
 		outputFile := *outFileFlag
@@ -1046,16 +1237,28 @@ func main() {
 		getImageDimensions(items)
 		getTextDimensions(items)
 
+		if globalVerboseFlag&4 != 0 {
+			log.Printf("Read input file")
+		}
+
 		// break into columns, rows
 		pbBook := breakIntoPages(items)
 
+		if globalVerboseFlag&4 != 0 {
+			log.Printf("Paginated")
+		}
+
 		// calculate sizes that fills available space
-		resizePages(pbBook, outputPageNumber)
+		resizePages(pbBook, outputPageRange)
 
 		// determine positions on page
-		layoutPages(pbBook, outputPageNumber)
+		layoutPages(pbBook, outputPageRange)
 
-		renderPages(pbBook, outputPageNumber, outputFile)
+		if globalVerboseFlag&4 != 0 {
+			log.Printf("Laid out pages")
+		}
+
+		renderPages(pbBook, outputPageRange, outputFile)
 
 		if globalVerboseFlag&1 != 0 {
 			fmt.Println(printItems(items))
@@ -1075,3 +1278,12 @@ func main() {
 		}
 	}
 }
+
+// TTD:
+// rect fit/trim
+// spreadeyelevel
+// Straighten
+// Contrast/Brightness adjustment
+// Gamma
+// HSL Adjustment
+// is there something wrong with settings that column settings for break, distribute, don't work?

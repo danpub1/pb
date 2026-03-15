@@ -776,8 +776,9 @@ var defaultSettings = map[string]string{
 	"contrast":     "0.0",
 	"gamma":        "1.0",
 	"saturation":   "0.0",
-	"s-contrast":   "0.0, 0.50",
-	"s-saturation": "0.0, 0.50",
+	"s-contrast":   "0.0,0.50",
+	"s-saturation": "0.0,0.50",
+	"rotate":       "0", // 0, 90, 180, 270
 
 	// text
 	"caption-position":   "below",
