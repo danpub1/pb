@@ -301,6 +301,24 @@ func (item *PbItem) Size() (float64, float64) {
 	return 0, 0
 }
 
+func (item *PbItem) SigmoidalSetting() (float64, float64) {
+	// factor (-10-10), midpoint (0.5)
+	parts := strings.SplitN(item.Setting("sigmoidal"), ",", 2)
+
+	factor := 0.0
+	midpoint := 0.5
+
+	if len(parts) > 0 && len(parts[0]) > 0 {
+		factor = Atof(parts[0])
+	}
+
+	if len(parts) > 1 && len(parts[1]) > 0 {
+		midpoint = Atof(parts[1])
+	}
+
+	return factor, midpoint
+}
+
 func (item *PbItem) Units() int {
 	switch item.Setting("units") {
 	case "pt":
@@ -772,6 +790,7 @@ var defaultSettings = map[string]string{
 	"background":      "#F",
 	"page-distribute": "spreadmiddle", // how rows are distributed vertically on the page
 	"page-row-gutter": "6",            // gutter between rows
+	"current-page":    "false",
 
 	// row
 	"row-distribute":    "spreadcenter", // how columns are distributed horizontally in a row
@@ -801,8 +820,10 @@ var defaultSettings = map[string]string{
 	"contrast":     "0.0",
 	"gamma":        "1.0",
 	"saturation":   "0.0",
-	"s-contrast":   "0.0,0.50",
+	"sigmoidal":    "0.0,0.50",
 	"s-saturation": "0.0,0.50",
+	"sharpen":      "0.0",
+	"blur":         "0.0",
 	"rotate":       "0", // 0, 90, 180, 270
 
 	// text

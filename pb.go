@@ -519,10 +519,10 @@ func (writer *PdfJpegObjectWriter) Finish() (int, error) {
 	return bytesWritten, err
 }
 
-func writePage(img image.Image, objNum int, curPage int, outPageRange string, outFilename string) (int, error) {
+func writePage(img image.Image, objNum int, curPage int, outFilename string, isPageRangeMulti bool) (int, error) {
 	ext := filepath.Ext(outFilename)
 	format := strings.ToLower(ext)
-	if isPageRangeMulti(outPageRange) && format != ".pdf" {
+	if isPageRangeMulti && format != ".pdf" {
 		outFilename = strings.TrimSuffix(outFilename, ext)
 		outFilename = fmt.Sprintf(outFilename+"-%v"+ext, curPage)
 	}
@@ -676,6 +676,8 @@ func renderPages(pbBook *PbBook, outPageRange string, outFilename string) {
 		return
 	}
 
+	isPageRangeMulti := isPageRangeMulti(outPageRange, pbBook)
+
 	offsets := []PageInfo{}
 	objNum := 1
 	for pp := range pbBook.pages {
@@ -684,7 +686,7 @@ func renderPages(pbBook *PbBook, outPageRange string, outFilename string) {
 			break
 		}
 		page := &pbBook.pages[pp]
-		if isPageInRange(outPageRange, pp) {
+		if isPageInRange(outPageRange, pp) || isCurrentPage(pbBook, pp) {
 			var top float64
 			var left float64
 			var dst *image.RGBA = nil
@@ -740,13 +742,26 @@ func renderPages(pbBook *PbBook, outPageRange string, outFilename string) {
 								picture = imaging.Rotate180(picture)
 							}
 
-							// imaging.Sharpen()
-							// imaging.AdjustBrightness()
-							// imaging.AdjustContrast()
-							// imaging.AdjustGamma()
-							// imaging.AdjustSaturation()
-							// imaging.AdjustSigmoid()
-							// imaging.Blur()
+							brightness := item.FloatSetting("brightness")
+							if brightness != 0 {
+								picture = imaging.AdjustBrightness(picture, brightness)
+							}
+							contrast := item.FloatSetting("contrast")
+							if contrast != 0 {
+								picture = imaging.AdjustContrast(picture, contrast)
+							}
+							gamma := item.FloatSetting("gamma")
+							if gamma != 1.0 {
+								picture = imaging.AdjustGamma(picture, gamma)
+							}
+							saturation := item.FloatSetting("saturation")
+							if saturation != 0 {
+								picture = imaging.AdjustSaturation(picture, saturation)
+							}
+							factor, midpoint := item.SigmoidalSetting()
+							if factor != 0 {
+								picture = imaging.AdjustSigmoid(picture, midpoint, factor)
+							}
 
 							picture = scaleToRect(picture, item)
 
@@ -755,6 +770,16 @@ func renderPages(pbBook *PbBook, outPageRange string, outFilename string) {
 							imageHeightDots := int(math.Round(dotsFromUnitsFloat(item.imageHeight, density)))
 
 							picture = imaging.Resize(picture, imageWidthDots, imageHeightDots, imaging.Lanczos)
+
+							blur := item.FloatSetting("blur")
+							if blur != 0 {
+								picture = imaging.Blur(picture, blur)
+							}
+							sharpen := item.FloatSetting("sharpen")
+							if sharpen != 0 {
+								picture = imaging.Sharpen(picture, sharpen)
+							}
+
 							textWidthDots := int(math.Round(dotsFromUnitsFloat(item.textWidth, density)))
 							textHeightDots := int(math.Round(dotsFromUnitsFloat(item.textHeight, density)))
 							xDots := int(math.Round(dotsFromUnitsFloat(left+item.xOffset, density)))
@@ -792,7 +817,7 @@ func renderPages(pbBook *PbBook, outPageRange string, outFilename string) {
 
 			w, h := item.PageSizePts()
 			offsets = append(offsets, PageInfo{n, w, h})
-			thisn, thisErr := writePage(dst, objNum, pp, outPageRange, outFilename)
+			thisn, thisErr := writePage(dst, objNum, pp, outFilename, isPageRangeMulti)
 			if thisErr != nil {
 				return
 			}
@@ -944,8 +969,18 @@ func isPageInRange(pageRange string, pageNum int) bool {
 	return false
 }
 
-func isPageRangeMulti(pageRange string) bool {
-	return len(pageRange) == 0 || strings.ContainsAny(pageRange, "-,")
+func isPageRangeMulti(pageRange string, pbBook *PbBook) bool {
+	pageCount := 0
+	for pp := range pbBook.pages {
+		if isPageInRange(pageRange, pp) {
+			pageCount++
+			if pageCount > 1 {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 type ResizeCacheEntryItem struct {
@@ -1013,11 +1048,21 @@ func deserializePage(jsonValue string, page *PbPage) {
 	}
 }
 
+func isCurrentPage(pb *PbBook, pp int) bool {
+	rv := false
+	if pb != nil && len(pb.pages) > pp {
+		if len(pb.pages[pp].rows) > 0 && len(pb.pages[pp].rows[0].columns) > 0 && len(pb.pages[pp].rows[0].columns[0].items) > 0 && pb.pages[pp].rows[0].columns[0].items[0].item != nil {
+			rv = pb.pages[pp].rows[0].columns[0].items[0].item.BoolPageSetting("current-page")
+		}
+	}
+	return rv
+}
+
 func resizePages(pb *PbBook, outPageRange string) {
 	resizeCache := loadResizeCache()
 
 	for pp := range pb.pages {
-		if isPageInRange(outPageRange, pp) {
+		if isPageInRange(outPageRange, pp) || isCurrentPage(pb, pp) {
 			page := &pb.pages[pp]
 			sPage := serializePage(page)
 			if newSPage, jsonhash := checkResizeCacheEntry(&resizeCache, sPage); newSPage != "" {
@@ -1088,7 +1133,7 @@ func layoutPages(pbBook *PbBook, outPageRange string) {
 	}
 
 	for pp := range pbBook.pages {
-		if isPageInRange(outPageRange, pp) {
+		if isPageInRange(outPageRange, pp) || isCurrentPage(pbBook, pp) {
 			page := &pbBook.pages[pp]
 			// pageHeight := page.height()
 			for row := range page.rows {
@@ -1398,10 +1443,7 @@ func main() {
 }
 
 // TTD:
-// rect fit/trim
 // spreadeyelevel
-// Straighten
-// Contrast/Brightness adjustment
-// Gamma
 // HSL Adjustment
+// highlights, midtones, shadows
 // is there something wrong with settings that column settings for break, distribute, don't work?
