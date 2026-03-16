@@ -27,7 +27,6 @@ type ImageCacheEntry struct {
 	Filedate      int64
 	ImageWidthPx  int
 	ImageHeightPx int
-	Rotation      int
 }
 
 func loadImageCache() map[string]ImageCacheEntry {
@@ -48,18 +47,18 @@ func saveImageCache(cache *map[string]ImageCacheEntry) {
 	}
 }
 
-func checkCacheEntry(cache *map[string]ImageCacheEntry, filename string) (int, int, int, bool) {
+func checkCacheEntry(cache *map[string]ImageCacheEntry, filename string) (int, int, bool) {
 	if entry, exists := (*cache)[filename]; exists {
 		filedate := fileDate(filename)
 		if entry.Filedate == filedate {
-			return entry.ImageWidthPx, entry.ImageHeightPx, entry.Rotation, true
+			return entry.ImageWidthPx, entry.ImageHeightPx, true
 		}
 	}
-	return 0, 0, 0, false
+	return 0, 0, false
 }
 
-func updateCacheEntry(cache *map[string]ImageCacheEntry, filename string, imageWidthPx int, imageHeightPx int, rotation int) {
-	(*cache)[filename] = ImageCacheEntry{fileDate(filename), imageWidthPx, imageHeightPx, rotation}
+func updateCacheEntry(cache *map[string]ImageCacheEntry, filename string, imageWidthPx int, imageHeightPx int) {
+	(*cache)[filename] = ImageCacheEntry{fileDate(filename), imageWidthPx, imageHeightPx}
 }
 
 func getImageDimensions(items []PbItem) {
@@ -75,7 +74,9 @@ func getImageDimensions(items []PbItem) {
 			items[ii].imageHeightPx = 1
 
 			filename := theItem.Setting("image")
-			if imageWidthPx, imageHeightPx, rotation, exists := checkCacheEntry(&cache, filename); exists {
+			rotation := Atoi(items[ii].Setting("rotate"))
+
+			if imageWidthPx, imageHeightPx, exists := checkCacheEntry(&cache, filename); exists {
 				if rotation == 90 || rotation == -90 || rotation == 270 || rotation == -270 {
 					items[ii].imageWidthPx = imageHeightPx
 					items[ii].imageHeightPx = imageWidthPx
@@ -103,8 +104,6 @@ func getImageDimensions(items []PbItem) {
 				continue
 			}
 
-			rotation := Atoi(items[ii].Setting("rotate"))
-
 			if rotation == 90 || rotation == -90 || rotation == 270 || rotation == -270 {
 				items[ii].imageWidthPx = config.Height
 				items[ii].imageHeightPx = config.Width
@@ -113,7 +112,7 @@ func getImageDimensions(items []PbItem) {
 				items[ii].imageHeightPx = config.Height
 			}
 
-			updateCacheEntry(&cache, filename, config.Width, config.Height, rotation)
+			updateCacheEntry(&cache, filename, config.Width, config.Height)
 		}
 	}
 
@@ -570,6 +569,107 @@ func writePage(img image.Image, objNum int, curPage int, outPageRange string, ou
 	return 0, nil
 }
 
+func scaleToRect(picture image.Image, item *PbItem) image.Image {
+	zoom, dstAspect, xOffset, yOffset := item.ImageRectSetting()
+
+	wr, hr, _, _ := calcStraighten(float64(item.imageWidthPx), float64(item.imageHeightPx), item.FloatSetting("straighten"))
+
+	srcAspect := wr / hr
+
+	dstWidth := int(math.Round(wr))
+	dstHeight := int(math.Round(hr))
+	dstXOffset := 0
+	dstYOffset := 0
+	switch zoom {
+	case 0: // trim
+		if dstAspect > srcAspect { // dst is wider than src, crop top & bottom
+			dstHeight = int(math.Round(float64(dstWidth) / dstAspect))
+			dstYOffset = int(math.Round(float64(int(math.Round(hr))-dstHeight) * float64(yOffset) / 100.0))
+			return imaging.Crop(picture, image.Rectangle{image.Point{dstXOffset, dstYOffset}, image.Point{dstXOffset + dstWidth, dstYOffset + dstHeight}})
+		} else if dstAspect < srcAspect { // dst is taller than src, crop left & right
+			dstWidth = int(math.Round(float64(dstHeight) * dstAspect))
+			dstXOffset = int(math.Round(float64(int(math.Round(wr))-dstWidth) * float64(xOffset) / 100.0))
+			return imaging.Crop(picture, image.Rectangle{image.Point{dstXOffset, dstYOffset}, image.Point{dstXOffset + dstWidth, dstYOffset + dstHeight}})
+		} else {
+			return picture
+		}
+	case 1: // fit
+		if dstAspect > srcAspect { // dst is wider than src, pad left & right
+			dstWidth = int(math.Round(float64(int(math.Round(hr))) * dstAspect))
+			dstXOffset = int(math.Round(float64(dstWidth-int(math.Round(wr))) * float64(xOffset) / 100.0))
+			dst := image.NewRGBA(image.Rect(0, 0, dstWidth, dstHeight))
+			backColor := colorToNRGBA(item.Setting("background"))
+			draw.Draw(dst, dst.Bounds(), image.NewUniform(color.RGBA{backColor.R, backColor.G, backColor.B, backColor.A}), image.Point{}, draw.Src)
+			return imaging.Paste(dst, picture, image.Point{dstXOffset, dstYOffset})
+		} else if dstAspect < srcAspect { // dst is taller than src, pad top & bottom
+			dstHeight = int(math.Round(float64(int(math.Round(wr))) / dstAspect))
+			dstYOffset = int(math.Round(float64(dstHeight-int(math.Round(hr))) * float64(yOffset) / 100.0))
+			dst := image.NewRGBA(image.Rect(0, 0, dstWidth, dstHeight))
+			backColor := colorToNRGBA(item.Setting("background"))
+			draw.Draw(dst, dst.Bounds(), image.NewUniform(color.RGBA{backColor.R, backColor.G, backColor.B, backColor.A}), image.Point{}, draw.Src)
+			return imaging.Paste(dst, picture, image.Point{dstXOffset, dstYOffset})
+		} else {
+			return picture
+		}
+	default: // arbitrary zoom
+	}
+
+	return picture
+}
+
+func calcStraighten(width float64, height float64, angle float64) (float64, float64, float64, float64) {
+	if angle == 0 {
+		return width, height, 0, 0
+	}
+	aspectRatio := float64(width) / float64(height)
+	angler := angle * 2 * 3.1415926535897932384626433 / 360
+	sin_a := math.Abs(math.Sin(angler))
+	cos_a := math.Abs(math.Cos(angler))
+
+	var sideLong, sideShort float64
+	if aspectRatio >= 1 {
+		sideLong = float64(width)
+		sideShort = float64(height)
+	} else {
+		sideLong = float64(height)
+		sideShort = float64(width)
+	}
+
+	var wr, hr float64
+	if sideShort <= 2*sin_a*cos_a*sideLong || math.Abs(sin_a-cos_a) < 0.0000000001 {
+		xx := sideShort / 2
+		if aspectRatio >= 1 {
+			wr = xx / sin_a
+			hr = xx / cos_a
+		} else {
+			wr = xx / cos_a
+			hr = xx / sin_a
+		}
+	} else {
+		cos2a := cos_a*cos_a - sin_a*sin_a
+		wr = math.Abs(width*cos_a-height*sin_a) / cos2a
+		hr = math.Abs(height*cos_a-width*sin_a) / cos2a
+	}
+
+	hOff := math.Abs((width*cos_a+height*sin_a)-wr) / 2
+	vOff := math.Abs((width*sin_a+height*cos_a)-hr) / 2
+
+	return wr, hr, hOff, vOff
+}
+
+func straighten(picture image.Image, angle float64) image.Image {
+
+	wr, hr, hOff, vOff := calcStraighten(float64(picture.Bounds().Dx()), float64(picture.Bounds().Dy()), angle)
+
+	picture = imaging.Rotate(picture, -angle, color.RGBA{127, 127, 127, 255})
+
+	rect := image.Rectangle{
+		image.Point{int(math.Round(hOff)), int(math.Round(vOff))},
+		image.Point{int(math.Round(hOff + wr)), int(math.Round(vOff + hr))}}
+
+	return imaging.Crop(picture, rect)
+}
+
 func renderPages(pbBook *PbBook, outPageRange string, outFilename string) {
 	n, err := writeHeader(outFilename)
 	if err != nil {
@@ -624,9 +724,12 @@ func renderPages(pbBook *PbBook, outPageRange string, outFilename string) {
 								log.Printf("failed to open image: %v", err)
 								continue
 							}
-							// Resize the cropped image to width = 200px preserving the aspect ratio.
-							imageWidthDots := int(math.Round(dotsFromUnitsFloat(item.imageWidth, density)))
-							imageHeightDots := int(math.Round(dotsFromUnitsFloat(item.imageHeight, density)))
+
+							straightenAngle := item.FloatSetting("straighten")
+							if straightenAngle != 0 {
+								picture = straighten(picture, straightenAngle)
+							}
+
 							rotation := Atoi(item.Setting("rotate"))
 							switch rotation {
 							case -90, 270:
@@ -636,6 +739,21 @@ func renderPages(pbBook *PbBook, outPageRange string, outFilename string) {
 							case 180, -180:
 								picture = imaging.Rotate180(picture)
 							}
+
+							// imaging.Sharpen()
+							// imaging.AdjustBrightness()
+							// imaging.AdjustContrast()
+							// imaging.AdjustGamma()
+							// imaging.AdjustSaturation()
+							// imaging.AdjustSigmoid()
+							// imaging.Blur()
+
+							picture = scaleToRect(picture, item)
+
+							// Resize the cropped image to width = 200px preserving the aspect ratio.
+							imageWidthDots := int(math.Round(dotsFromUnitsFloat(item.imageWidth, density)))
+							imageHeightDots := int(math.Round(dotsFromUnitsFloat(item.imageHeight, density)))
+
 							picture = imaging.Resize(picture, imageWidthDots, imageHeightDots, imaging.Lanczos)
 							textWidthDots := int(math.Round(dotsFromUnitsFloat(item.textWidth, density)))
 							textHeightDots := int(math.Round(dotsFromUnitsFloat(item.textHeight, density)))

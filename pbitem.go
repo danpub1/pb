@@ -443,16 +443,8 @@ func (item *PbItem) Frame(whichFrame string) *FrameInfo {
 var rxRect, _ = regexp.Compile(`^(fit|trim|crop),\d+:\d+,\d+(\.\d+)?(,\d+(\.\d+)?)?$`)
 
 func (item *PbItem) Aspect() float64 {
-	sRect := item.Setting("rect")
-	if rxRect.MatchString(sRect) {
-		parts := strings.Split(sRect, ",")
-		wh := strings.Split(parts[1], ":")
-		width := Atof(wh[0])
-		height := Atof(wh[1])
-		return width / height
-	} else {
-		return 1.0
-	}
+	_, aspect, _, _ := item.ImageRectSetting()
+	return aspect
 }
 
 func (item *PbItem) Density() float64 {
@@ -528,7 +520,10 @@ func (item *PbItem) enlargeImage(amount float64) (float64, float64) {
 	oldWidth, oldHeight := item.Size()
 
 	maxWidth, maxHeight := item.ImageSizeForPage("max-size")
-	aspect := float64(item.imageWidthPx) / float64(item.imageHeightPx)
+
+	aspect := item.Aspect()
+	// TODO: use aspect from rect if present
+	//aspect := float64(item.imageWidthPx) / float64(item.imageHeightPx)
 
 	if aspect >= 1 {
 		amount = math.Min(amount, math.Max(maxWidth-item.imageWidth, 0))
@@ -592,8 +587,9 @@ func (item *PbItem) ImageRectSetting() (float64, float64, int, int) {
 	sRect := item.Setting("rect")
 	parts := strings.SplitN(sRect, ",", 4)
 
-	if len(parts) != 4 {
-		return 1, float64(item.imageWidthPx) / float64(item.imageHeightPx), 50, 50
+	if len(parts) > 4 {
+		wr, hr, _, _ := calcStraighten(float64(item.imageWidthPx), float64(item.imageHeightPx), item.FloatSetting("straighten"))
+		return 1, wr / hr, 50, 50
 	}
 
 	zoom := 1.0
@@ -602,23 +598,52 @@ func (item *PbItem) ImageRectSetting() (float64, float64, int, int) {
 	if parts[0] == "fit" {
 		zoom = 1.0
 	} else if parts[0] == "trim" {
-		zoom = 1.0 // TODO
+		zoom = 0.0
 	} else if len(parts[0]) > 0 {
 		zoom = Atof(parts[0])
+		if zoom < 1.0 {
+			zoom = 1.0
+		}
 	}
 
-	if len(parts[1]) > 0 {
-		aspectParts := strings.SplitN(parts[0], ":", 2)
+	if len(parts) > 1 && len(parts[1]) > 0 {
+		aspectParts := strings.SplitN(parts[1], ":", 2)
 		if len(aspectParts) == 2 {
-			aspect = float64(Atoi(aspectParts[0])) / float64(Atoi(aspectParts[1]))
+			aspect = Atof(aspectParts[0]) / Atof(aspectParts[1])
 		} else {
-			aspect = float64(item.imageWidthPx) / float64(item.imageHeightPx)
+			wr, hr, _, _ := calcStraighten(float64(item.imageWidthPx), float64(item.imageHeightPx), item.FloatSetting("straighten"))
+			aspect = wr / hr
 		}
 	} else {
-		aspect = float64(item.imageWidthPx) / float64(item.imageHeightPx)
+		wr, hr, _, _ := calcStraighten(float64(item.imageWidthPx), float64(item.imageHeightPx), item.FloatSetting("straighten"))
+		aspect = wr / hr
 	}
 
-	return zoom, aspect, Atoi(parts[2]), Atoi(parts[3])
+	xOffset := 50
+	if len(parts) > 2 && len(parts[2]) > 0 {
+		xOffset = Atoi(parts[2])
+	}
+
+	yOffset := 50
+	if len(parts) > 3 && len(parts[3]) > 0 {
+		yOffset = Atoi(parts[3])
+	} else {
+		yOffset = xOffset
+	}
+
+	if xOffset < 0 {
+		xOffset = 0
+	} else if xOffset > 100 {
+		xOffset = 100
+	}
+
+	if yOffset < 0 {
+		yOffset = 0
+	} else if yOffset > 100 {
+		yOffset = 100
+	}
+
+	return zoom, aspect, xOffset, yOffset
 }
 
 var rxRelativeSize, _ = regexp.Compile(`^(much-smaller$|smaller$|normal$|larger$|much-larger$|scale:)`)
@@ -689,7 +714,7 @@ func (item *PbItem) ImageSizeForPage(sizeName string) (float64, float64) {
 		height = Atof(sSize) / 100 * maxHeight
 	}
 
-	_, aspect, _, _ := item.ImageRectSetting()
+	aspect := item.Aspect()
 
 	if aspect >= 1 { // width > height
 		width = math.Min(width, maxWidth)
