@@ -672,8 +672,10 @@ func (item *PbItem) ImageSizeForPage(sizeName string) (float64, float64) {
 	maxWidth, maxHeight := ContainerSize(item.PageSetting("page-size"), item.PageSetting("margin"))
 	sSize := item.Setting(sizeName)
 
-	width := 0.0
-	height := 0.0
+	// percentage is percentage of the width
+	// neither width nor height should be larger than the size
+
+	maxDimension := 0.0
 
 	if rxRelativeSize.MatchString(sSize) {
 		sBaseSize := item.RowSetting(sizeName)
@@ -687,68 +689,51 @@ func (item *PbItem) ImageSizeForPage(sizeName string) (float64, float64) {
 			}
 		}
 
-		baseWidth := 0.0
-		baseHeight := 0.0
+		baseSize := 0.0
 
 		if !strings.HasSuffix(sBaseSize, "%") {
-			baseWidth = Atof(sBaseSize)
-			baseHeight = Atof(sBaseSize)
+			baseSize = Atof(sBaseSize)
 		} else {
 			sBaseSize = strings.TrimSuffix(sBaseSize, "%")
-			if maxWidth > maxHeight {
-				baseWidth = Atof(sBaseSize) / 100 * maxHeight
-				baseHeight = Atof(sBaseSize) / 100 * maxHeight
-			} else {
-				baseWidth = Atof(sBaseSize) / 100 * maxWidth
-				baseHeight = Atof(sBaseSize) / 100 * maxWidth
-			}
+			baseSize = Atof(sBaseSize) / 100 * maxWidth
 		}
 
 		switch sSize {
 		case "much-much-much-smaller":
-			width = baseWidth / 1.25 / 1.25 / 1.25 / 1.25
-			height = baseHeight / 1.25 / 1.25 / 1.25 / 1.25
+			maxDimension = baseSize / 1.25 / 1.25 / 1.25 / 1.25
 		case "much-much-smaller":
-			width = baseWidth / 1.25 / 1.25 / 1.25
-			height = baseHeight / 1.25 / 1.25 / 1.25
+			maxDimension = baseSize / 1.25 / 1.25 / 1.25
 		case "much-smaller":
-			width = baseWidth / 1.25 / 1.25
-			height = baseHeight / 1.25 / 1.25
+			maxDimension = baseSize / 1.25 / 1.25
 		case "smaller":
-			width = baseWidth / 1.25
-			height = baseHeight / 1.25
+			maxDimension = baseSize / 1.25
 		case "normal":
-			width = baseWidth
-			height = baseHeight
+			maxDimension = baseSize
 		case "larger":
-			width = baseWidth * 1.25
-			height = baseHeight * 1.25
+			maxDimension = baseSize * 1.25
 		case "much-larger":
-			width = baseWidth * 1.25 * 1.25
-			height = baseHeight * 1.25 * 1.25
+			maxDimension = baseSize * 1.25 * 1.25
 		case "much-much-larger":
-			width = baseWidth * 1.25 * 1.25 * 1.25
-			height = baseHeight * 1.25 * 1.25 * 1.25
+			maxDimension = baseSize * 1.25 * 1.25 * 1.25
 		case "much-much-much-larger":
-			width = baseWidth * 1.25 * 1.25 * 1.25 * 1.25
-			height = baseHeight * 1.25 * 1.25 * 1.25 * 1.25
+			maxDimension = baseSize * 1.25 * 1.25 * 1.25 * 1.25
 		default: // scale:
 			sSize = strings.TrimPrefix(sSize, "scale:")
-			width = baseWidth * Atof(sSize)
-			height = baseHeight * Atof(sSize)
+			maxDimension = baseSize * Atof(sSize)
 		}
 	} else if !strings.HasSuffix(sSize, "%") {
-		width = Atof(sSize)
-		height = Atof(sSize)
+		maxDimension = Atof(sSize)
 	} else {
 		sSize = strings.TrimSuffix(sSize, "%")
-		width = Atof(sSize) / 100 * maxWidth
-		height = Atof(sSize) / 100 * maxHeight
+		maxDimension = Atof(sSize) / 100 * maxWidth
 	}
 
+	width := 0.0
+	height := 0.0
 	aspect := item.Aspect()
 
 	if aspect >= 1 { // width > height
+		width = maxDimension
 		width = math.Min(width, maxWidth)
 		height = width / aspect
 		if height > maxHeight {
@@ -756,6 +741,7 @@ func (item *PbItem) ImageSizeForPage(sizeName string) (float64, float64) {
 			width = height * aspect
 		}
 	} else { // height > width
+		height = maxDimension
 		height = math.Min(height, maxHeight)
 		width = height * aspect
 		if width > maxWidth {
