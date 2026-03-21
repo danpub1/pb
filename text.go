@@ -239,7 +239,7 @@ func layoutForWidth(text string, advances []fixed.Int26_6, width float64, lineHe
 
 	longestBlock := fixed.Int26_6(0)
 	blockLength := fixed.Int26_6(0)
-	for idx := 0; idx < len(advances); idx++ {
+	for idx := range advances {
 		if stringRunes[idx] == " " {
 			if longestBlock < blockLength {
 				longestBlock = blockLength

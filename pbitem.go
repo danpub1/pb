@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"image"
 	"log"
+	"maps"
 	"math"
 	"os"
 	"regexp"
@@ -766,9 +767,7 @@ func (item *PbItem) PageSizePts() (int, int) {
 func (source *PbItem) DeepCopy() PbItem {
 	var dest PbItem
 	dest.settings = map[string]string{}
-	for kk, vv := range source.settings {
-		dest.settings[kk] = vv
-	}
+	maps.Copy(dest.settings, source.settings)
 	dest.itemType = source.itemType
 	dest.pb = source.pb
 	return dest
