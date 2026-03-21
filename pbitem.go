@@ -474,7 +474,7 @@ func (item *PbItem) TextInfo() *TextInfo {
 	return &TextInfo{
 		font: item.Setting("font"), height: item.FloatSetting("font-size"), units: item.Units(),
 		density: item.Density(), padding: FourTwoOneTRBL(item.Setting("padding")), lineSpacing: item.FloatSetting("linespacing"),
-		letterSpacing: item.FloatSetting("letterspacing"), wordSpacing: item.FloatSetting("wordspacing"),
+		letterSpacing: item.FloatSetting("letterspacing"), wordSpacing: item.FloatSetting("wordspacing"), breakChars: item.Setting("breakchars"),
 		textColor: colorToNRGBA(item.Setting("text-color")), backColor: colorToNRGBA(item.Setting("text-back-color")),
 		textAlign: item.TextAlign(), textWrap: item.TextWrap(), justifyWeight: item.IntSetting("justify-weight"),
 		frameColor: frameInfo.color, frameSize: &frameInfo.size,
@@ -526,7 +526,7 @@ func (item *PbItem) textForImageDimensions(w float64, h float64) (float64, float
 	return textBlockLayout.width, textBlockLayout.height, best
 }
 
-func (item *PbItem) enlargeImage(amount float64) (float64, float64) {
+func (item *PbItem) enlargeImage(amount float64, dx float64, dy float64) (float64, float64) {
 	if item.itemType == ItemTypeText && len(item.textBlockLayouts) == 1 {
 		return 0, 0
 	}
@@ -544,19 +544,21 @@ func (item *PbItem) enlargeImage(amount float64) (float64, float64) {
 	//aspect := float64(item.imageWidthPx) / float64(item.imageHeightPx)
 
 	if aspect >= 1 {
-		amount = math.Min(amount, math.Max(maxWidth-item.imageWidth, 0))
+		amount = math.Min(math.Min(amount, math.Max(maxWidth-item.imageWidth, 0)), dx)
 		item.imageWidth += amount
+		prevHeight := item.imageHeight
 		item.imageHeight = item.imageWidth / aspect
-		if item.imageHeight > maxHeight {
-			item.imageHeight = maxHeight
+		if item.imageHeight > maxHeight || item.imageHeight > prevHeight+dy {
+			item.imageHeight = math.Min(maxHeight, prevHeight+dy)
 			item.imageWidth = item.imageHeight * aspect
 		}
 	} else {
-		amount = math.Min(amount, math.Max(maxHeight-item.imageHeight, 0))
+		amount = math.Min(math.Min(amount, math.Max(maxHeight-item.imageHeight, 0)), dy)
 		item.imageHeight += amount
+		prevWidth := item.imageWidth
 		item.imageWidth = item.imageHeight * aspect
-		if item.imageWidth > maxWidth {
-			item.imageWidth = maxWidth
+		if item.imageWidth > maxWidth || item.imageWidth > prevWidth+dx {
+			item.imageWidth = math.Min(maxWidth, prevWidth+dx)
 			item.imageHeight = item.imageWidth / aspect
 		}
 	}
@@ -664,7 +666,7 @@ func (item *PbItem) ImageRectSetting() (float64, float64, int, int) {
 	return zoom, aspect, xOffset, yOffset
 }
 
-var rxRelativeSize, _ = regexp.Compile(`^(much-smaller$|smaller$|normal$|larger$|much-larger$|scale:)`)
+var rxRelativeSize, _ = regexp.Compile(`^(much-much-much-smaller$|much-much-smaller$|much-smaller$|smaller$|normal$|larger$|much-larger$|much-much-larger$|much-much-much-larger$|scale:)`)
 
 func (item *PbItem) ImageSizeForPage(sizeName string) (float64, float64) {
 	maxWidth, maxHeight := ContainerSize(item.PageSetting("page-size"), item.PageSetting("margin"))
@@ -703,6 +705,12 @@ func (item *PbItem) ImageSizeForPage(sizeName string) (float64, float64) {
 		}
 
 		switch sSize {
+		case "much-much-much-smaller":
+			width = baseWidth / 1.25 / 1.25 / 1.25 / 1.25
+			height = baseHeight / 1.25 / 1.25 / 1.25 / 1.25
+		case "much-much-smaller":
+			width = baseWidth / 1.25 / 1.25 / 1.25
+			height = baseHeight / 1.25 / 1.25 / 1.25
 		case "much-smaller":
 			width = baseWidth / 1.25 / 1.25
 			height = baseHeight / 1.25 / 1.25
@@ -718,6 +726,12 @@ func (item *PbItem) ImageSizeForPage(sizeName string) (float64, float64) {
 		case "much-larger":
 			width = baseWidth * 1.25 * 1.25
 			height = baseHeight * 1.25 * 1.25
+		case "much-much-larger":
+			width = baseWidth * 1.25 * 1.25 * 1.25
+			height = baseHeight * 1.25 * 1.25 * 1.25
+		case "much-much-much-larger":
+			width = baseWidth * 1.25 * 1.25 * 1.25 * 1.25
+			height = baseHeight * 1.25 * 1.25 * 1.25 * 1.25
 		default: // scale:
 			sSize = strings.TrimPrefix(sSize, "scale:")
 			width = baseWidth * Atof(sSize)
@@ -825,6 +839,7 @@ var defaultSettings = map[string]string{
 	"sharpen":      "0.0",
 	"blur":         "0.0",
 	"rotate":       "0", // 0, 90, 180, 270
+	"recurse":      "true",
 
 	// text
 	"caption-position":   "below",
@@ -843,10 +858,10 @@ var defaultSettings = map[string]string{
 	"text-color":         "#0",
 	"text-back-color":    "#0000",
 	"justify-weight":     "10",
-
-	"text":  "",
-	"image": "",
-	"name":  "",
+	"breakchars":         "",
+	"text":               "",
+	"image":              "",
+	"name":               "",
 }
 
 func (item *PbItem) Set(setting string, value string) {

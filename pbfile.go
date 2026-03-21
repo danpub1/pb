@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
@@ -254,7 +255,25 @@ func parse(line string, styles map[string]string) PbItem {
 		parts[ii] = strings.TrimSpace(parts[ii])
 		pieces := strings.SplitN(parts[ii], ":", 2)
 		if len(pieces) == 2 {
+			if pieces[0] == "trim" || pieces[0] == "fit" {
+				pieces[1] = pieces[0] + "," + pieces[1]
+				pieces[0] = "rect"
+			}
 			theItem.Set(pieces[0], unescape(pieces[1]))
+		} else if len(pieces) == 1 {
+			switch pieces[0] {
+			case "row-break":
+				theItem.Set("row-break", "true")
+			case "column-break":
+				theItem.Set("column-break", "true")
+			case "page-break":
+				theItem.Set("page-break", "true")
+			case "current-page":
+				theItem.Set("current-page", "true")
+			case "smaller", "much-smaller", "much-much-smaller", "much-much-much-smaller",
+				"larger", "much-larger", "much-much-larger", "much-much-much-larger":
+				theItem.Set("size", pieces[0])
+			}
 		}
 	}
 
@@ -293,16 +312,132 @@ func processAsLinesFromBasePath(lines []string, basePath string, styles map[stri
 	return items, styles, options
 }
 
+func glob(path string, recurse bool) ([]string, error) {
+	exts := []string{".jpg", ".jpeg", ".png"}
+	for ii := len(exts); ii > 0; ii-- {
+		exts = append(exts, strings.ToUpper(exts[ii-1]))
+	}
+	filename := filepath.Base(path)
+	rPath, _ := strings.CutSuffix(path, filename)
+
+	if filename == "*" {
+		sources := make([]string, 0)
+		for _, ext := range exts {
+			sources2, err := glob(rPath+filename+ext, recurse)
+			if err != nil {
+				log.Print(err)
+				return make([]string, 0), err
+			}
+			if len(sources2) > 0 {
+				sources = append(sources, sources2...)
+			}
+		}
+		return sources, nil
+	}
+
+	sources, err := filepath.Glob(path)
+	if err != nil {
+		log.Print(err)
+		return make([]string, 0), err
+	}
+
+	rPath = filepath.Clean(rPath)
+	if recurse {
+		rErr := filepath.WalkDir(rPath, func(dirpath string, dirEntry fs.DirEntry, err error) error {
+			if err != nil {
+				return filepath.SkipDir
+			}
+
+			if dirEntry.IsDir() && dirpath != rPath {
+				rSources, err2 := glob(dirpath+string(filepath.Separator)+filename, true)
+				if err2 != nil {
+					log.Print(err2)
+					return err2
+				}
+
+				if len(rSources) > 0 {
+					sources = append(sources, rSources...)
+				}
+			}
+
+			return nil
+		})
+
+		if rErr != nil {
+			log.Print(rErr)
+			return make([]string, 0), rErr
+		}
+	}
+	return sources, nil
+}
+
 func expandWild(item *PbItem) []PbItem {
 	var newItems []PbItem
 
 	if item.itemType == ItemTypeImage {
 		if strings.ContainsAny(item.Setting("image"), "?*") {
-			sources, err := filepath.Glob(item.Setting("image"))
+			sources, err := glob(item.Setting("image"), item.BoolSetting("recurse"))
 			if err != nil {
 				log.Fatal(err)
 			}
 			slices.Sort(sources)
+			sources = slices.Compact(sources)
+			slices.SortFunc(sources, func(a string, b string) int {
+				aparts := strings.Split(a, string(os.PathSeparator))
+				bparts := strings.Split(b, string(os.PathSeparator))
+				alen := len(aparts) - 1
+				blen := len(bparts) - 1
+				ii := 0
+				for {
+					if alen >= ii && blen >= ii {
+						laparts := strings.ToLower(aparts[ii])
+						lbparts := strings.ToLower(bparts[ii])
+						if laparts == lbparts {
+							laparts = aparts[ii]
+							lbparts = bparts[ii]
+						}
+						if laparts == lbparts {
+							if ii == alen && ii == blen {
+								return 0
+							} else if ii == alen {
+								return -1
+							} else if ii == blen {
+								return 1
+							} else {
+								ii++
+								continue
+							}
+						} else {
+							if ii == alen && ii == blen {
+								if laparts > lbparts {
+									return 1
+								} else {
+									return -1
+								}
+							} else if ii == alen {
+								return -1
+							} else if ii == blen {
+								return 1
+							} else {
+								if laparts > lbparts {
+									return 1
+								} else {
+									return -1
+								}
+							}
+						}
+
+					} else {
+						if alen < ii && blen < ii {
+							return 0
+						} else if alen < ii {
+							return -1
+						} else if blen < ii {
+							return 1
+						}
+					}
+				}
+			})
 			if len(sources) > 1 {
 				newItems = make([]PbItem, len(sources))
 				for jj := 0; jj < len(sources); jj++ {
@@ -390,6 +525,7 @@ func ApplyItemSpecificStyles(items []PbItem) {
 		if items[ii].itemType == ItemTypeImage {
 			text := items[ii].Setting("text")
 			text = strings.ReplaceAll(text, "{{Filename}}", filepath.Base(items[ii].Setting("image")))
+			text = strings.ReplaceAll(text, "{{Fullname}}", filepath.Clean(items[ii].Setting("image")))
 			items[ii].Set("text", text)
 		}
 	}

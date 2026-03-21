@@ -16,9 +16,13 @@ import (
 	"log"
 	"math"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
+
+	"github.com/spakin/netpbm"
 
 	"github.com/disintegration/imaging"
 )
@@ -31,6 +35,10 @@ type ImageCacheEntry struct {
 
 func loadImageCache() map[string]ImageCacheEntry {
 	cache := map[string]ImageCacheEntry{}
+
+	if *nocacheFlag {
+		return cache
+	}
 
 	bytes, err := os.ReadFile(".pbimagecache")
 	if err == nil {
@@ -61,15 +69,17 @@ func updateCacheEntry(cache *map[string]ImageCacheEntry, filename string, imageW
 	(*cache)[filename] = ImageCacheEntry{fileDate(filename), imageWidthPx, imageHeightPx}
 }
 
-func getImageDimensions(items []PbItem) {
+func getImageDimensions(items []PbItem) int {
 	if len(items) == 0 {
-		return
+		return 0
 	}
 
+	numImages := 0
 	cache := loadImageCache()
 
 	for ii, theItem := range items {
 		if theItem.itemType == ItemTypeImage {
+			numImages++
 			items[ii].imageWidthPx = 1
 			items[ii].imageHeightPx = 1
 
@@ -117,24 +127,30 @@ func getImageDimensions(items []PbItem) {
 	}
 
 	saveImageCache(&cache)
+	return numImages
 }
 
-func getTextDimensions(items []PbItem) {
+func getTextDimensions(items []PbItem) int {
 	if len(items) == 0 {
-		return
+		return 0
 	}
 
+	numTexts := 0
 	for ii := range items {
 		if items[ii].itemType == ItemTypeText && len(items[ii].Setting("text")) > 0 {
 			width := WidthForContainer(items[ii].Setting("text-width"), items[ii].PageSetting("page-size"), items[ii].PageSetting("margin"))
 			items[ii].textBlockLayouts = MeasureText(items[ii].Setting("text"), width, 0.0, items[ii].TextInfo())
 			// TextToImage(&items[ii].textBlockLayouts[0], items[ii].TextInfo())
+			numTexts++
 		} else if items[ii].itemType == ItemTypeImage && len(items[ii].Setting("text")) > 0 {
 			maxWidth := ContainerWidth(items[ii].PageSetting("page-size"), items[ii].PageSetting("margin"))
 			maxHeight := ContainerHeight(items[ii].PageSetting("page-size"), items[ii].PageSetting("margin"))
 			items[ii].textBlockLayouts = MeasureText(items[ii].Setting("text"), maxWidth, maxHeight, items[ii].TextInfo())
+			numTexts++
 		}
 	}
+
+	return numTexts
 }
 
 func rowHeight(items []PbItem, page int, row int, maxColumn int) float64 {
@@ -519,7 +535,7 @@ func (writer *PdfJpegObjectWriter) Finish() (int, error) {
 	return bytesWritten, err
 }
 
-func writePage(img image.Image, objNum int, curPage int, outFilename string, isPageRangeMulti bool) (int, error) {
+func writePage(img image.Image, objNum int, curPage int, outFilename string, isPageRangeMulti bool, compressionLevel int) (int, error) {
 	ext := filepath.Ext(outFilename)
 	format := strings.ToLower(ext)
 	if isPageRangeMulti && format != ".pdf" {
@@ -547,21 +563,27 @@ func writePage(img image.Image, objNum int, curPage int, outFilename string, isP
 		}
 		return 0, nil
 	case ".jpg", ".jpeg":
-		options := jpeg.Options{Quality: 92}
+		options := jpeg.Options{Quality: compressionLevel}
 		if err := jpeg.Encode(out, img, &options); err != nil {
 			log.Print(err)
 			return 0, err
 		}
 		return 0, nil
+		// return writeJPEG(img, out, compressionLevel)
 	case ".pdf":
 		writer := PdfJpegObjectWriter{}
 		writer.Start(out, objNum, img.Bounds().Dx(), img.Bounds().Dy())
 
-		options := jpeg.Options{Quality: 92}
+		options := jpeg.Options{Quality: compressionLevel}
 		if err := jpeg.Encode(writer, img, &options); err != nil {
 			log.Print(err)
 			return 0, err
 		}
+
+		// if _, err := writeJPEG(img, writer, compressionLevel); err != nil {
+		// 	log.Print(err)
+		// 	return 0, err
+		// }
 
 		return writer.Finish()
 	}
@@ -668,6 +690,175 @@ func straighten(picture image.Image, angle float64) image.Image {
 		image.Point{int(math.Round(hOff + wr)), int(math.Round(vOff + hr))}}
 
 	return imaging.Crop(picture, rect)
+}
+
+func convertImage(picture image.Image) image.Image {
+	// this is too slow for regular use
+	// may be able to adapt to use imagmagick or mozjpeg to create quality jpegs for final output
+	log.Print("executing convert")
+	cmd := exec.Command("convert", "-", "-adaptive-sharpen", "x5", "PNM:-")
+
+	stdin, err1 := cmd.StdinPipe()
+	if err1 != nil {
+		log.Print("Error opening stdin")
+		log.Print(err1)
+		return picture
+	}
+
+	stdout, err2 := cmd.StdoutPipe()
+	if err2 != nil {
+		stdin.Close()
+		log.Print("Error opening stdout")
+		log.Print(err2)
+		return picture
+	}
+
+	var wg sync.WaitGroup
+
+	wg.Add(1)
+	go func() {
+		defer stdin.Close()
+		defer wg.Done()
+		err := netpbm.Encode(stdin, picture, &netpbm.EncodeOptions{})
+		if err != nil {
+			log.Print("Error encoding image")
+			log.Print(err)
+		}
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer stdout.Close()
+		defer wg.Done()
+		newpicture, err := netpbm.Decode(stdout, &netpbm.DecodeOptions{})
+		if err != nil {
+			log.Print("Error decoding image")
+			log.Print(err)
+		}
+		if newpicture != nil && newpicture.Bounds().Dx() == picture.Bounds().Dx() && newpicture.Bounds().Dy() == picture.Bounds().Dy() {
+			picture = newpicture
+		}
+	}()
+
+	err2 = cmd.Run()
+	if err2 != nil {
+		log.Print("Error running command")
+		log.Print(err2)
+	}
+
+	wg.Wait()
+	log.Print("executed convert")
+	return picture
+}
+
+func writeJPEG(picture image.Image, out io.Writer, compressionLevel int) (int, error) {
+	// this is too slow for regular use
+	// may be able to adapt to use imagmagick or mozjpeg to create quality jpegs for final output
+	cmd := exec.Command("convert", "PNM:-", "-quality", fmt.Sprintf("%v", compressionLevel), "-sampling-factor", "4:4:4", "JPEG:-")
+	//cmd := exec.Command("cjpeg", "-quality", fmt.Sprintf("%v", compressionLevel), "-sample", "1x1")
+
+	log.Print(cmd.String())
+	bytesWritten := 0
+	var errReturn error
+
+	stdin, err1 := cmd.StdinPipe()
+	if err1 != nil {
+		log.Print("Error opening stdin")
+		log.Print(err1)
+		return 0, err1
+	}
+
+	stdout, err2 := cmd.StdoutPipe()
+	if err2 != nil {
+		stdin.Close()
+		log.Print("Error opening stdout")
+		log.Print(err2)
+		return 0, err2
+	}
+
+	var wg sync.WaitGroup
+
+	wg.Add(1)
+	go func() {
+		defer stdin.Close()
+		defer wg.Done()
+		err := netpbm.Encode(stdin, picture, &netpbm.EncodeOptions{})
+		if err != nil {
+			log.Print("Error encoding image")
+			log.Print(err)
+			errReturn = err
+		}
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer stdout.Close()
+		defer wg.Done()
+		p := make([]byte, 1024*64)
+		for {
+			n, err := stdout.Read(p)
+			if n > 0 {
+				m, err2 := out.Write(p[:n])
+				if err2 != nil {
+					log.Print("error writing output file")
+					log.Print(err2)
+					errReturn = err2
+					break
+				}
+				bytesWritten += m
+				if m != n {
+					log.Print("truncated write")
+					break
+				}
+			}
+			if err != nil {
+				if err != io.EOF {
+					log.Print("Error readig input stream")
+					log.Print(err)
+					errReturn = err
+				}
+				break
+			}
+		}
+	}()
+
+	// err2 = cmd.Start()
+	// if err2 != nil {
+	// 	log.Print("Error running command")
+	// 	log.Print(err2)
+	// 	errReturn = err2
+	// }
+	// err2 = cmd.Wait()
+	// if err2 != nil {
+	// 	log.Print("Error waiting for command")
+	// 	log.Print(err2)
+	// 	errReturn = err2
+	// }
+
+	err2 = cmd.Run()
+	if err2 != nil {
+		log.Print("Error running command")
+		log.Print(err2)
+		errReturn = err2
+	}
+
+	// var bytes []byte
+	// bytes, err2 = cmd.Output()
+	// if err2 != nil {
+	// 	log.Print("Error running command")
+	// 	log.Print(err2)
+	// 	errReturn = err2
+	// }
+	// log.Print(string(bytes))
+
+	wg.Wait()
+
+	if errReturn == nil {
+		log.Printf("%v: %v bytes", cmd.String(), bytesWritten)
+	} else {
+		log.Printf("%v: %v bytes, %v", cmd.String(), bytesWritten, errReturn)
+	}
+	return bytesWritten, errReturn
 }
 
 func renderPages(pbBook *PbBook, outPageRange string, outFilename string) {
@@ -817,13 +1008,13 @@ func renderPages(pbBook *PbBook, outPageRange string, outFilename string) {
 
 			w, h := item.PageSizePts()
 			offsets = append(offsets, PageInfo{n, w, h})
-			thisn, thisErr := writePage(dst, objNum, pp, outFilename, isPageRangeMulti)
+			thisn, thisErr := writePage(dst, objNum, pp, outFilename, isPageRangeMulti, item.IntBookSetting("output-compression"))
 			if thisErr != nil {
 				return
 			}
 
 			if globalVerboseFlag&4 != 0 {
-				log.Printf("Rendered Page %v", pp+1)
+				log.Printf("Rendered Page %v / %v", pp+1, len(pbBook.pages))
 			}
 
 			n += thisn
@@ -838,6 +1029,10 @@ func renderPages(pbBook *PbBook, outPageRange string, outFilename string) {
 
 func loadResizeCache() map[string]string {
 	cache := map[string]string{}
+
+	if *nocacheFlag {
+		return cache
+	}
 
 	bytes, err := os.ReadFile(".pbresizecache")
 	if err == nil {
@@ -867,14 +1062,14 @@ func updateResizeCacheEntry(cache *map[string]string, jsonValue string, jsonhash
 	(*cache)[jsonhash] = jsonValue
 }
 
-func spaceToDistribute(page *PbPage, row *PbRow, column *PbColumn) bool {
+func spaceToDistribute(page *PbPage, row *PbRow, column *PbColumn) (float64, float64, bool) {
 	spareRowWidth := page.availableWidth - row.width()
 	sparePageHeight := page.availableHeight - page.height()
 	spareColumnHeight := row.height() - column.height()
-	return spareRowWidth > 0 && (sparePageHeight > 0 || spareColumnHeight > 0)
+	return spareRowWidth, math.Max(sparePageHeight, spareColumnHeight), spareRowWidth > 0 && (sparePageHeight > 0 || spareColumnHeight > 0)
 }
 
-func resizeItem(itemColumnItemNum int, itemColumnNum int, itemRowNum int, pbPage *PbPage) bool {
+func resizeItem(itemColumnItemNum int, itemColumnNum int, itemRowNum int, pbPage *PbPage, dx float64, dy float64) bool {
 	pbRow := &pbPage.rows[itemRowNum]
 	pbColumn := &pbRow.columns[itemColumnNum]
 	pbColumnItem := &pbColumn.items[itemColumnItemNum]
@@ -889,7 +1084,7 @@ func resizeItem(itemColumnItemNum int, itemColumnNum int, itemRowNum int, pbPage
 	oldColumnWidth := pbColumn.width()
 	oldRowHeight := pbRow.height()
 
-	deltaWidth, deltaHeight := pbItem.enlargeImage(amount)
+	deltaWidth, deltaHeight := pbItem.enlargeImage(amount, dx, dy)
 	if deltaWidth == 0 && deltaHeight == 0 {
 		return false
 	}
@@ -910,6 +1105,8 @@ func resizeItem(itemColumnItemNum int, itemColumnNum int, itemRowNum int, pbPage
 			}
 		}
 	}
+
+	pbPage.updateOffsets()
 
 	newRowHeight := pbRow.height()
 	deltaRowHeight := newRowHeight - oldRowHeight
@@ -1063,6 +1260,10 @@ func resizePages(pb *PbBook, outPageRange string) {
 
 	for pp := range pb.pages {
 		if isPageInRange(outPageRange, pp) || isCurrentPage(pb, pp) {
+			changed := false
+			if changed, _ = fileChanged(*inFileFlag, lastModTime); changed {
+				break
+			}
 			page := &pb.pages[pp]
 			sPage := serializePage(page)
 			if newSPage, jsonhash := checkResizeCacheEntry(&resizeCache, sPage); newSPage != "" {
@@ -1074,8 +1275,9 @@ func resizePages(pb *PbBook, outPageRange string) {
 					for row := range page.rows {
 						for column := range page.rows[row].columns {
 							for item := range page.rows[row].columns[column].items {
-								if spaceToDistribute(page, &page.rows[row], &page.rows[row].columns[column]) {
-									resized = resizeItem(item, column, row, page) || resized
+								if dx, dy, canResize := spaceToDistribute(page, &page.rows[row], &page.rows[row].columns[column]); canResize {
+									resizedOne := resizeItem(item, column, row, page, dx, dy)
+									resized = resized || resizedOne
 								}
 							}
 						}
@@ -1089,7 +1291,7 @@ func resizePages(pb *PbBook, outPageRange string) {
 				updateResizeCacheEntry(&resizeCache, sPage, jsonhash)
 
 				if globalVerboseFlag&4 != 0 {
-					log.Printf("Resized Page %v", pp+1)
+					log.Printf("Resized Page %v / %v", pp+1, len(pb.pages))
 				}
 			}
 		}
@@ -1351,18 +1553,23 @@ func fileChanged(filename string, lastModTime time.Time) (bool, time.Time) {
 }
 
 var globalVerboseFlag = 0
+var nocacheFlag *bool
 var lastModTime time.Time
 var inFileFlag *string
 
 func main() {
 	var (
-		pageFlag    = flag.String("p", "", "page range")
-		verboseFlag = flag.Int("v", 0, "verbose")
-		watchFlag   = flag.Bool("w", false, "watch")
-		outFileFlag = flag.String("o", "out.png", "output filename")
+		pageFlag     = flag.String("p", "", "page range")
+		verboseFlag  = flag.Int("v", 0, "verbose")
+		watchFlag    = flag.Bool("w", false, "watch")
+		outFileFlag  = flag.String("o", "out.png", "output filename")
+		noresizeFlag = flag.Bool("noresize", false, "noresize")
+		nolayoutFlag = flag.Bool("nolayout", false, "nolayout")
+		norenderFlag = flag.Bool("norender", false, "norender")
 	)
 
 	inFileFlag = flag.String("i", "", "input filename")
+	nocacheFlag = flag.Bool("nocache", false, "do not use caches")
 
 	flag.Parse()
 	globalVerboseFlag = *verboseFlag
@@ -1376,6 +1583,26 @@ func main() {
 
 	for {
 		items, options := ReadPbFile(*inFileFlag)
+
+		globalVerboseFlag = *verboseFlag
+		if val, exists := options["v"]; exists {
+			globalVerboseFlag = Atoi(val)
+		}
+
+		bNoResize := *noresizeFlag
+		if val, exists := options["noresize"]; exists {
+			bNoResize = Atob(val)
+		}
+
+		bNoLayout := *nolayoutFlag
+		if val, exists := options["nolayout"]; exists {
+			bNoLayout = Atob(val)
+		}
+
+		bNoRender := *norenderFlag
+		if val, exists := options["norender"]; exists {
+			bNoRender = Atob(val)
+		}
 
 		globalVerboseFlag = *verboseFlag
 		if val, exists := options["v"]; exists {
@@ -1397,31 +1624,41 @@ func main() {
 			outputFile = val
 		}
 
-		getImageDimensions(items)
-		getTextDimensions(items)
-
 		if globalVerboseFlag&4 != 0 {
 			log.Printf("Read input file")
+		}
+
+		numImages := getImageDimensions(items)
+		numTexts := getTextDimensions(items)
+
+		if globalVerboseFlag&4 != 0 {
+			log.Printf("Got Dimensions for %v Images and Measured %v Texts", numImages, numTexts)
 		}
 
 		// break into columns, rows
 		pbBook := breakIntoPages(items)
 
 		if globalVerboseFlag&4 != 0 {
-			log.Printf("Paginated")
+			log.Printf("Paginated: %v pages", len(pbBook.pages))
 		}
 
 		// calculate sizes that fills available space
-		resizePages(pbBook, outputPageRange)
-
-		// determine positions on page
-		layoutPages(pbBook, outputPageRange)
-
-		if globalVerboseFlag&4 != 0 {
-			log.Printf("Laid out pages")
+		if !bNoResize {
+			resizePages(pbBook, outputPageRange)
 		}
 
-		renderPages(pbBook, outputPageRange, outputFile)
+		// determine positions on page
+		if !bNoLayout {
+			layoutPages(pbBook, outputPageRange)
+
+			if globalVerboseFlag&4 != 0 {
+				log.Printf("Laid out pages")
+			}
+		}
+
+		if !bNoRender {
+			renderPages(pbBook, outputPageRange, outputFile)
+		}
 
 		if globalVerboseFlag&1 != 0 {
 			fmt.Println(printItems(items))

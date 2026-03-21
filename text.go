@@ -29,6 +29,7 @@ type TextInfo struct {
 	lineSpacing   float64
 	letterSpacing float64
 	wordSpacing   float64
+	breakChars    string
 	textColor     color.NRGBA
 	backColor     color.NRGBA
 	textAlign     int // TextAlignLeft TextAlignCenter TextAlignRight TextAlignJustified
@@ -60,7 +61,7 @@ func fixedFromFloat64(f float64) fixed.Int26_6 {
 }
 
 func floatFromFixed(i fixed.Int26_6) float64 {
-	return (float64)(i / 64.0)
+	return ((float64)(i)) / 64.0
 }
 
 var fontCache map[string]font.Face = map[string]font.Face{}
@@ -244,10 +245,16 @@ func layoutForWidth(text string, advances []fixed.Int26_6, width float64, lineHe
 				longestBlock = blockLength
 			}
 			blockLength = 0
+		} else if strings.ContainsAny(stringRunes[idx], textInfo.breakChars) {
+			if longestBlock < blockLength {
+				longestBlock = blockLength + advances[idx]
+			}
+			blockLength = 0
 		} else {
 			blockLength += advances[idx]
 		}
 	}
+
 	if longestBlock < blockLength {
 		longestBlock = blockLength
 	}
@@ -255,29 +262,37 @@ func layoutForWidth(text string, advances []fixed.Int26_6, width float64, lineHe
 	breakWidth := fixed.Int26_6(0)
 	for idx := 0; idx < len(advances); idx++ {
 		if curWidth+advances[idx] > widthDots {
-			if beginIdx == breakIdx && stringRunes[idx] != " " {
+			if beginIdx == breakIdx && stringRunes[idx] != " " && !strings.ContainsAny(stringRunes[idx], textInfo.breakChars) {
 				return nil, 0.0
-			} else {
-				if stringRunes[idx] == " " {
-					breakIdx = idx
-					breakWidth = curWidth
-				}
-				var textLineLayout TextLineLayout
-				textLineLayout.advance = breakWidth
-				textLineLayout.line = strings.Join(stringRunes[beginIdx:breakIdx], "")
-				layout.lines = append(layout.lines, textLineLayout)
-				beginIdx = breakIdx
-				idx = breakIdx
-				breakWidth = 0
-				curWidth = 0
-				if stringRunes[idx] == " " {
-					idx++
-					breakIdx++
-					beginIdx++
-				}
+			}
+			if stringRunes[idx] == " " {
+				breakIdx = idx
+				breakWidth = curWidth
+			} else if idx > 0 && strings.ContainsAny(stringRunes[idx-1], textInfo.breakChars) {
+				breakIdx = idx
+				breakWidth = curWidth
+			}
+			var textLineLayout TextLineLayout
+			textLineLayout.advance = breakWidth
+			textLineLayout.line = strings.Join(stringRunes[beginIdx:breakIdx], "")
+			layout.lines = append(layout.lines, textLineLayout)
+			beginIdx = breakIdx
+			idx = breakIdx
+			breakWidth = 0
+			curWidth = 0
+			if stringRunes[idx] == " " {
+				idx++
+				breakIdx++
+				beginIdx++
 			}
 		}
 		if stringRunes[idx] == " " {
+			breakIdx = idx
+			breakWidth = curWidth
+			if lastSpace < curWidth {
+				lastSpace = curWidth
+			}
+		} else if idx > 0 && strings.ContainsAny(stringRunes[idx-1], textInfo.breakChars) {
 			breakIdx = idx
 			breakWidth = curWidth
 			if lastSpace < curWidth {
