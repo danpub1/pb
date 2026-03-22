@@ -283,6 +283,13 @@ type PbItem struct {
 	imageHeight         float64
 	xOffset             float64
 	yOffset             float64
+
+	// settings
+	hasSettings   bool
+	bookSetting   int
+	pageSetting   int
+	rowSetting    int
+	columnSetting int
 }
 
 func (item *PbItem) CaptionGutter() float64 {
@@ -977,6 +984,45 @@ func (item *PbItem) DefaultSetting(setting string) string {
 	return item.SettingInt(setting, ItemTypeDefault)
 }
 
+func OptimizeSettings(book []PbItem) {
+	for ii := range book {
+		item := &book[ii]
+		if !item.hasSettings {
+			item.bookSetting = -1
+			item.pageSetting = -1
+			item.rowSetting = -1
+			item.columnSetting = -1
+			for ii, anItem := range item.pb {
+				switch anItem.itemType {
+				case ItemTypeBook:
+					item.bookSetting = ii
+				case ItemTypePage:
+					item.pageSetting = ii
+				case ItemTypeRow:
+					item.rowSetting = ii
+				case ItemTypeColumn:
+					item.columnSetting = ii
+				}
+				if &item.pb[ii] == item {
+					break
+				}
+			}
+
+			if item.columnSetting < item.rowSetting {
+				item.columnSetting = -1
+			}
+			if item.rowSetting < item.pageSetting {
+				item.rowSetting = -1
+			}
+			if item.pageSetting < item.bookSetting {
+				item.pageSetting = -1
+			}
+
+			item.hasSettings = true
+		}
+	}
+}
+
 func (item *PbItem) SettingInt(setting string, itemType int) string {
 	var book *PbItem
 	var page *PbItem
@@ -997,32 +1043,46 @@ func (item *PbItem) SettingInt(setting string, itemType int) string {
 		}
 	}
 
-	for ii, anItem := range item.pb {
-		if &item.pb[ii] == item {
-			break
-		} else if anItem.itemType == ItemTypeBook {
-			book = &anItem
-			bookIdx = ii
-		} else if anItem.itemType == ItemTypePage {
-			page = &anItem
-			pageIdx = ii
-		} else if anItem.itemType == ItemTypeRow {
-			row = &anItem
-			rowIdx = ii
-		} else if anItem.itemType == ItemTypeColumn {
-			column = &anItem
-			columnIdx = ii
+	if !item.hasSettings {
+		for ii, anItem := range item.pb {
+			if &item.pb[ii] == item {
+				break
+			} else if anItem.itemType == ItemTypeBook {
+				book = &anItem
+				bookIdx = ii
+			} else if anItem.itemType == ItemTypePage {
+				page = &anItem
+				pageIdx = ii
+			} else if anItem.itemType == ItemTypeRow {
+				row = &anItem
+				rowIdx = ii
+			} else if anItem.itemType == ItemTypeColumn {
+				column = &anItem
+				columnIdx = ii
+			}
 		}
-	}
-
-	if columnIdx < rowIdx {
-		column = nil
-	}
-	if rowIdx < pageIdx {
-		row = nil
-	}
-	if pageIdx < bookIdx {
-		page = nil
+		if columnIdx < rowIdx {
+			column = nil
+		}
+		if rowIdx < pageIdx {
+			row = nil
+		}
+		if pageIdx < bookIdx {
+			page = nil
+		}
+	} else {
+		if item.bookSetting >= 0 {
+			book = &item.pb[item.bookSetting]
+		}
+		if item.pageSetting >= 0 {
+			page = &item.pb[item.pageSetting]
+		}
+		if item.rowSetting >= 0 {
+			row = &item.pb[item.rowSetting]
+		}
+		if item.columnSetting >= 0 {
+			column = &item.pb[item.columnSetting]
+		}
 	}
 
 	if column != nil && (itemType == ItemTypeAny || itemType == ItemTypeColumn) {

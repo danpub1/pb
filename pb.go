@@ -186,6 +186,10 @@ func main() {
 		// calculate sizes that fills available space
 		if !bNoResize {
 			resizePages(pbBook, outputPageRange)
+
+			if globalVerboseFlag&4 != 0 {
+				log.Printf("Resized pages")
+			}
 		}
 
 		// determine positions on page

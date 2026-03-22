@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"log"
 	"math"
 	"os"
 )
@@ -461,10 +460,6 @@ func resizePages(pb *PbBook, outPageRange string) {
 
 				sPage = serializePage(page)
 				updateResizeCacheEntry(&resizeCache, sPage, jsonhash)
-
-				if globalVerboseFlag&4 != 0 {
-					log.Printf("Resized Page %v / %v", pp+1, len(pb.pages))
-				}
 			}
 		}
 	}

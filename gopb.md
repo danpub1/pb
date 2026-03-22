@@ -6,6 +6,13 @@ and convert that to a nicely formatted photo book.
 But a photo book should also be a nice finished product, so the second design goal
 is to support enough formatting to make that possible. 
 
+Uses:
+* A nicely arranged photo book with captions and text describing the photos
+* A contact sheet of all the photos in a folder
+* A nicely arranged collection of all the photos in a folder - not as small as a contact sheet, but not as finished as a photo book
+* Layout pictures on a page in specific sizes for printing
+* A collage for a calendar page
+
 ## Introduction
 
 ### Content: Images and Text
@@ -47,7 +54,7 @@ Multiple images can be specified with wildcards (asterisks and question marks). 
 
 Recursion into subdirectories may also be specified
 
-    *.jpg $ recurse:true # {{FileName}}
+    *.jpg $ recurse:true # {{Filename}}
 
 ### Blank Lines 
 
@@ -100,8 +107,8 @@ A pb file is assumed to be UTF-8.
 `@@@` = include another pb file
 `///` = comment
 
-Given a list of images and text, pb will arrange them into rows and pages. How it does that can be controlled
-with directives, which are additional lines starting with ..., ---, +++, ***, etc.
+Given a list of images and text, pb will arrange them into columns and rows and pages.  
+That layout is controlled through the settings for pages, rows, and columns, which follow the directive.
 
     *** size:621x810 margin:36
 
@@ -159,7 +166,7 @@ Example:
 
 Because styles replace references to themselves, styles that have settings values need to escape those values as needed. Styles used to replace text do not need escaping because text does not need escaping
 
-    $$$ 1 font:Neon\_Sans.ttf
+    $$$ 1 font:Neon`_Sans.ttf
 
 The following lines are equivalent:
 
@@ -205,7 +212,8 @@ There are several pre-defined styles, useful as part of texts in headers and foo
 
 {{Date}} (Current date, not the date of the image file)  
 {{Year}}  
-{{FileName}} (the name of an image file, useful with wildcards)  
+{{Filename}} (the name of an image file without the path, useful with wildcards)  
+{{Fullname}} (the name of an image file with the path, useful with wildcards)  
 {{PageNumber}}  
 {{TotalPages}}  
 
@@ -258,7 +266,6 @@ Book-Level Settings
 * `background-first`, `background-even`, `background-odd`, `background-last`
 * `header-first`, `header-even`, `header-odd`, `header-last`
 * `footer-first`, `footer-even`, `footer-odd`, `footer-last`
-* `filename` ?
 
 Page-Level Settings
 -------------------
@@ -267,12 +274,10 @@ Page-Level Settings
 * `margin:0,0,0,0`: Margins in the order Top, Right, Bottom, Left (binding:none), Top, Binding, Bottom, Edge (for binding:side), or Binding Right Edge Left (binding:top).  In units or percent.
 * `margin:0,0`: Margins in the order Top/Bottom, Right/Left
 * `margin:0`: Margins, all the same
-* ???? `textAlign:left`: Alignment of non-specified text, equivalent to `#L`
 * `background:color:#F,image:name,stretch:no,trim:x%,fit:x%,ninepatch:border,gradient:#F-#F,tile:?`
 * `header`
 * `footer`
-* `gutter:0,0`, `gutter:0%,0%`: vertical space (between rows), horizontal space (between images) (or percent of page)
-* `valign:spreadmiddle`: vertical spacing of rows in a layout.  Specifies how extra space is distributed after rows are laid out.  One of:
+* `page-distribute:spreadmiddle`: vertical spacing of rows on the page.  Specifies how extra space is distributed after rows are laid out.  One of:
   * `middle`: gutter is placed between rows, any extra is divided equally between the top and bottom
   * `justify`: extra is evenly distributed between rows
   * `top`: extra is placed at the bottom
@@ -289,7 +294,7 @@ Row-Level Settings
 ------------------
 * `minsize:0`, `minsize:0%`: Minimum size in units (or in percent of shorter dimension of page) of any dimension of image, used during layout
 * `row-weight:1`: Make rows bigger to fill the page.
-* `halign:spreadcenter`: horizontal spacing of images in a row.  Specifies how extra space is distributed after images are laid out.
+* `row-distribute:spreadcenter`: horizontal spacing of columns in a row.  Specifies how extra space is distributed after images are laid out.
   * `center`: gutter is placed between images, any extra is divided equally between the left and right
   * `justify`: extra is evenly distributed between images
   * `left`: extra is placed at the right
@@ -299,6 +304,11 @@ Row-Level Settings
   * `spreadleft`: extra is distributed between pictures and at the right
   * `spreadright`: extra is distributed between pictures and at the left
   * `spreadcenter`: extra is distributed between pictures and at the right and left
+
+Column-Level Settings
+---------------------
+* `column-distribute`: vertical spacing of items in a column (same values as for page-distribute)
+* `column-weight:1`
 
 Image Settings
 --------------

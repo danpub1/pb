@@ -572,5 +572,7 @@ func ReadPbFile(inFileFlag string) ([]PbItem, map[string]string) {
 		items[ii].pb = items
 	}
 
+	OptimizeSettings(items)
+
 	return items, options
 }
