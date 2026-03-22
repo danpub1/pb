@@ -673,7 +673,7 @@ func (item *PbItem) ImageSizeForPage(sizeName string) (float64, float64) {
 	maxWidth, maxHeight := ContainerSize(item.PageSetting("page-size"), item.PageSetting("margin"))
 	sSize := item.Setting(sizeName)
 
-	// percentage is percentage of the width
+	// percentage is percentage of the width of the page
 	// neither width nor height should be larger than the size
 
 	maxDimension := 0.0
@@ -733,16 +733,40 @@ func (item *PbItem) ImageSizeForPage(sizeName string) (float64, float64) {
 	height := 0.0
 	aspect := item.Aspect()
 
-	if aspect >= 1 { // width > height
-		width = maxDimension
+	// Way 1: maxDimension is larger dimension
+	// if aspect >= 1 { // width > height
+	// 	width = maxDimension
+	// 	width = math.Min(width, maxWidth)
+	// 	height = width / aspect
+	// 	if height > maxHeight {
+	// 		height = maxHeight
+	// 		width = height * aspect
+	// 	}
+	// } else { // height > width
+	// 	height = maxDimension
+	// 	height = math.Min(height, maxHeight)
+	// 	width = height * aspect
+	// 	if width > maxWidth {
+	// 		width = maxWidth
+	// 		height = width / aspect
+	// 	}
+	// }
+
+	// Way 2: maxDimension * maxDimension is target area
+	// width * height = maxDimension * maxDimension
+	// width / heigth = aspect
+	// width * width = maxDimension * maxDimension * aspect
+	// height * height = maxDimension * maxDimension / aspect
+	if aspect > 1 {
+		width = math.Sqrt(maxDimension * maxDimension * aspect)
 		width = math.Min(width, maxWidth)
 		height = width / aspect
 		if height > maxHeight {
 			height = maxHeight
 			width = height * aspect
 		}
-	} else { // height > width
-		height = maxDimension
+	} else {
+		height = math.Sqrt(maxDimension * maxDimension / aspect)
 		height = math.Min(height, maxHeight)
 		width = height * aspect
 		if width > maxWidth {
