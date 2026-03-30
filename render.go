@@ -151,7 +151,7 @@ func (writer *PdfJpegObjectWriter) Finish() (int, error) {
 	return bytesWritten, err
 }
 
-func writePage(img image.Image, objNum int, curPage int, outFilename string, isPageRangeMulti bool, compressionLevel int) (int, error) {
+func writePage(img image.Image, objNum int, curPage int, outFilename string, isPageRangeMulti bool, compressionLevel int, useMozJpeg bool, samplingFactor string) (int, error) {
 	ext := filepath.Ext(outFilename)
 	format := strings.ToLower(ext)
 	if isPageRangeMulti && format != ".pdf" {
@@ -179,27 +179,51 @@ func writePage(img image.Image, objNum int, curPage int, outFilename string, isP
 		}
 		return 0, nil
 	case ".jpg", ".jpeg":
-		options := jpeg.Options{Quality: compressionLevel}
-		if err := jpeg.Encode(out, img, &options); err != nil {
-			log.Print(err)
-			return 0, err
+		if useMozJpeg {
+			bytesWritten := 0
+			var err error
+			if bytesWritten, err = writeJPEG(img, out, compressionLevel, samplingFactor); err != nil {
+				log.Print(err)
+				return 0, err
+			}
+			return bytesWritten, nil
+		} else {
+			if globalVerboseFlag&4 != 0 {
+				log.Print("Writing JPEG")
+			}
+			options := jpeg.Options{Quality: compressionLevel}
+			if err := jpeg.Encode(out, img, &options); err != nil {
+				log.Print(err)
+				return 0, err
+			}
+			if globalVerboseFlag&4 != 0 {
+				log.Print("Wrote JPEG")
+			}
+			return 0, nil
 		}
-		return 0, nil
-		// return writeJPEG(img, out, compressionLevel)
 	case ".pdf":
 		writer := PdfJpegObjectWriter{}
 		writer.Start(out, objNum, img.Bounds().Dx(), img.Bounds().Dy())
 
-		options := jpeg.Options{Quality: compressionLevel}
-		if err := jpeg.Encode(writer, img, &options); err != nil {
-			log.Print(err)
-			return 0, err
+		if useMozJpeg {
+			var err error
+			if _, err = writeJPEG(img, writer, compressionLevel, samplingFactor); err != nil {
+				log.Print(err)
+				return 0, err
+			}
+		} else {
+			if globalVerboseFlag&4 != 0 {
+				log.Print("Writing JPEG")
+			}
+			options := jpeg.Options{Quality: compressionLevel}
+			if err := jpeg.Encode(writer, img, &options); err != nil {
+				log.Print(err)
+				return 0, err
+			}
+			if globalVerboseFlag&4 != 0 {
+				log.Print("Wrote JPEG")
+			}
 		}
-
-		// if _, err := writeJPEG(img, writer, compressionLevel); err != nil {
-		// 	log.Print(err)
-		// 	return 0, err
-		// }
 
 		return writer.Finish()
 	}
@@ -208,51 +232,73 @@ func writePage(img image.Image, objNum int, curPage int, outFilename string, isP
 }
 
 func scaleToRect(picture image.Image, item *PbItem) image.Image {
-	zoom, dstAspect, xOffset, yOffset := item.ImageRectSetting()
+	zoom, zoomXOffset, zoomYOffset, dstAspect, offset := item.ImageRectSetting()
 
 	wr, hr, _, _ := calcStraighten(float64(item.imageWidthPx), float64(item.imageHeightPx), item.FloatSetting("straighten"))
 
 	srcAspect := wr / hr
 
+	if zoom > 0 && zoom < 100 {
+		newWr := wr
+		newHr := hr
+		if dstAspect > srcAspect { // dst is wider than src
+			newHr = hr * float64(zoom) / 100.0
+			newWr = newHr * dstAspect
+			if newWr > wr {
+				newWr = wr
+			}
+		} else { // dst is taller than src
+			newWr = wr * float64(zoom) / 100.0
+			newHr = newWr / dstAspect
+			if newHr > hr {
+				newHr = hr
+			}
+		}
+		xOffset := int(math.Round((wr - newWr) * float64(zoomXOffset) / 100.0))
+		yOffset := int(math.Round((hr - newHr) * float64(zoomYOffset) / 100.0))
+		picture = imaging.Crop(picture, image.Rectangle{image.Point{xOffset, yOffset}, image.Point{xOffset + int(math.Round(newWr)), yOffset + int(math.Round(newHr))}})
+		wr = newWr
+		hr = newHr
+		srcAspect = wr / hr
+		zoom = 1
+	}
+
 	dstWidth := int(math.Round(wr))
 	dstHeight := int(math.Round(hr))
 	dstXOffset := 0
 	dstYOffset := 0
-	switch zoom {
-	case 0: // trim
+
+	if zoom == 0 { // zoom == 0 == trim
 		if dstAspect > srcAspect { // dst is wider than src, crop top & bottom
 			dstHeight = int(math.Round(float64(dstWidth) / dstAspect))
-			dstYOffset = int(math.Round(float64(int(math.Round(hr))-dstHeight) * float64(yOffset) / 100.0))
+			dstYOffset = int(math.Round(float64(int(math.Round(hr))-dstHeight) * float64(offset) / 100.0))
 			return imaging.Crop(picture, image.Rectangle{image.Point{dstXOffset, dstYOffset}, image.Point{dstXOffset + dstWidth, dstYOffset + dstHeight}})
 		} else if dstAspect < srcAspect { // dst is taller than src, crop left & right
 			dstWidth = int(math.Round(float64(dstHeight) * dstAspect))
-			dstXOffset = int(math.Round(float64(int(math.Round(wr))-dstWidth) * float64(xOffset) / 100.0))
+			dstXOffset = int(math.Round(float64(int(math.Round(wr))-dstWidth) * float64(offset) / 100.0))
 			return imaging.Crop(picture, image.Rectangle{image.Point{dstXOffset, dstYOffset}, image.Point{dstXOffset + dstWidth, dstYOffset + dstHeight}})
 		} else {
 			return picture
 		}
-	case 1: // fit
+	} else { // zoom == 100 == fit
 		if dstAspect > srcAspect { // dst is wider than src, pad left & right
 			dstWidth = int(math.Round(float64(int(math.Round(hr))) * dstAspect))
-			dstXOffset = int(math.Round(float64(dstWidth-int(math.Round(wr))) * float64(xOffset) / 100.0))
-			dst := image.NewRGBA(image.Rect(0, 0, dstWidth, dstHeight))
+			dstXOffset = int(math.Round(float64(dstWidth-int(math.Round(wr))) * float64(offset) / 100.0))
+			dst := image.NewNRGBA(image.Rect(0, 0, dstWidth, dstHeight))
 			backColor := colorToNRGBA(item.Setting("background"))
-			draw.Draw(dst, dst.Bounds(), image.NewUniform(color.RGBA{backColor.R, backColor.G, backColor.B, backColor.A}), image.Point{}, draw.Src)
+			draw.Draw(dst, dst.Bounds(), image.NewUniform(color.NRGBA{backColor.R, backColor.G, backColor.B, backColor.A}), image.Point{}, draw.Src)
 			return imaging.Paste(dst, picture, image.Point{dstXOffset, dstYOffset})
 		} else if dstAspect < srcAspect { // dst is taller than src, pad top & bottom
 			dstHeight = int(math.Round(float64(int(math.Round(wr))) / dstAspect))
-			dstYOffset = int(math.Round(float64(dstHeight-int(math.Round(hr))) * float64(yOffset) / 100.0))
-			dst := image.NewRGBA(image.Rect(0, 0, dstWidth, dstHeight))
+			dstYOffset = int(math.Round(float64(dstHeight-int(math.Round(hr))) * float64(offset) / 100.0))
+			dst := image.NewNRGBA(image.Rect(0, 0, dstWidth, dstHeight))
 			backColor := colorToNRGBA(item.Setting("background"))
-			draw.Draw(dst, dst.Bounds(), image.NewUniform(color.RGBA{backColor.R, backColor.G, backColor.B, backColor.A}), image.Point{}, draw.Src)
+			draw.Draw(dst, dst.Bounds(), image.NewUniform(color.NRGBA{backColor.R, backColor.G, backColor.B, backColor.A}), image.Point{}, draw.Src)
 			return imaging.Paste(dst, picture, image.Point{dstXOffset, dstYOffset})
 		} else {
 			return picture
 		}
-	default: // arbitrary zoom
 	}
-
-	return picture
 }
 
 func calcStraighten(width float64, height float64, angle float64) (float64, float64, float64, float64) {
@@ -308,11 +354,24 @@ func straighten(picture image.Image, angle float64) image.Image {
 	return imaging.Crop(picture, rect)
 }
 
+func tilt(picture image.Image, angle float64) (image.Image, int, int) {
+
+	orgWidth := picture.Bounds().Dx()
+	orgHeight := picture.Bounds().Dy()
+
+	picture = imaging.Rotate(picture, -angle, color.NRGBA{127, 127, 127, 0})
+
+	newWidth := picture.Bounds().Dx()
+	newHeight := picture.Bounds().Dy()
+
+	return picture, (newWidth - orgWidth) / 2, (newHeight - orgHeight) / 2
+}
+
 func convertImage(picture image.Image) image.Image {
 	// this is too slow for regular use
 	// may be able to adapt to use imagmagick or mozjpeg to create quality jpegs for final output
 	log.Print("executing convert")
-	cmd := exec.Command("convert", "-", "-adaptive-sharpen", "x5", "PNM:-")
+	cmd := exec.Command("convert", "-", "-adaptive-sharpen", "x5", "PPM:-")
 
 	stdin, err1 := cmd.StdinPipe()
 	if err1 != nil {
@@ -335,7 +394,7 @@ func convertImage(picture image.Image) image.Image {
 	go func() {
 		defer stdin.Close()
 		defer wg.Done()
-		err := netpbm.Encode(stdin, picture, &netpbm.EncodeOptions{})
+		err := netpbm.Encode(stdin, picture, &netpbm.EncodeOptions{Format: netpbm.PPM})
 		if err != nil {
 			log.Print("Error encoding image")
 			log.Print(err)
@@ -367,15 +426,13 @@ func convertImage(picture image.Image) image.Image {
 	return picture
 }
 
-func writeJPEG(picture image.Image, out io.Writer, compressionLevel int) (int, error) {
-	// this is too slow for regular use
-	// may be able to adapt to use imagmagick or mozjpeg to create quality jpegs for final output
-	cmd := exec.Command("convert", "PNM:-", "-quality", fmt.Sprintf("%v", compressionLevel), "-sampling-factor", "4:4:4", "JPEG:-")
-	//cmd := exec.Command("cjpeg", "-quality", fmt.Sprintf("%v", compressionLevel), "-sample", "1x1")
+func writeJPEG(picture image.Image, out io.Writer, compressionLevel int, samplingFactor string) (int, error) {
+	cmd := exec.Command("/home/dms/programming/mozjpeg-4.1.1/mozjpeg-4.1.1/cjpeg-static", "-quality", fmt.Sprintf("%v", compressionLevel), "-sample", samplingFactor)
 
-	log.Print(cmd.String())
 	bytesWritten := 0
 	var errReturn error
+
+	log.Print(cmd.String())
 
 	stdin, err1 := cmd.StdinPipe()
 	if err1 != nil {
@@ -386,7 +443,6 @@ func writeJPEG(picture image.Image, out io.Writer, compressionLevel int) (int, e
 
 	stdout, err2 := cmd.StdoutPipe()
 	if err2 != nil {
-		stdin.Close()
 		log.Print("Error opening stdout")
 		log.Print(err2)
 		return 0, err2
@@ -398,7 +454,7 @@ func writeJPEG(picture image.Image, out io.Writer, compressionLevel int) (int, e
 	go func() {
 		defer stdin.Close()
 		defer wg.Done()
-		err := netpbm.Encode(stdin, picture, &netpbm.EncodeOptions{})
+		err := netpbm.Encode(stdin, picture, &netpbm.EncodeOptions{Format: netpbm.PPM})
 		if err != nil {
 			log.Print("Error encoding image")
 			log.Print(err)
@@ -438,34 +494,12 @@ func writeJPEG(picture image.Image, out io.Writer, compressionLevel int) (int, e
 		}
 	}()
 
-	// err2 = cmd.Start()
-	// if err2 != nil {
-	// 	log.Print("Error running command")
-	// 	log.Print(err2)
-	// 	errReturn = err2
-	// }
-	// err2 = cmd.Wait()
-	// if err2 != nil {
-	// 	log.Print("Error waiting for command")
-	// 	log.Print(err2)
-	// 	errReturn = err2
-	// }
-
 	err2 = cmd.Run()
 	if err2 != nil {
 		log.Print("Error running command")
 		log.Print(err2)
 		errReturn = err2
 	}
-
-	// var bytes []byte
-	// bytes, err2 = cmd.Output()
-	// if err2 != nil {
-	// 	log.Print("Error running command")
-	// 	log.Print(err2)
-	// 	errReturn = err2
-	// }
-	// log.Print(string(bytes))
 
 	wg.Wait()
 
@@ -496,7 +530,7 @@ func renderPages(pbBook *PbBook, outPageRange string, outFilename string) {
 		if isPageInRange(outPageRange, pp) || isCurrentPage(pbBook, pp) {
 			var top float64
 			var left float64
-			var dst *image.RGBA = nil
+			var dst *image.NRGBA = nil
 			density := 1.0
 
 			if len(page.rows[0].columns[0].items) == 0 {
@@ -509,11 +543,11 @@ func renderPages(pbBook *PbBook, outPageRange string, outFilename string) {
 			top, _, _, left = FourTwoOne(item.Setting("margin"))
 			widthDots := int(math.Round(dotsFromUnitsFloat(pageWidth, density)))
 			heightDots := int(math.Round(dotsFromUnitsFloat(pageHeight, density)))
-			dst = image.NewRGBA(image.Rect(0, 0, widthDots, heightDots))
+			dst = image.NewNRGBA(image.Rect(0, 0, widthDots, heightDots))
 
 			// fill the destination with the background color
 			backColor := colorToNRGBA(item.Setting("background"))
-			draw.Draw(dst, dst.Bounds(), image.NewUniform(color.RGBA{backColor.R, backColor.G, backColor.B, backColor.A}), image.Point{}, draw.Src)
+			draw.Draw(dst, dst.Bounds(), image.NewUniform(color.NRGBA{backColor.R, backColor.G, backColor.B, backColor.A}), image.Point{}, draw.Src)
 
 			for row := range page.rows {
 				for column := range page.rows[row].columns {
@@ -521,10 +555,48 @@ func renderPages(pbBook *PbBook, outPageRange string, outFilename string) {
 						item = page.rows[row].columns[column].items[columnItem].item
 
 						if item.itemType == ItemTypeText && len(item.Setting("name")) == 0 {
-							textImage := TextToImage(&item.textBlockLayouts[0], item.TextInfo())
-							xDots := int(math.Round(dotsFromUnitsFloat(left+item.xOffset, density)))
-							yDots := int(math.Round(dotsFromUnitsFloat(top+item.yOffset, density)))
-							draw.Draw(dst, image.Rect(xDots, yDots, xDots+textImage.Bounds().Size().X, yDots+textImage.Bounds().Size().Y), textImage, image.Point{}, draw.Over)
+
+							var textImage *image.NRGBA
+							rotation := Atoi(item.Setting("rotate"))
+							switch rotation {
+							case -90, 270:
+								temp := item.textBlockLayouts[0].height
+								item.textBlockLayouts[0].height = item.textBlockLayouts[0].width
+								item.textBlockLayouts[0].width = temp
+								textImage = TextToImage(&item.textBlockLayouts[0], item.TextInfo())
+								temp = item.textBlockLayouts[0].height
+								item.textBlockLayouts[0].height = item.textBlockLayouts[0].width
+								item.textBlockLayouts[0].width = temp
+								textImage = imaging.Rotate90(textImage)
+							case 90, -270:
+								temp := item.textBlockLayouts[0].height
+								item.textBlockLayouts[0].height = item.textBlockLayouts[0].width
+								item.textBlockLayouts[0].width = temp
+								textImage = TextToImage(&item.textBlockLayouts[0], item.TextInfo())
+								temp = item.textBlockLayouts[0].height
+								item.textBlockLayouts[0].height = item.textBlockLayouts[0].width
+								item.textBlockLayouts[0].width = temp
+								textImage = imaging.Rotate270(textImage)
+							case 180, -180:
+								textImage = TextToImage(&item.textBlockLayouts[0], item.TextInfo())
+								textImage = imaging.Rotate180(textImage)
+							default:
+								textImage = TextToImage(&item.textBlockLayouts[0], item.TextInfo())
+							}
+
+							tiltAngle := item.FloatSetting("tilt")
+							deltaXtilt := 0
+							deltaYtilt := 0
+							var picture image.Image
+							if tiltAngle != 0 {
+								picture, deltaXtilt, deltaYtilt = tilt(textImage, tiltAngle)
+							} else {
+								picture = textImage
+							}
+
+							xDots := int(math.Round(dotsFromUnitsFloat(left+item.xOffset, density))) - deltaXtilt
+							yDots := int(math.Round(dotsFromUnitsFloat(top+item.yOffset, density))) - deltaYtilt
+							draw.Draw(dst, image.Rect(xDots, yDots, xDots+picture.Bounds().Size().X, yDots+picture.Bounds().Size().Y), picture, image.Point{}, draw.Over)
 						}
 
 						if item.itemType == ItemTypeImage && len(item.Setting("name")) == 0 {
@@ -587,11 +659,6 @@ func renderPages(pbBook *PbBook, outPageRange string, outFilename string) {
 								picture = imaging.Sharpen(picture, sharpen)
 							}
 
-							textWidthDots := int(math.Round(dotsFromUnitsFloat(item.textWidth, density)))
-							textHeightDots := int(math.Round(dotsFromUnitsFloat(item.textHeight, density)))
-							xDots := int(math.Round(dotsFromUnitsFloat(left+item.xOffset, density)))
-							yDots := int(math.Round(dotsFromUnitsFloat(top+item.yOffset, density)))
-
 							if len(item.textBlockLayouts) > 0 {
 								captionGutterDots := int(math.Round(dotsFromUnitsFloat(item.FloatSetting("caption-gutter"), density)))
 								textBlockLayout := TextBlockLayout{}
@@ -600,31 +667,63 @@ func renderPages(pbBook *PbBook, outPageRange string, outFilename string) {
 								}
 								textImage := TextToImage(&textBlockLayout, item.TextInfo())
 								captionWidthDots := int(math.Round(dotsFromUnitsFloat(textBlockLayout.width, density)))
+								captionHeightDots := int(math.Round(dotsFromUnitsFloat(textBlockLayout.height, density)))
 
-								xDotsImage := xDots
-								if captionWidthDots > imageWidthDots {
-									xDotsImage = xDots + (captionWidthDots-imageWidthDots)/2
-								}
-								draw.Draw(dst, image.Rect(xDotsImage, yDots, xDotsImage+imageWidthDots, yDots+imageHeightDots), picture, image.Point{}, draw.Over)
+								combinedWidthDots := int(math.Max(float64(captionWidthDots), float64(imageWidthDots)))
+								combinedHeightDots := imageHeightDots + captionGutterDots + captionHeightDots
+								combined := image.NewNRGBA(image.Rect(0, 0, combinedWidthDots, combinedHeightDots))
 
-								xDotsText := xDots
+								captionX := 0
+								captionY := 0
+								imageX := 0
+								imageY := 0
 								if captionWidthDots < imageWidthDots {
-									xDotsText = xDots + (imageWidthDots-captionWidthDots)/2
+									captionX = (imageWidthDots - captionWidthDots) / 2
+								} else if imageWidthDots < captionWidthDots {
+									imageX = (captionWidthDots - imageWidthDots) / 2
 								}
 
-								yDots += imageHeightDots + captionGutterDots
-								draw.Draw(dst, image.Rect(xDotsText, yDots, xDotsText+textWidthDots, yDots+textHeightDots), textImage, image.Point{}, draw.Over)
-							} else {
-								draw.Draw(dst, image.Rect(xDots, yDots, xDots+imageWidthDots, yDots+imageHeightDots), picture, image.Point{}, draw.Over)
+								if item.Setting("caption-position") == "below" {
+									captionY = imageHeightDots + captionGutterDots
+								} else {
+									imageY = captionHeightDots + captionGutterDots
+								}
+
+								draw.Draw(combined, image.Rect(captionX, captionY, captionX+captionWidthDots, captionY+captionHeightDots), textImage, image.Point{}, draw.Over)
+								draw.Draw(combined, image.Rect(imageX, imageY, imageX+imageWidthDots, imageY+imageHeightDots), picture, image.Point{}, draw.Over)
+
+								picture = combined
+								imageWidthDots = combinedWidthDots
+								imageHeightDots = combinedHeightDots
 							}
+
+							tiltAngle := item.FloatSetting("tilt")
+							deltaXtilt := 0
+							deltaYtilt := 0
+							if tiltAngle != 0 {
+								picture, deltaXtilt, deltaYtilt = tilt(picture, tiltAngle)
+							}
+
+							xDots := int(math.Round(dotsFromUnitsFloat(left+item.xOffset, density)))
+							yDots := int(math.Round(dotsFromUnitsFloat(top+item.yOffset, density)))
+
+							draw.Draw(dst, image.Rect(xDots-deltaXtilt, yDots-deltaYtilt, xDots+imageWidthDots+deltaXtilt*2, yDots+imageHeightDots+deltaYtilt*2), picture, image.Point{}, draw.Over)
 						}
 					}
 				}
 			}
 
+			if outputGamma := item.FloatBookSetting("output-gamma"); outputGamma != 1.0 {
+				dst = imaging.AdjustGamma(dst, outputGamma)
+			}
+
+			if outputSharpen := item.FloatBookSetting("output-sharpen"); outputSharpen != 0 {
+				dst = imaging.Sharpen(dst, outputSharpen)
+			}
+
 			w, h := item.PageSizePts()
 			offsets = append(offsets, PageInfo{n, w, h})
-			thisn, thisErr := writePage(dst, objNum, pp, outFilename, isPageRangeMulti, item.IntBookSetting("output-compression"))
+			thisn, thisErr := writePage(dst, objNum, pp, outFilename, isPageRangeMulti, item.IntBookSetting("output-compression"), item.BoolBookSetting("mozjpeg"), item.BookSetting("mozjpeg-sampling"))
 			if thisErr != nil {
 				return
 			}

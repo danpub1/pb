@@ -264,7 +264,10 @@ func breakIntoPages(items []PbItem) *PbBook {
 func loadResizeCache() map[string]string {
 	cache := map[string]string{}
 
-	if *nocacheFlag {
+	if *cacheMode == CacheModeNone || *cacheMode == CacheModeDuring {
+		if *cacheMode == CacheModeDuring {
+			*cacheMode = CacheModeFull
+		}
 		return cache
 	}
 

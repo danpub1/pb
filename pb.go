@@ -93,8 +93,14 @@ func fileChanged(filename string, lastModTime time.Time) (bool, time.Time) {
 	return lastModTime != thisModTime, thisModTime
 }
 
+const (
+	CacheModeNone = iota
+	CacheModeDuring
+	CacheModeFull
+)
+
 var globalVerboseFlag = 0
-var nocacheFlag *bool
+var cacheMode *int
 var lastModTime time.Time
 var inFileFlag *string
 
@@ -110,7 +116,7 @@ func main() {
 	)
 
 	inFileFlag = flag.String("i", "", "input filename")
-	nocacheFlag = flag.Bool("nocache", false, "do not use caches")
+	cacheMode = flag.Int("cache", CacheModeDuring, "cache mode")
 
 	flag.Parse()
 	globalVerboseFlag = *verboseFlag
@@ -225,7 +231,18 @@ func main() {
 }
 
 // TTD:
-// spreadeyelevel
-// HSL Adjustment
-// highlights, midtones, shadows
+// Float
+// Headers, Footers
 // is there something wrong with settings that column settings for break, distribute, don't work?
+//   (some) header settings for text seem to have to be on a row instead of on a column
+//
+// Output sigmoidal brightness/lightness?
+// eyelevel, spreadeyelevel, mouthlevel, spreadmouthlevel?
+// highlights, midtones, shadows
+// Image, font zip:filename:filename - read directly from zip and/or cache
+// Image, font https://... downloaded and then cached (in a zip file?)
+// HSL Adjustment
+// Frame
+// Background
+// Justify text
+// Italics, Bold, Bold-Italics

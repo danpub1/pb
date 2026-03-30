@@ -131,23 +131,23 @@ func drawString(d *font.Drawer, s string, letterSpacing fixed.Int26_6, wordSpaci
 	return advances
 }
 
-func TextToImage(TextBlockLayout *TextBlockLayout, textInfo *TextInfo) *image.RGBA {
+func TextToImage(TextBlockLayout *TextBlockLayout, textInfo *TextInfo) *image.NRGBA {
 	face, fontAscent, lineHeight := openFont(textInfo)
 
 	widthDots := dotsFromUnitsFloat(TextBlockLayout.width, textInfo.density)
 	heightDots := dotsFromUnitsFloat(TextBlockLayout.height, textInfo.density)
 
-	dst := image.NewRGBA(image.Rect(0, 0, int(math.Round(widthDots)), int(math.Round(heightDots))))
+	dst := image.NewNRGBA(image.Rect(0, 0, int(math.Round(widthDots)), int(math.Round(heightDots))))
 
 	d := &font.Drawer{
 		Dst:  dst,
-		Src:  image.NewUniform(color.RGBA{textInfo.textColor.R, textInfo.textColor.G, textInfo.textColor.B, textInfo.textColor.A}),
+		Src:  image.NewUniform(color.NRGBA{textInfo.textColor.R, textInfo.textColor.G, textInfo.textColor.B, textInfo.textColor.A}),
 		Face: face,
 	}
 
 	// fill the destination with the frame color
 	if textInfo.frameSize.top != 0 || textInfo.frameSize.right != 0 || textInfo.frameSize.bottom != 0 || textInfo.frameSize.left != 0 {
-		draw.Draw(dst, dst.Bounds(), image.NewUniform(color.RGBA{textInfo.frameColor.R, textInfo.frameColor.G, textInfo.frameColor.B, textInfo.frameColor.A}), image.Point{}, draw.Src)
+		draw.Draw(dst, dst.Bounds(), image.NewUniform(color.NRGBA{textInfo.frameColor.R, textInfo.frameColor.G, textInfo.frameColor.B, textInfo.frameColor.A}), image.Point{}, draw.Src)
 	}
 
 	nonFrameRect := dst.Bounds()
@@ -165,7 +165,7 @@ func TextToImage(TextBlockLayout *TextBlockLayout, textInfo *TextInfo) *image.RG
 	}
 
 	// fill area inside the frame with the background color
-	draw.Draw(dst, nonFrameRect, image.NewUniform(color.RGBA{textInfo.backColor.R, textInfo.backColor.G, textInfo.backColor.B, textInfo.backColor.A}), image.Point{}, draw.Src)
+	draw.Draw(dst, nonFrameRect, image.NewUniform(color.NRGBA{textInfo.backColor.R, textInfo.backColor.G, textInfo.backColor.B, textInfo.backColor.A}), image.Point{}, draw.Src)
 
 	letterSpacing := fixedFromFloat64(textInfo.letterSpacing)
 	wordSpacing := fixedFromFloat64(textInfo.wordSpacing)

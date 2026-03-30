@@ -469,7 +469,7 @@ func (item *PbItem) Frame(whichFrame string) *FrameInfo {
 var rxRect, _ = regexp.Compile(`^(fit|trim|crop),\d+:\d+,\d+(\.\d+)?(,\d+(\.\d+)?)?$`)
 
 func (item *PbItem) Aspect() float64 {
-	_, aspect, _, _ := item.ImageRectSetting()
+	_, _, _, aspect, _ := item.ImageRectSetting()
 	return aspect
 }
 
@@ -545,7 +545,7 @@ func (item *PbItem) enlargeImage(amount float64, dx float64, dy float64) (float6
 
 	oldWidth, oldHeight := item.Size()
 
-	maxWidth, maxHeight := item.ImageSizeForPage("max-size")
+	maxWidth, maxHeight, _, _ := item.ImageSizeForPage("max-size")
 
 	aspect := item.Aspect()
 	// TODO: use aspect from rect if present
@@ -587,10 +587,36 @@ func (item *PbItem) baseDimensions() (float64, float64, float64, float64, int) {
 		return 0, 0, 0, 0, -1
 	}
 
-	w, h := item.ImageSizeForPage("size")
-	tw, th, best := item.textForImageDimensions(w, h)
+	w, h, maxW, maxH := item.ImageSizeForPage("size")
+	aspect := w / h
+	pageAspect := maxW / maxH
+	cg := item.CaptionGutter()
 
-	return tw, th, w, h, best
+	for {
+		tw, th, best := item.textForImageDimensions(w, h)
+
+		if w+tw <= maxW && h+th+cg <= maxH {
+			return tw, th, w, h, best
+		}
+
+		if aspect > pageAspect {
+			w = maxW - tw
+			h = w / aspect
+			if h+th+cg > maxH {
+				h = maxH - th - cg
+				w = h * aspect
+			}
+		} else {
+			h = maxH - th - cg
+			w = h * aspect
+			if w+tw > maxW {
+				w = maxW - tw
+				h = w / aspect
+			}
+		}
+	}
+
+	return 0, 0, 0, 0, -1
 }
 
 func (item *PbItem) GetImage() *image.Image {
@@ -611,31 +637,50 @@ func (item *PbItem) GetImage() *image.Image {
 	return &decodedImage
 }
 
-func (item *PbItem) ImageRectSetting() (float64, float64, int, int) {
+func (item *PbItem) ImageRectSetting() (int, int, int, float64, int) {
 	sRect := item.Setting("rect")
-	parts := strings.SplitN(sRect, ",", 4)
+	parts := strings.SplitN(sRect, ",", 5)
 
-	if len(parts) > 4 {
+	//rect:fit,x:y,o
+	//rect:trim,x:y,o
+	//rect:#,xo,yo,x:y,o
+
+	if len(parts) > 5 || len(parts) < 1 {
 		wr, hr, _, _ := calcStraighten(float64(item.imageWidthPx), float64(item.imageHeightPx), item.FloatSetting("straighten"))
-		return 1, wr / hr, 50, 50
+		return 1, 0, 0, wr / hr, 50
 	}
 
-	zoom := 1.0
+	zoom := 100
+	xOffset := 50
+	yOffset := 50
 	aspect := 1.0
+	offset := 50
+
+	nextPart := 1
 
 	if parts[0] == "fit" {
-		zoom = 1.0
+		zoom = 100
 	} else if parts[0] == "trim" {
-		zoom = 0.0
+		zoom = 0
 	} else if len(parts[0]) > 0 {
-		zoom = Atof(parts[0])
-		if zoom < 1.0 {
-			zoom = 1.0
+		zoom = Atoi(parts[0])
+		zoom = int(math.Min(math.Max(float64(zoom), 0), 100))
+
+		if len(parts) > 1 && len(parts[1]) > 0 {
+			xOffset = Atoi(parts[1])
+			xOffset = int(math.Min(math.Max(float64(xOffset), 0), 100))
 		}
+
+		if len(parts) > 2 && len(parts[2]) > 0 {
+			yOffset = Atoi(parts[2])
+			yOffset = int(math.Min(math.Max(float64(yOffset), 0), 100))
+		}
+
+		nextPart = 3
 	}
 
-	if len(parts) > 1 && len(parts[1]) > 0 {
-		aspectParts := strings.SplitN(parts[1], ":", 2)
+	if len(parts) > nextPart && len(parts[nextPart]) > 0 {
+		aspectParts := strings.SplitN(parts[nextPart], ":", 2)
 		if len(aspectParts) == 2 {
 			aspect = Atof(aspectParts[0]) / Atof(aspectParts[1])
 		} else {
@@ -647,36 +692,18 @@ func (item *PbItem) ImageRectSetting() (float64, float64, int, int) {
 		aspect = wr / hr
 	}
 
-	xOffset := 50
-	if len(parts) > 2 && len(parts[2]) > 0 {
-		xOffset = Atoi(parts[2])
+	nextPart++
+	if len(parts) > nextPart && len(parts[nextPart]) > 0 {
+		offset = Atoi(parts[nextPart])
+		offset = int(math.Min(math.Max(float64(offset), 0), 100))
 	}
 
-	yOffset := 50
-	if len(parts) > 3 && len(parts[3]) > 0 {
-		yOffset = Atoi(parts[3])
-	} else {
-		yOffset = xOffset
-	}
-
-	if xOffset < 0 {
-		xOffset = 0
-	} else if xOffset > 100 {
-		xOffset = 100
-	}
-
-	if yOffset < 0 {
-		yOffset = 0
-	} else if yOffset > 100 {
-		yOffset = 100
-	}
-
-	return zoom, aspect, xOffset, yOffset
+	return zoom, xOffset, yOffset, aspect, offset
 }
 
 var rxRelativeSize, _ = regexp.Compile(`^(much-much-much-smaller$|much-much-smaller$|much-smaller$|smaller$|normal$|larger$|much-larger$|much-much-larger$|much-much-much-larger$|scale:)`)
 
-func (item *PbItem) ImageSizeForPage(sizeName string) (float64, float64) {
+func (item *PbItem) ImageSizeForPage(sizeName string) (float64, float64, float64, float64) {
 	maxWidth, maxHeight := ContainerSize(item.PageSetting("page-size"), item.PageSetting("margin"))
 	sSize := item.Setting(sizeName)
 
@@ -704,6 +731,7 @@ func (item *PbItem) ImageSizeForPage(sizeName string) (float64, float64) {
 		} else {
 			sBaseSize = strings.TrimSuffix(sBaseSize, "%")
 			baseSize = Atof(sBaseSize) / 100 * maxWidth
+			//baseSize = math.Sqrt((Atof(sBaseSize) / 100 * maxWidth) * (Atof(sBaseSize) / 100 * maxHeight))
 		}
 
 		switch sSize {
@@ -734,6 +762,7 @@ func (item *PbItem) ImageSizeForPage(sizeName string) (float64, float64) {
 	} else {
 		sSize = strings.TrimSuffix(sSize, "%")
 		maxDimension = Atof(sSize) / 100 * maxWidth
+		//maxDimension = math.Sqrt((Atof(sSize) / 100 * maxWidth) * (Atof(sSize) / 100 * maxHeight))
 	}
 
 	width := 0.0
@@ -782,7 +811,7 @@ func (item *PbItem) ImageSizeForPage(sizeName string) (float64, float64) {
 		}
 	}
 
-	return width, height
+	return width, height, maxWidth, maxHeight
 }
 
 func (item *PbItem) pageDimensions() (float64, float64) {
@@ -810,9 +839,10 @@ var defaultSettings = map[string]string{
 	"density":            "2",
 	"binding":            "side",
 	"output-gamma":       "1.0",
-	"output-sharpen":     "4,1,0.5,0",
-	"output-mozjpeg":     "true",
-	"output-compression": "97",
+	"output-sharpen":     "0",
+	"output-compression": "92",
+	"mozjpeg":            "false",
+	"mozjpeg-sampling":   "1x1",
 
 	// page
 	"page-size":       "576x576",
@@ -838,11 +868,12 @@ var defaultSettings = map[string]string{
 	// image or text
 	"column-break": "true",
 	"item-align":   "center", // left center right - how images or text of different width are aligned in a column
+	"tilt":         "0",
 
 	// image
 	"max-size":     "100%",
 	"size":         "25%",
-	"rect":         "1", // fit,3:2,50  trim,3:2,50  #,x:y,50,50  #=zoom level where 1=fit, Missing aspect=image aspect, Missing position=50
+	"rect":         "100", // fit,3:2,50  trim,3:2,50  #,x:y,50,50  #=zoom level 0-100, Missing aspect=image aspect, Missing position=50
 	"image-weight": "1",
 	"image-frame":  "#0000,0",
 	"straighten":   "0.0",
@@ -860,7 +891,7 @@ var defaultSettings = map[string]string{
 	// text
 	"caption-position":   "below",
 	"caption-squareness": "100",
-	"caption-gutter":     "2",
+	"caption-gutter":     "0",
 	"text-align":         "left",
 	"text-frame":         "#0000,0",
 	"font":               "",

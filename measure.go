@@ -17,7 +17,10 @@ type ImageCacheEntry struct {
 func loadImageCache() map[string]ImageCacheEntry {
 	cache := map[string]ImageCacheEntry{}
 
-	if *nocacheFlag {
+	if *cacheMode == CacheModeNone || *cacheMode == CacheModeDuring {
+		if *cacheMode == CacheModeDuring {
+			*cacheMode = CacheModeFull
+		}
 		return cache
 	}
 
@@ -119,9 +122,22 @@ func getTextDimensions(items []PbItem) int {
 	numTexts := 0
 	for ii := range items {
 		if items[ii].itemType == ItemTypeText && len(items[ii].Setting("text")) > 0 {
-			width := WidthForContainer(items[ii].Setting("text-width"), items[ii].PageSetting("page-size"), items[ii].PageSetting("margin"))
+			rotate := items[ii].IntSetting("rotate")
+			var width float64
+			bRotate := rotate == 90 || rotate == -90 || rotate == 270 || rotate == -270
+			if bRotate {
+				width = HeightForContainer(items[ii].Setting("text-width"), items[ii].PageSetting("page-size"), items[ii].PageSetting("margin"))
+			} else {
+				width = WidthForContainer(items[ii].Setting("text-width"), items[ii].PageSetting("page-size"), items[ii].PageSetting("margin"))
+			}
 			items[ii].textBlockLayouts = MeasureText(items[ii].Setting("text"), width, 0.0, items[ii].TextInfo())
-			// TextToImage(&items[ii].textBlockLayouts[0], items[ii].TextInfo())
+			if bRotate {
+				for jj := range items[ii].textBlockLayouts {
+					temp := items[ii].textBlockLayouts[jj].height
+					items[ii].textBlockLayouts[jj].height = items[ii].textBlockLayouts[jj].width
+					items[ii].textBlockLayouts[jj].width = temp
+				}
+			}
 			numTexts++
 		} else if items[ii].itemType == ItemTypeImage && len(items[ii].Setting("text")) > 0 {
 			maxWidth := ContainerWidth(items[ii].PageSetting("page-size"), items[ii].PageSetting("margin"))
