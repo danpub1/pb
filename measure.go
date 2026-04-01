@@ -1,10 +1,7 @@
 package main
 
 import (
-	"bufio"
 	"encoding/json"
-	"image"
-	"log"
 	"os"
 )
 
@@ -81,22 +78,7 @@ func getImageDimensions(items []PbItem) int {
 				continue
 			}
 
-			imageFile, err := os.Open(filename)
-			if err != nil {
-				log.Print(err)
-				continue
-			}
-			imageReader := bufio.NewReader(imageFile)
-			config, _, err := image.DecodeConfig(imageReader)
-			if err != nil {
-				imageFile.Close()
-				log.Print(err)
-				continue
-			}
-			if err := imageFile.Close(); err != nil {
-				log.Print(err)
-				continue
-			}
+			config := items[ii].GetImageConfig()
 
 			if rotation == 90 || rotation == -90 || rotation == 270 || rotation == -270 {
 				items[ii].imageWidthPx = config.Height

@@ -38,6 +38,8 @@ type breakIntoPageState struct {
 	columnsInRow  int
 	itemsInColumn int
 
+	pageHasContent bool
+
 	pageWidth  float64
 	pageHeight float64
 
@@ -55,6 +57,8 @@ func (source *breakIntoPageState) DeepCopy() breakIntoPageState {
 		rowsOnPage:    source.rowsOnPage,
 		columnsInRow:  source.columnsInRow,
 		itemsInColumn: source.itemsInColumn,
+
+		pageHasContent: source.pageHasContent,
 
 		pageHeight: source.pageHeight,
 		pageWidth:  source.pageWidth,
@@ -103,6 +107,7 @@ func breakIntoPages(items []PbItem) *PbBook {
 		itemHeight := items[ii].imageHeight + captionGutter + items[ii].textHeight
 
 		s.pageWidth, s.pageHeight = items[ii].pageDimensions()
+		items[ii].inLayout = true
 
 		if ii > 0 {
 			items[ii].page = items[ii-1].page
@@ -114,7 +119,7 @@ func breakIntoPages(items []PbItem) *PbBook {
 			items[ii].column = 0
 		}
 
-		if items[ii].itemType == ItemTypeBook && s.pagesInBook == 0 || (items[ii].itemType == ItemTypePage || items[ii].BoolSetting("page-break")) && s.rowsOnPage > 0 {
+		if items[ii].itemType == ItemTypeBook && s.pagesInBook == 0 || (items[ii].itemType == ItemTypePage || items[ii].BoolSetting("page-break")) && (s.rowsOnPage > 0 || s.pageHasContent) {
 			if ii > 0 {
 				items[ii].page = items[ii-1].page + 1
 			} else {
@@ -125,6 +130,7 @@ func breakIntoPages(items []PbItem) *PbBook {
 			s.rowsOnPage = 0
 			s.columnsInRow = 0
 			s.itemsInColumn = 0
+			s.pageHasContent = false
 			s.curRowYOffset = 0
 			s.curRowHeight = 0
 			s.curColumnXOffset = 0
@@ -166,17 +172,19 @@ func breakIntoPages(items []PbItem) *PbBook {
 			items[ii].yOffset = s.curRowYOffset
 		}
 
-		if (items[ii].itemType == ItemTypeImage || items[ii].itemType == ItemTypeText) && len(items[ii].Setting("name")) == 0 {
+		if items[ii].itemType == ItemTypeImage || items[ii].itemType == ItemTypeText {
+			isFloated := len(items[ii].Setting("name")) != 0 || len(items[ii].Setting("float")) != 0
+
 			columnItemGutter := 0.0
-			if s.itemsInColumn > 0 {
+			if s.itemsInColumn > 0 && !isFloated {
 				columnItemGutter = items[ii].FloatSetting("column-item-gutter")
 			}
 			rowColumnGutter := 0.0
-			if s.columnsInRow > 0 {
+			if s.columnsInRow > 0 && !isFloated {
 				rowColumnGutter = items[ii].FloatSetting("row-column-gutter")
 			}
 			pageRowGutter := 0.0
-			if s.rowsOnPage > 0 {
+			if s.rowsOnPage > 0 && !isFloated {
 				pageRowGutter = items[ii].FloatSetting("page-row-gutter")
 			}
 			startOfColumn := ii
@@ -196,7 +204,11 @@ func breakIntoPages(items []PbItem) *PbBook {
 
 			prevColumnsRowHeight := rowHeight(items, items[ii].page, items[ii].row, items[ii].column-1)
 
-			if curItemYOffset+itemHeight <= s.pageHeight && s.curColumnXOffset+itemWidth <= s.pageWidth {
+			items[ii].inLayout = true
+			if isFloated {
+				items[ii].inLayout = false
+				s.pageHasContent = true
+			} else if curItemYOffset+itemHeight <= s.pageHeight && s.curColumnXOffset+itemWidth <= s.pageWidth {
 				items[ii].xOffset = s.curColumnXOffset
 				items[ii].yOffset = curItemYOffset
 				s.curColumnWidth = math.Max(s.curColumnWidth, itemWidth)
@@ -212,7 +224,6 @@ func breakIntoPages(items []PbItem) *PbBook {
 						}
 					}
 				}
-
 			} else if s.curColumnXOffset+itemWidth > s.pageWidth { // Column is too wide for page
 				// Column is too wide but there is room for it in the next row
 				if s.curRowYOffset+prevColumnsRowHeight+pageRowGutter+s.curColumnHeight+itemHeight < s.pageHeight {
@@ -240,7 +251,6 @@ func breakIntoPages(items []PbItem) *PbBook {
 						}
 					}
 				}
-
 			} else {
 				// Is there room for another column?
 				if s.itemsInColumn > 0 && s.curColumnXOffset+s.curColumnWidth+rowColumnGutter+itemWidth < s.pageWidth {
@@ -498,6 +508,36 @@ func BindingAlign(align int, binding int, pageNum int) int {
 	return align
 }
 
+func NumItemLayout(items []PbColumnItem) int {
+	numLayout := 0
+	for ii := range items {
+		if items[ii].item.inLayout {
+			numLayout++
+		}
+	}
+	return numLayout
+}
+
+func NumColumnLayout(items []PbColumn) int {
+	numLayout := 0
+	for ii := range items {
+		if NumItemLayout(items[ii].items) > 0 {
+			numLayout++
+		}
+	}
+	return numLayout
+}
+
+func NumRowLayout(items []PbRow) int {
+	numLayout := 0
+	for ii := range items {
+		if NumColumnLayout(items[ii].columns) > 0 {
+			numLayout++
+		}
+	}
+	return numLayout
+}
+
 func layoutPages(pbBook *PbBook, outPageRange string) {
 	binding := BindingUnknown
 	if len(pbBook.pages) > 0 {
@@ -514,6 +554,11 @@ func layoutPages(pbBook *PbBook, outPageRange string) {
 				for column := range page.rows[row].columns {
 					columnWidth := page.rows[row].columns[column].width() // distribute items across this width
 					for item := range page.rows[row].columns[column].items {
+
+						if !page.rows[row].columns[column].items[item].item.inLayout {
+							continue
+						}
+
 						w, _ := page.rows[row].columns[column].items[item].item.Size()
 						if w < columnWidth {
 							itemAlign := page.rows[row].columns[column].items[item].item.Align("item-align")
@@ -528,41 +573,63 @@ func layoutPages(pbBook *PbBook, outPageRange string) {
 					extraColumnHeight := rowHeight - page.rows[row].columns[column].height() // distribute items across this height
 					if extraColumnHeight > 0 {
 						columnDistribute := AlignTop
-						if len(page.rows[row].columns[column].items) > 0 {
+						if NumItemLayout(page.rows[row].columns[column].items) > 0 {
 							columnDistribute = page.rows[row].columns[column].items[0].item.Align("column-distribute")
 						}
 						switch BindingAlign(columnDistribute, binding, pp) {
 						case AlignBottom:
 							for item := range page.rows[row].columns[column].items {
-								page.rows[row].columns[column].items[item].item.yOffset += extraColumnHeight
+								if page.rows[row].columns[column].items[item].item.inLayout {
+									page.rows[row].columns[column].items[item].item.yOffset += extraColumnHeight
+								}
 							}
 						case AlignMiddle:
 							for item := range page.rows[row].columns[column].items {
-								page.rows[row].columns[column].items[item].item.yOffset += extraColumnHeight / 2
+								if page.rows[row].columns[column].items[item].item.inLayout {
+									page.rows[row].columns[column].items[item].item.yOffset += extraColumnHeight / 2
+								}
 							}
 						case AlignJustify:
-							if len(page.rows[row].columns[column].items) == 1 {
-								page.rows[row].columns[column].items[0].item.yOffset += extraColumnHeight / 2
+							if NumItemLayout(page.rows[row].columns[column].items) == 1 {
+								if page.rows[row].columns[column].items[0].item.inLayout {
+									page.rows[row].columns[column].items[0].item.yOffset += extraColumnHeight / 2
+								}
 							} else {
-								interSpace := extraColumnHeight / float64(len(page.rows[row].columns[column].items)-1)
+								interSpace := extraColumnHeight / float64(NumItemLayout(page.rows[row].columns[column].items)-1)
+								numItem := 0
 								for item := range page.rows[row].columns[column].items {
-									page.rows[row].columns[column].items[item].item.yOffset += interSpace * float64(item)
+									if page.rows[row].columns[column].items[item].item.inLayout {
+										page.rows[row].columns[column].items[item].item.yOffset += interSpace * float64(numItem)
+										numItem++
+									}
 								}
 							}
 						case AlignSpreadTop:
-							interSpace := extraColumnHeight / float64(len(page.rows[row].columns[column].items))
+							interSpace := extraColumnHeight / float64(NumItemLayout(page.rows[row].columns[column].items))
+							numItem := 0
 							for item := range page.rows[row].columns[column].items {
-								page.rows[row].columns[column].items[item].item.yOffset += interSpace * float64(item)
+								if page.rows[row].columns[column].items[item].item.inLayout {
+									page.rows[row].columns[column].items[item].item.yOffset += interSpace * float64(numItem)
+									numItem++
+								}
 							}
 						case AlignSpreadBottom:
-							interSpace := extraColumnHeight / float64(len(page.rows[row].columns[column].items))
+							interSpace := extraColumnHeight / float64(NumItemLayout(page.rows[row].columns[column].items))
+							numItem := 0
 							for item := range page.rows[row].columns[column].items {
-								page.rows[row].columns[column].items[item].item.yOffset += interSpace * float64(item+1)
+								if page.rows[row].columns[column].items[item].item.inLayout {
+									page.rows[row].columns[column].items[item].item.yOffset += interSpace * float64(numItem+1)
+									numItem++
+								}
 							}
 						case AlignSpreadMiddle:
-							interSpace := extraColumnHeight / float64(len(page.rows[row].columns[column].items)+1)
+							interSpace := extraColumnHeight / float64(NumItemLayout(page.rows[row].columns[column].items)+1)
+							numItem := 0
 							for item := range page.rows[row].columns[column].items {
-								page.rows[row].columns[column].items[item].item.yOffset += interSpace * float64(item+1)
+								if page.rows[row].columns[column].items[item].item.inLayout {
+									page.rows[row].columns[column].items[item].item.yOffset += interSpace * float64(numItem+1)
+									numItem++
+								}
 							}
 						}
 					}
@@ -571,54 +638,84 @@ func layoutPages(pbBook *PbBook, outPageRange string) {
 				extraRowWidth := page.availableWidth - page.rows[row].width()
 				if extraRowWidth > 0 {
 					rowDistribute := AlignLeft
-					if len(page.rows[row].columns[0].items) > 0 {
+					if NumItemLayout(page.rows[row].columns[0].items) > 0 {
 						rowDistribute = page.rows[row].columns[0].items[0].item.Align("row-distribute")
 					}
 					switch BindingAlign(rowDistribute, binding, pp) {
 					case AlignRight:
 						for column := range page.rows[row].columns {
 							for item := range page.rows[row].columns[column].items {
-								page.rows[row].columns[column].items[item].item.xOffset += extraRowWidth
+								if page.rows[row].columns[column].items[item].item.inLayout {
+									page.rows[row].columns[column].items[item].item.xOffset += extraRowWidth
+								}
 							}
 						}
 					case AlignCenter:
 						for column := range page.rows[row].columns {
 							for item := range page.rows[row].columns[column].items {
-								page.rows[row].columns[column].items[item].item.xOffset += extraRowWidth / 2
+								if page.rows[row].columns[column].items[item].item.inLayout {
+									page.rows[row].columns[column].items[item].item.xOffset += extraRowWidth / 2
+								}
 							}
 						}
 					case AlignJustify:
-						if len(page.rows[row].columns) == 1 {
+						if NumColumnLayout(page.rows[row].columns) == 1 {
 							for item := range page.rows[row].columns[0].items {
-								page.rows[row].columns[0].items[item].item.xOffset += extraRowWidth / 2
+								if page.rows[row].columns[0].items[item].item.inLayout {
+									page.rows[row].columns[0].items[item].item.xOffset += extraRowWidth / 2
+								}
 							}
 						} else {
-							interSpace := extraRowWidth / float64(len(page.rows[row].columns)-1)
+							interSpace := extraRowWidth / float64(NumColumnLayout(page.rows[row].columns)-1)
+							numColumn := 0
 							for column := range page.rows[row].columns {
 								for item := range page.rows[row].columns[column].items {
-									page.rows[row].columns[column].items[item].item.xOffset += interSpace * float64(column)
+									if page.rows[row].columns[column].items[item].item.inLayout {
+										page.rows[row].columns[column].items[item].item.xOffset += interSpace * float64(numColumn)
+									}
+								}
+								if NumItemLayout(page.rows[row].columns[column].items) > 0 {
+									numColumn++
 								}
 							}
 						}
 					case AlignSpreadLeft:
-						interSpace := extraRowWidth / float64(len(page.rows[row].columns))
+						interSpace := extraRowWidth / float64(NumColumnLayout(page.rows[row].columns))
+						numColumn := 0
 						for column := range page.rows[row].columns {
 							for item := range page.rows[row].columns[column].items {
-								page.rows[row].columns[column].items[item].item.xOffset += interSpace * float64(column)
+								if page.rows[row].columns[column].items[item].item.inLayout {
+									page.rows[row].columns[column].items[item].item.xOffset += interSpace * float64(numColumn)
+								}
+							}
+							if NumItemLayout(page.rows[row].columns[column].items) > 0 {
+								numColumn++
 							}
 						}
 					case AlignSpreadRight:
-						interSpace := extraRowWidth / float64(len(page.rows[row].columns))
+						interSpace := extraRowWidth / float64(NumColumnLayout(page.rows[row].columns))
+						numColumn := 0
 						for column := range page.rows[row].columns {
 							for item := range page.rows[row].columns[column].items {
-								page.rows[row].columns[column].items[item].item.xOffset += interSpace * float64(column+1)
+								if page.rows[row].columns[column].items[item].item.inLayout {
+									page.rows[row].columns[column].items[item].item.xOffset += interSpace * float64(numColumn+1)
+								}
+							}
+							if NumItemLayout(page.rows[row].columns[column].items) > 0 {
+								numColumn++
 							}
 						}
 					case AlignSpreadCenter:
-						interSpace := extraRowWidth / float64(len(page.rows[row].columns)+1)
+						interSpace := extraRowWidth / float64(NumColumnLayout(page.rows[row].columns)+1)
+						numColumn := 0
 						for column := range page.rows[row].columns {
 							for item := range page.rows[row].columns[column].items {
-								page.rows[row].columns[column].items[item].item.xOffset += interSpace * float64(column+1)
+								if page.rows[row].columns[column].items[item].item.inLayout {
+									page.rows[row].columns[column].items[item].item.xOffset += interSpace * float64(numColumn+1)
+								}
+							}
+							if NumItemLayout(page.rows[row].columns[column].items) > 0 {
+								numColumn++
 							}
 						}
 					}
@@ -628,7 +725,7 @@ func layoutPages(pbBook *PbBook, outPageRange string) {
 			extraPageHeight := page.availableHeight - page.height()
 			if extraPageHeight > 0 {
 				pageDistribute := AlignTop
-				if len(page.rows[0].columns[0].items) > 0 {
+				if NumItemLayout(page.rows[0].columns[0].items) > 0 {
 					pageDistribute = page.rows[0].columns[0].items[0].item.Align("page-distribute")
 				}
 				switch BindingAlign(pageDistribute, binding, pp) {
@@ -636,7 +733,9 @@ func layoutPages(pbBook *PbBook, outPageRange string) {
 					for row := range page.rows {
 						for column := range page.rows[row].columns {
 							for item := range page.rows[row].columns[column].items {
-								page.rows[row].columns[column].items[item].item.yOffset += extraPageHeight
+								if page.rows[row].columns[column].items[item].item.inLayout {
+									page.rows[row].columns[column].items[item].item.yOffset += extraPageHeight
+								}
 							}
 						}
 					}
@@ -644,52 +743,80 @@ func layoutPages(pbBook *PbBook, outPageRange string) {
 					for row := range page.rows {
 						for column := range page.rows[row].columns {
 							for item := range page.rows[row].columns[column].items {
-								page.rows[row].columns[column].items[item].item.yOffset += extraPageHeight / 2
-							}
-						}
-					}
-				case AlignJustify:
-					if len(page.rows) == 1 {
-						for column := range page.rows[0].columns {
-							for item := range page.rows[0].columns[column].items {
-								page.rows[0].columns[column].items[item].item.yOffset += extraPageHeight / 2
-							}
-						}
-					} else {
-						interSpace := extraPageHeight / float64(len(page.rows)-1)
-						for row := range page.rows {
-							for column := range page.rows[row].columns {
-								for item := range page.rows[row].columns[column].items {
-									page.rows[row].columns[column].items[item].item.yOffset += interSpace * float64(row)
+								if page.rows[row].columns[column].items[item].item.inLayout {
+									page.rows[row].columns[column].items[item].item.yOffset += extraPageHeight / 2
 								}
 							}
 						}
 					}
+				case AlignJustify:
+					if NumRowLayout(page.rows) == 1 {
+						for column := range page.rows[0].columns {
+							for item := range page.rows[0].columns[column].items {
+								if page.rows[0].columns[column].items[item].item.inLayout {
+									page.rows[0].columns[column].items[item].item.yOffset += extraPageHeight / 2
+								}
+							}
+						}
+					} else {
+						interSpace := extraPageHeight / float64(NumRowLayout(page.rows)-1)
+						numRow := 0
+						for row := range page.rows {
+							for column := range page.rows[row].columns {
+								for item := range page.rows[row].columns[column].items {
+									if page.rows[row].columns[column].items[item].item.inLayout {
+										page.rows[row].columns[column].items[item].item.yOffset += interSpace * float64(numRow)
+									}
+								}
+							}
+							if NumColumnLayout(page.rows[row].columns) > 0 {
+								numRow++
+							}
+						}
+					}
 				case AlignSpreadTop:
-					interSpace := extraPageHeight / float64(len(page.rows))
+					interSpace := extraPageHeight / float64(NumRowLayout(page.rows))
+					numRow := 0
 					for row := range page.rows {
 						for column := range page.rows[row].columns {
 							for item := range page.rows[row].columns[column].items {
-								page.rows[row].columns[column].items[item].item.yOffset += interSpace * float64(row)
+								if page.rows[row].columns[column].items[item].item.inLayout {
+									page.rows[row].columns[column].items[item].item.yOffset += interSpace * float64(numRow)
+								}
 							}
+						}
+						if NumColumnLayout(page.rows[row].columns) > 0 {
+							numRow++
 						}
 					}
 				case AlignSpreadBottom:
-					interSpace := extraPageHeight / float64(len(page.rows))
+					interSpace := extraPageHeight / float64(NumRowLayout(page.rows))
+					numRow := 0
 					for row := range page.rows {
 						for column := range page.rows[row].columns {
 							for item := range page.rows[row].columns[column].items {
-								page.rows[row].columns[column].items[item].item.yOffset += interSpace * float64(row+1)
+								if page.rows[row].columns[column].items[item].item.inLayout {
+									page.rows[row].columns[column].items[item].item.yOffset += interSpace * float64(numRow+1)
+								}
 							}
+						}
+						if NumColumnLayout(page.rows[row].columns) > 0 {
+							numRow++
 						}
 					}
 				case AlignSpreadMiddle:
-					interSpace := extraPageHeight / float64(len(page.rows)+1)
+					interSpace := extraPageHeight / float64(NumRowLayout(page.rows)+1)
+					numRow := 0
 					for row := range page.rows {
 						for column := range page.rows[row].columns {
 							for item := range page.rows[row].columns[column].items {
-								page.rows[row].columns[column].items[item].item.yOffset += interSpace * float64(row+1)
+								if page.rows[row].columns[column].items[item].item.inLayout {
+									page.rows[row].columns[column].items[item].item.yOffset += interSpace * float64(numRow+1)
+								}
 							}
+						}
+						if NumColumnLayout(page.rows[row].columns) > 0 {
+							numRow++
 						}
 					}
 				}

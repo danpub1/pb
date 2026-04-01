@@ -1,8 +1,10 @@
 package main
 
 import (
+	"archive/zip"
 	"bufio"
 	"image"
+	"io"
 	"log"
 	"maps"
 	"math"
@@ -217,7 +219,7 @@ func ToPbBook(items []PbItem) *PbBook {
 			book.pages[curPage].rows[curRow].columns[curColumn].weight = item.FloatSetting("column-weight")
 		}
 
-		if (item.itemType == ItemTypeImage || item.itemType == ItemTypeText) && len(item.Setting("name")) == 0 {
+		if item.itemType == ItemTypeImage || item.itemType == ItemTypeText {
 			curItem++
 
 			book.pages[curPage].rows[curRow].columns[curColumn].items = append(book.pages[curPage].rows[curRow].columns[curColumn].items, PbColumnItem{})
@@ -283,6 +285,7 @@ type PbItem struct {
 	imageHeight         float64
 	xOffset             float64
 	yOffset             float64
+	inLayout            bool
 
 	// settings
 	hasSettings   bool
@@ -302,7 +305,7 @@ func (item *PbItem) CaptionGutter() float64 {
 
 func (item *PbItem) Size() (float64, float64) {
 
-	if (item.itemType == ItemTypeImage || item.itemType == ItemTypeText) && len(item.Setting("name")) == 0 {
+	if (item.itemType == ItemTypeImage || item.itemType == ItemTypeText) && len(item.Setting("name")) == 0 && len(item.Setting("float")) == 0 {
 		return math.Max(item.imageWidth, item.textWidth), item.imageHeight + item.CaptionGutter() + item.textHeight
 	}
 
@@ -615,26 +618,122 @@ func (item *PbItem) baseDimensions() (float64, float64, float64, float64, int) {
 			}
 		}
 	}
-
-	return 0, 0, 0, 0, -1
 }
 
-func (item *PbItem) GetImage() *image.Image {
-	imageFile, err := os.Open(item.Setting("image"))
-	if err != nil {
-		log.Fatal(err)
-	}
-	imageReader := bufio.NewReader(imageFile)
-	decodedImage, _, err := image.Decode(imageReader)
-	if err != nil {
-		imageFile.Close()
-		log.Fatal(err)
-	}
-	if err := imageFile.Close(); err != nil {
-		log.Fatal(err)
+type ImageReader struct {
+	file       *os.File
+	fileReader io.Reader
+	zipFile    *zip.ReadCloser
+	zipReader  io.ReadCloser
+}
+
+func (imageReader *ImageReader) Reader() io.Reader {
+	if imageReader.file != nil && imageReader.fileReader != nil {
+		return imageReader.fileReader
 	}
 
-	return &decodedImage
+	if imageReader.zipFile != nil && imageReader.zipReader != nil {
+		return imageReader.zipReader
+	}
+
+	return nil
+}
+
+func (imageReader *ImageReader) Close() error {
+	if imageReader.file != nil {
+		return imageReader.file.Close()
+	}
+
+	if imageReader.zipFile != nil {
+		if imageReader.zipReader != nil {
+			imageReader.zipReader.Close()
+		}
+
+		return imageReader.zipFile.Close()
+	}
+
+	return nil
+}
+
+func (item *PbItem) OpenImage() *ImageReader {
+	imageReader := ImageReader{}
+
+	name := item.Setting("image")
+	var err error
+	if strings.Contains(name, "::") {
+		names := strings.SplitN(name, "::", 2)
+		if len(names) == 2 {
+			if imageReader.zipFile, err = zip.OpenReader(names[0]); err != nil {
+				log.Print(err)
+				return nil
+			}
+
+			for ii := range imageReader.zipFile.File {
+				if imageReader.zipFile.File[ii].Name == names[1] {
+					imageReader.zipReader, err = imageReader.zipFile.File[ii].Open()
+					break
+				}
+			}
+		}
+	} else {
+		imageReader.file, err = os.Open(name)
+		if err != nil {
+			log.Print(err)
+			return nil
+		}
+		imageReader.fileReader = bufio.NewReader(imageReader.file)
+	}
+
+	return &imageReader
+}
+
+func (item *PbItem) GetImage() image.Image {
+	// imageFile, err := os.Open(item.Setting("image"))
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	// imageReader := bufio.NewReader(imageFile)
+	// decodedImage, _, err := image.Decode(imageReader)
+	// if err != nil {
+	// 	imageFile.Close()
+	// 	log.Fatal(err)
+	// }
+	// if err := imageFile.Close(); err != nil {
+	// 	log.Fatal(err)
+	// }
+
+	imageFile := item.OpenImage()
+	decodedImage, _, err := image.Decode(imageFile.Reader())
+	imageFile.Close()
+	if err != nil {
+		log.Print(err)
+	}
+
+	return decodedImage
+}
+
+func (item *PbItem) GetImageConfig() image.Config {
+	// imageFile, err := os.Open(item.Setting("image"))
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	// imageReader := bufio.NewReader(imageFile)
+	// imageConfig, _, err := image.DecodeConfig(imageReader)
+	// if err != nil {
+	// 	imageFile.Close()
+	// 	log.Fatal(err)
+	// }
+	// if err := imageFile.Close(); err != nil {
+	// 	log.Fatal(err)
+	// }
+
+	imageFile := item.OpenImage()
+	imageConfig, _, err := image.DecodeConfig(imageFile.Reader())
+	imageFile.Close()
+	if err != nil {
+		log.Print(err)
+	}
+	return imageConfig
 }
 
 func (item *PbItem) ImageRectSetting() (int, int, int, float64, int) {
@@ -866,9 +965,11 @@ var defaultSettings = map[string]string{
 	"keep-columns-together": "false",
 
 	// image or text
-	"column-break": "true",
-	"item-align":   "center", // left center right - how images or text of different width are aligned in a column
-	"tilt":         "0",
+	"column-break":  "true",
+	"item-align":    "center", // left center right - how images or text of different width are aligned in a column
+	"tilt":          "0",
+	"superellipse":  "0",
+	"corner-radius": "0",
 
 	// image
 	"max-size":     "100%",
@@ -887,6 +988,7 @@ var defaultSettings = map[string]string{
 	"blur":         "0.0",
 	"rotate":       "0", // 0, 90, 180, 270
 	"recurse":      "true",
+	"float":        "", // X,Y,width,height
 
 	// text
 	"caption-position":   "below",

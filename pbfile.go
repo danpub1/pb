@@ -1,6 +1,7 @@
 package main
 
 import (
+	"archive/zip"
 	"fmt"
 	"io"
 	"io/fs"
@@ -317,66 +318,101 @@ func glob(path string, recurse bool) ([]string, error) {
 	for ii := len(exts); ii > 0; ii-- {
 		exts = append(exts, strings.ToUpper(exts[ii-1]))
 	}
-	filename := filepath.Base(path)
-	rPath, _ := strings.CutSuffix(path, filename)
 
-	if filename == "*" {
-		sources := make([]string, 0)
-		for _, ext := range exts {
-			sources2, err := glob(rPath+filename+ext, recurse)
-			if err != nil {
+	if zipParts := strings.SplitN(path, "::", 2); len(zipParts) == 2 {
+		if zipParts[1] == "*" {
+			sources := make([]string, 0)
+			for _, ext := range exts {
+				sources2, err := glob(zipParts[0]+"::"+zipParts[1]+ext, recurse)
+				if err != nil {
+					log.Print(err)
+					return make([]string, 0), err
+				}
+				if len(sources2) > 0 {
+					sources = append(sources, sources2...)
+				}
+			}
+			return sources, nil
+		} else {
+			if zipReader, err := zip.OpenReader(zipParts[0]); err != nil {
 				log.Print(err)
 				return make([]string, 0), err
+			} else {
+				sources := make([]string, 0)
+				for f := range zipReader.File {
+					if matched, err := filepath.Match(zipParts[1], zipReader.File[f].Name); err == nil && matched {
+						sources = append(sources, zipParts[0]+"::"+zipReader.File[f].Name)
+					} else if err != nil {
+						log.Print(err)
+						return make([]string, 0), err
+					}
+				}
+				return sources, nil
 			}
-			if len(sources2) > 0 {
-				sources = append(sources, sources2...)
+		}
+	} else {
+		filename := filepath.Base(path)
+		rPath, _ := strings.CutSuffix(path, filename)
+
+		if filename == "*" {
+			sources := make([]string, 0)
+			for _, ext := range exts {
+				sources2, err := glob(rPath+filename+ext, recurse)
+				if err != nil {
+					log.Print(err)
+					return make([]string, 0), err
+				}
+				if len(sources2) > 0 {
+					sources = append(sources, sources2...)
+				}
+			}
+			return sources, nil
+		}
+
+		sources, err := filepath.Glob(path)
+		if err != nil {
+			log.Print(err)
+			return make([]string, 0), err
+		}
+
+		rPath = filepath.Clean(rPath)
+		if recurse {
+			rErr := filepath.WalkDir(rPath, func(dirpath string, dirEntry fs.DirEntry, err error) error {
+				if err != nil {
+					return filepath.SkipDir
+				}
+
+				if dirEntry.IsDir() && dirpath != rPath {
+					rSources, err2 := glob(dirpath+string(filepath.Separator)+filename, true)
+					if err2 != nil {
+						log.Print(err2)
+						return err2
+					}
+
+					if len(rSources) > 0 {
+						sources = append(sources, rSources...)
+					}
+				}
+
+				return nil
+			})
+
+			if rErr != nil {
+				log.Print(rErr)
+				return make([]string, 0), rErr
 			}
 		}
 		return sources, nil
 	}
-
-	sources, err := filepath.Glob(path)
-	if err != nil {
-		log.Print(err)
-		return make([]string, 0), err
-	}
-
-	rPath = filepath.Clean(rPath)
-	if recurse {
-		rErr := filepath.WalkDir(rPath, func(dirpath string, dirEntry fs.DirEntry, err error) error {
-			if err != nil {
-				return filepath.SkipDir
-			}
-
-			if dirEntry.IsDir() && dirpath != rPath {
-				rSources, err2 := glob(dirpath+string(filepath.Separator)+filename, true)
-				if err2 != nil {
-					log.Print(err2)
-					return err2
-				}
-
-				if len(rSources) > 0 {
-					sources = append(sources, rSources...)
-				}
-			}
-
-			return nil
-		})
-
-		if rErr != nil {
-			log.Print(rErr)
-			return make([]string, 0), rErr
-		}
-	}
-	return sources, nil
 }
 
 func expandWild(item *PbItem) []PbItem {
 	var newItems []PbItem
 
 	if item.itemType == ItemTypeImage {
-		if strings.ContainsAny(item.Setting("image"), "?*") {
-			sources, err := glob(item.Setting("image"), item.BoolSetting("recurse"))
+		imageName := item.Setting("image")
+		if strings.ContainsAny(imageName, "?*") {
+			sources, err := glob(imageName, item.BoolSetting("recurse"))
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -524,8 +560,12 @@ func ApplyItemSpecificStyles(items []PbItem) {
 	for ii := range items {
 		if items[ii].itemType == ItemTypeImage {
 			text := items[ii].Setting("text")
-			text = strings.ReplaceAll(text, "{{Filename}}", filepath.Base(items[ii].Setting("image")))
-			text = strings.ReplaceAll(text, "{{Fullname}}", filepath.Clean(items[ii].Setting("image")))
+			imageName := items[ii].Setting("image")
+			if imageNameParts := strings.SplitN(imageName, "::", 2); len(imageNameParts) == 2 {
+				imageName = imageNameParts[1]
+			}
+			text = strings.ReplaceAll(text, "{{Filename}}", filepath.Base(imageName))
+			text = strings.ReplaceAll(text, "{{Fullname}}", filepath.Clean(imageName))
 			items[ii].Set("text", text)
 		}
 	}

@@ -1,10 +1,12 @@
 package main
 
 import (
+	"archive/zip"
 	"fmt"
 	"image"
 	"image/color"
 	"image/draw"
+	"io"
 	"log"
 	"math"
 	"os"
@@ -64,6 +66,43 @@ func floatFromFixed(i fixed.Int26_6) float64 {
 	return ((float64)(i)) / 64.0
 }
 
+func ReadFontFile(path string) ([]byte, error) {
+	if pathParts := strings.SplitN(path, "::", 2); len(pathParts) == 2 {
+		if zipReader, err := zip.OpenReader(pathParts[0]); err != nil {
+			return make([]byte, 0), err
+		} else {
+			defer zipReader.Close()
+			for ii := range zipReader.File {
+				if zipReader.File[ii].Name == pathParts[1] {
+					if file, err := zipReader.File[ii].Open(); err != nil {
+						return make([]byte, 0), err
+					} else {
+						defer file.Close()
+						buffer := make([]byte, 64*1024)
+						bytes := make([]byte, 0)
+
+						for {
+							if n, err := file.Read(buffer); n > 0 && (err == nil || err == io.EOF) {
+								bytes = append(bytes, buffer[:n]...)
+							} else if err != io.EOF {
+								log.Print(err)
+								return make([]byte, 0), err
+							} else if n == 0 || err == io.EOF {
+								break
+							}
+						}
+
+						return bytes, nil
+					}
+				}
+			}
+			return make([]byte, 0), os.ErrNotExist
+		}
+	} else {
+		return os.ReadFile(path)
+	}
+}
+
 var fontCache map[string]font.Face = map[string]font.Face{}
 
 func openFont(textInfo *TextInfo) (font.Face, float64, float64) {
@@ -74,7 +113,7 @@ func openFont(textInfo *TextInfo) (font.Face, float64, float64) {
 	var face font.Face
 	var exists bool
 	if face, exists = fontCache[key]; !exists {
-		fontData, err := os.ReadFile(textInfo.font)
+		fontData, err := ReadFontFile(textInfo.font)
 		if err != nil {
 			log.Print("Error opening font \"" + textInfo.font + "\"")
 			log.Fatal(err)

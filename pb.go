@@ -231,7 +231,6 @@ func main() {
 }
 
 // TTD:
-// Float
 // Headers, Footers
 // is there something wrong with settings that column settings for break, distribute, don't work?
 //   (some) header settings for text seem to have to be on a row instead of on a column
@@ -239,10 +238,10 @@ func main() {
 // Output sigmoidal brightness/lightness?
 // eyelevel, spreadeyelevel, mouthlevel, spreadmouthlevel?
 // highlights, midtones, shadows
-// Image, font zip:filename:filename - read directly from zip and/or cache
 // Image, font https://... downloaded and then cached (in a zip file?)
 // HSL Adjustment
 // Frame
 // Background
 // Justify text
 // Italics, Bold, Bold-Italics
+// Circular Mask, Rounded corners

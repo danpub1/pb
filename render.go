@@ -21,6 +21,90 @@ import (
 	"github.com/disintegration/imaging"
 )
 
+type Rounded struct {
+	width  int
+	height int
+	power  float64 // -10 .. +10
+	radius int     // 0 <= radius <= min(width, height)
+
+	wmr  int
+	hmr  int
+	wmrr int
+	hmrr int
+	p    float64
+	rsq  float64
+}
+
+func NewRounded(width int, height int, power float64, radius int) Rounded {
+	r := Rounded{width, height, power, radius, 0, 0, 0, 0, 0, 0}
+
+	r.radius = int(math.Max(math.Min(float64(r.radius), math.Min(float64(r.width), float64(r.height))), 0))
+	r.wmr = r.width - r.radius
+	r.hmr = r.height - r.radius
+	r.wmrr = r.width - 2*r.radius
+	r.hmrr = r.height - 2*r.radius
+	r.p = math.Pow(2, r.power)
+	r.rsq = math.Abs(math.Pow(float64(r.radius), r.p))
+	return r
+}
+
+func (r Rounded) ColorModel() color.Model {
+	return color.AlphaModel
+}
+
+func (r Rounded) Bounds() image.Rectangle {
+	return image.Rect(0, 0, r.width, r.height)
+}
+
+func (r Rounded) At(x, y int) color.Color {
+	if x > r.radius && x < r.wmr || y > r.radius && y < r.hmr {
+		return color.Alpha{255}
+	}
+
+	if x >= r.wmr {
+		x -= r.wmrr
+	}
+
+	if y >= r.hmr {
+		y -= r.hmrr
+	}
+
+	x = int(math.Abs(float64(x - r.radius + 1)))
+	y = int(math.Abs(float64(y - r.radius + 1)))
+	if math.Pow(float64(x), r.p)+math.Pow(float64(y), r.p) <= r.rsq {
+		return color.Alpha{255}
+	}
+
+	return color.Alpha{0}
+}
+
+func GetMask(width int, height int, power float64, sCornerRadius string, density float64) *image.NRGBA {
+	cornerRadius := 0
+	if prefix, ok := strings.CutSuffix(sCornerRadius, "%"); ok {
+		cornerPercent := Atoi(prefix)
+		cornerRadius = int(math.Round(math.Min(float64(width), float64(height)) / 2 * float64(cornerPercent) / 100.0))
+	} else {
+		cornerRadius = int(math.Round(dotsFromUnitsFloat(Atof(sCornerRadius), density)))
+		cornerRadius = int(math.Min(math.Min(float64(width), float64(height))/2, float64(cornerRadius)))
+	}
+	return imaging.Resize(NewRounded(width*5, height*5, power, cornerRadius*5), width, height, imaging.Box)
+}
+
+func ApplyMask(picture image.Image, mask image.Image) image.Image {
+	dst := image.NewNRGBA(image.Rect(0, 0, picture.Bounds().Size().X, picture.Bounds().Size().Y))
+	draw.DrawMask(dst, image.Rect(0, 0, picture.Bounds().Size().X, picture.Bounds().Size().Y), picture, image.Point{}, mask, image.Point{}, draw.Over)
+	return dst
+}
+
+func ApplyRoundedCorners(picture image.Image, power float64, sCornerRadius string, density float64) image.Image {
+	if sCornerRadius != "0" {
+		mask := GetMask(picture.Bounds().Dx(), picture.Bounds().Dy(), power, sCornerRadius, density)
+		return ApplyMask(picture, mask)
+	}
+
+	return picture
+}
+
 func writeHeader(outFilename string) (int, error) {
 	ext := filepath.Ext(outFilename)
 	format := strings.ToLower(ext)
@@ -554,9 +638,9 @@ func renderPages(pbBook *PbBook, outPageRange string, outFilename string) {
 					for columnItem := range page.rows[row].columns[column].items {
 						item = page.rows[row].columns[column].items[columnItem].item
 
-						if item.itemType == ItemTypeText && len(item.Setting("name")) == 0 {
+						if item.itemType == ItemTypeText {
 
-							var textImage *image.NRGBA
+							var textImage image.Image
 							rotation := Atoi(item.Setting("rotate"))
 							switch rotation {
 							case -90, 270:
@@ -584,6 +668,8 @@ func renderPages(pbBook *PbBook, outPageRange string, outFilename string) {
 								textImage = TextToImage(&item.textBlockLayouts[0], item.TextInfo())
 							}
 
+							textImage = ApplyRoundedCorners(textImage, item.FloatSetting("superellipse"), item.Setting("corner-radius"), density)
+
 							tiltAngle := item.FloatSetting("tilt")
 							deltaXtilt := 0
 							deltaYtilt := 0
@@ -594,15 +680,22 @@ func renderPages(pbBook *PbBook, outPageRange string, outFilename string) {
 								picture = textImage
 							}
 
+							if sSize := item.Setting("float"); sSize != "" {
+								if sSizeParts := strings.SplitN(sSize, ",", 2); len(sSizeParts) == 2 {
+									item.xOffset = Atof(sSizeParts[0])
+									item.yOffset = Atof(sSizeParts[1])
+								}
+							}
+
 							xDots := int(math.Round(dotsFromUnitsFloat(left+item.xOffset, density))) - deltaXtilt
 							yDots := int(math.Round(dotsFromUnitsFloat(top+item.yOffset, density))) - deltaYtilt
+
 							draw.Draw(dst, image.Rect(xDots, yDots, xDots+picture.Bounds().Size().X, yDots+picture.Bounds().Size().Y), picture, image.Point{}, draw.Over)
 						}
 
-						if item.itemType == ItemTypeImage && len(item.Setting("name")) == 0 {
-							picture, err := imaging.Open(item.Setting("image"))
-							if err != nil {
-								log.Printf("failed to open image: %v", err)
+						if item.itemType == ItemTypeImage {
+							picture := item.GetImage()
+							if picture == nil {
 								continue
 							}
 
@@ -644,6 +737,15 @@ func renderPages(pbBook *PbBook, outPageRange string, outFilename string) {
 
 							picture = scaleToRect(picture, item)
 
+							if sSize := item.Setting("float"); sSize != "" {
+								if sSizeParts := strings.SplitN(sSize, ",", 4); len(sSizeParts) == 4 {
+									item.xOffset = Atof(sSizeParts[0])
+									item.yOffset = Atof(sSizeParts[1])
+									item.imageWidth = Atof(sSizeParts[2])
+									item.imageHeight = Atof(sSizeParts[3])
+								}
+							}
+
 							// Resize the cropped image to width = 200px preserving the aspect ratio.
 							imageWidthDots := int(math.Round(dotsFromUnitsFloat(item.imageWidth, density)))
 							imageHeightDots := int(math.Round(dotsFromUnitsFloat(item.imageHeight, density)))
@@ -659,13 +761,18 @@ func renderPages(pbBook *PbBook, outPageRange string, outFilename string) {
 								picture = imaging.Sharpen(picture, sharpen)
 							}
 
+							picture = ApplyRoundedCorners(picture, item.FloatSetting("superellipse"), item.Setting("corner-radius"), density)
+
 							if len(item.textBlockLayouts) > 0 {
 								captionGutterDots := int(math.Round(dotsFromUnitsFloat(item.FloatSetting("caption-gutter"), density)))
 								textBlockLayout := TextBlockLayout{}
 								if item.bestTextBlockLayout >= 0 {
 									textBlockLayout = item.textBlockLayouts[item.bestTextBlockLayout]
 								}
-								textImage := TextToImage(&textBlockLayout, item.TextInfo())
+
+								var textImage image.Image = TextToImage(&textBlockLayout, item.TextInfo())
+								textImage = ApplyRoundedCorners(textImage, item.FloatSetting("superellipse"), item.Setting("corner-radius"), density)
+
 								captionWidthDots := int(math.Round(dotsFromUnitsFloat(textBlockLayout.width, density)))
 								captionHeightDots := int(math.Round(dotsFromUnitsFloat(textBlockLayout.height, density)))
 
@@ -707,7 +814,7 @@ func renderPages(pbBook *PbBook, outPageRange string, outFilename string) {
 							xDots := int(math.Round(dotsFromUnitsFloat(left+item.xOffset, density)))
 							yDots := int(math.Round(dotsFromUnitsFloat(top+item.yOffset, density)))
 
-							draw.Draw(dst, image.Rect(xDots-deltaXtilt, yDots-deltaYtilt, xDots+imageWidthDots+deltaXtilt*2, yDots+imageHeightDots+deltaYtilt*2), picture, image.Point{}, draw.Over)
+							draw.Draw(dst, image.Rect(xDots-deltaXtilt, yDots-deltaYtilt, xDots+imageWidthDots+deltaXtilt, yDots+imageHeightDots+deltaYtilt), picture, image.Point{}, draw.Over)
 						}
 					}
 				}
