@@ -173,18 +173,19 @@ func breakIntoPages(items []PbItem) *PbBook {
 		}
 
 		if items[ii].itemType == ItemTypeImage || items[ii].itemType == ItemTypeText {
-			isFloated := len(items[ii].Setting("name")) != 0 || len(items[ii].Setting("float")) != 0
+			isFloated := len(items[ii].Setting("float")) != 0
+			isNotInLayout := isFloated || len(items[ii].Setting("name")) != 0
 
 			columnItemGutter := 0.0
-			if s.itemsInColumn > 0 && !isFloated {
+			if s.itemsInColumn > 0 && !isNotInLayout {
 				columnItemGutter = items[ii].FloatSetting("column-item-gutter")
 			}
 			rowColumnGutter := 0.0
-			if s.columnsInRow > 0 && !isFloated {
+			if s.columnsInRow > 0 && !isNotInLayout {
 				rowColumnGutter = items[ii].FloatSetting("row-column-gutter")
 			}
 			pageRowGutter := 0.0
-			if s.rowsOnPage > 0 && !isFloated {
+			if s.rowsOnPage > 0 && !isNotInLayout {
 				pageRowGutter = items[ii].FloatSetting("page-row-gutter")
 			}
 			startOfColumn := ii
@@ -208,6 +209,8 @@ func breakIntoPages(items []PbItem) *PbBook {
 			if isFloated {
 				items[ii].inLayout = false
 				s.pageHasContent = true
+			} else if isNotInLayout {
+				items[ii].inLayout = false
 			} else if curItemYOffset+itemHeight <= s.pageHeight && s.curColumnXOffset+itemWidth <= s.pageWidth {
 				items[ii].xOffset = s.curColumnXOffset
 				items[ii].yOffset = curItemYOffset

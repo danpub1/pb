@@ -12,6 +12,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"time"
 )
 
 func escapeValue(s string) string {
@@ -557,15 +558,22 @@ func makeIntoLines(lines []string) []string {
 }
 
 func ApplyItemSpecificStyles(items []PbItem) {
+	today := time.Now()
+	date := today.Format("02-Jan-2006")
+	year := today.Format("2006")
 	for ii := range items {
-		if items[ii].itemType == ItemTypeImage {
+		if items[ii].itemType == ItemTypeImage || items[ii].itemType == ItemTypeText {
 			text := items[ii].Setting("text")
-			imageName := items[ii].Setting("image")
-			if imageNameParts := strings.SplitN(imageName, "::", 2); len(imageNameParts) == 2 {
-				imageName = imageNameParts[1]
+			if items[ii].itemType == ItemTypeImage {
+				imageName := items[ii].Setting("image")
+				if imageNameParts := strings.SplitN(imageName, "::", 2); len(imageNameParts) == 2 {
+					imageName = imageNameParts[1]
+				}
+				text = strings.ReplaceAll(text, "{{Filename}}", filepath.Base(imageName))
+				text = strings.ReplaceAll(text, "{{Fullname}}", filepath.Clean(imageName))
 			}
-			text = strings.ReplaceAll(text, "{{Filename}}", filepath.Base(imageName))
-			text = strings.ReplaceAll(text, "{{Fullname}}", filepath.Clean(imageName))
+			text = strings.ReplaceAll(text, "{{Date}}", date)
+			text = strings.ReplaceAll(text, "{{Year}}", year)
 			items[ii].Set("text", text)
 		}
 	}

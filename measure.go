@@ -96,6 +96,26 @@ func getImageDimensions(items []PbItem) int {
 	return numImages
 }
 
+func getOneTextDimensions(item *PbItem, text string) []TextBlockLayout {
+	rotate := item.IntSetting("rotate")
+	var width float64
+	bRotate := rotate == 90 || rotate == -90 || rotate == 270 || rotate == -270
+	if bRotate {
+		width = HeightForContainer(item.Setting("text-width"), item.PageSetting("page-size"), item.PageSetting("margin"))
+	} else {
+		width = WidthForContainer(item.Setting("text-width"), item.PageSetting("page-size"), item.PageSetting("margin"))
+	}
+	textBlockLayouts := MeasureText(text, width, 0.0, item.TextInfo())
+	if bRotate {
+		for jj := range textBlockLayouts {
+			temp := textBlockLayouts[jj].height
+			textBlockLayouts[jj].height = textBlockLayouts[jj].width
+			textBlockLayouts[jj].width = temp
+		}
+	}
+	return textBlockLayouts
+}
+
 func getTextDimensions(items []PbItem) int {
 	if len(items) == 0 {
 		return 0
@@ -104,22 +124,7 @@ func getTextDimensions(items []PbItem) int {
 	numTexts := 0
 	for ii := range items {
 		if items[ii].itemType == ItemTypeText && len(items[ii].Setting("text")) > 0 {
-			rotate := items[ii].IntSetting("rotate")
-			var width float64
-			bRotate := rotate == 90 || rotate == -90 || rotate == 270 || rotate == -270
-			if bRotate {
-				width = HeightForContainer(items[ii].Setting("text-width"), items[ii].PageSetting("page-size"), items[ii].PageSetting("margin"))
-			} else {
-				width = WidthForContainer(items[ii].Setting("text-width"), items[ii].PageSetting("page-size"), items[ii].PageSetting("margin"))
-			}
-			items[ii].textBlockLayouts = MeasureText(items[ii].Setting("text"), width, 0.0, items[ii].TextInfo())
-			if bRotate {
-				for jj := range items[ii].textBlockLayouts {
-					temp := items[ii].textBlockLayouts[jj].height
-					items[ii].textBlockLayouts[jj].height = items[ii].textBlockLayouts[jj].width
-					items[ii].textBlockLayouts[jj].width = temp
-				}
-			}
+			items[ii].textBlockLayouts = getOneTextDimensions(&items[ii], items[ii].Setting("text"))
 			numTexts++
 		} else if items[ii].itemType == ItemTypeImage && len(items[ii].Setting("text")) > 0 {
 			maxWidth := ContainerWidth(items[ii].PageSetting("page-size"), items[ii].PageSetting("margin"))

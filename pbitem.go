@@ -175,12 +175,14 @@ func (thePage *PbPage) height() float64 {
 }
 
 type PbBook struct {
-	pages []PbPage
+	pages      []PbPage
+	namedItems []PbItem
 }
 
 func ToPbBook(items []PbItem) *PbBook {
 	book := PbBook{}
 	book.pages = make([]PbPage, 0)
+	book.namedItems = make([]PbItem, 0)
 
 	curPage := -1
 	curRow := -1
@@ -220,19 +222,25 @@ func ToPbBook(items []PbItem) *PbBook {
 		}
 
 		if item.itemType == ItemTypeImage || item.itemType == ItemTypeText {
-			curItem++
 
-			book.pages[curPage].rows[curRow].columns[curColumn].items = append(book.pages[curPage].rows[curRow].columns[curColumn].items, PbColumnItem{})
-			book.pages[curPage].rows[curRow].columns[curColumn].items[curItem].item = &items[ii]
-
-			if curItem == 0 && curColumn == 0 {
-				book.pages[curPage].rows[curRow].yOffset = items[ii].yOffset
-			}
-
-			if item.itemType == ItemTypeImage {
-				book.pages[curPage].rows[curRow].columns[curColumn].items[curItem].weight = item.FloatSetting("image-weight")
+			name := items[ii].Setting("name")
+			if len(name) != 0 {
+				book.namedItems = append(book.namedItems, items[ii])
 			} else {
-				book.pages[curPage].rows[curRow].columns[curColumn].items[curItem].weight = 1
+				curItem++
+
+				book.pages[curPage].rows[curRow].columns[curColumn].items = append(book.pages[curPage].rows[curRow].columns[curColumn].items, PbColumnItem{})
+				book.pages[curPage].rows[curRow].columns[curColumn].items[curItem].item = &items[ii]
+
+				if curItem == 0 && curColumn == 0 {
+					book.pages[curPage].rows[curRow].yOffset = items[ii].yOffset
+				}
+
+				if item.itemType == ItemTypeImage {
+					book.pages[curPage].rows[curRow].columns[curColumn].items[curItem].weight = item.FloatSetting("image-weight")
+				} else {
+					book.pages[curPage].rows[curRow].columns[curColumn].items[curItem].weight = 1
+				}
 			}
 		}
 	}
@@ -950,6 +958,8 @@ var defaultSettings = map[string]string{
 	"page-distribute": "spreadmiddle", // how rows are distributed vertically on the page
 	"page-row-gutter": "6",            // gutter between rows
 	"current-page":    "false",
+	"header":          "",
+	"footer":          "",
 
 	// row
 	"row-distribute":    "spreadcenter", // how columns are distributed horizontally in a row

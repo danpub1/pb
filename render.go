@@ -595,6 +595,106 @@ func writeJPEG(picture image.Image, out io.Writer, compressionLevel int, samplin
 	return bytesWritten, errReturn
 }
 
+func renderText(item *PbItem, textBlockLayouts []TextBlockLayout, density float64) (image.Image, int, int) {
+
+	if len(textBlockLayouts) == 0 {
+		return nil, 0, 0
+	}
+
+	var textImage image.Image
+	rotation := Atoi(item.Setting("rotate"))
+	switch rotation {
+	case -90, 270:
+		temp := textBlockLayouts[0].height
+		textBlockLayouts[0].height = textBlockLayouts[0].width
+		textBlockLayouts[0].width = temp
+		textImage = TextToImage(&textBlockLayouts[0], item.TextInfo())
+		temp = textBlockLayouts[0].height
+		textBlockLayouts[0].height = textBlockLayouts[0].width
+		textBlockLayouts[0].width = temp
+		textImage = imaging.Rotate90(textImage)
+	case 90, -270:
+		temp := textBlockLayouts[0].height
+		textBlockLayouts[0].height = textBlockLayouts[0].width
+		textBlockLayouts[0].width = temp
+		textImage = TextToImage(&textBlockLayouts[0], item.TextInfo())
+		temp = textBlockLayouts[0].height
+		textBlockLayouts[0].height = textBlockLayouts[0].width
+		textBlockLayouts[0].width = temp
+		textImage = imaging.Rotate270(textImage)
+	case 180, -180:
+		textImage = TextToImage(&textBlockLayouts[0], item.TextInfo())
+		textImage = imaging.Rotate180(textImage)
+	default:
+		textImage = TextToImage(&textBlockLayouts[0], item.TextInfo())
+	}
+
+	textImage = ApplyRoundedCorners(textImage, item.FloatSetting("superellipse"), item.Setting("corner-radius"), density)
+
+	tiltAngle := item.FloatSetting("tilt")
+	deltaXtilt := 0
+	deltaYtilt := 0
+	var picture image.Image
+	if tiltAngle != 0 {
+		picture, deltaXtilt, deltaYtilt = tilt(textImage, tiltAngle)
+	} else {
+		picture = textImage
+	}
+
+	return picture, deltaXtilt, deltaYtilt
+}
+
+func renderHeader(dst *image.NRGBA, header string, curPage int, totalPages int, left float64, margin float64, marginOffsetSign int, density float64, namedItems []PbItem) {
+	parts := strings.SplitN(header, ",", 5)
+	offset := 0.0
+	leadingPages := 0
+	trailingPages := 0
+	headerName := ""
+	if (curPage+1)%2 == 0 {
+		if len(parts) > 0 {
+			headerName = parts[0]
+		}
+	} else {
+		if len(parts) > 1 {
+			headerName = parts[1]
+		} else {
+			headerName = parts[0]
+		}
+	}
+	if len(parts) > 2 {
+		offset = Atof(parts[2])
+	}
+	if len(parts) > 3 {
+		leadingPages = Atoi(parts[3])
+	}
+	if len(parts) > 4 {
+		trailingPages = Atoi(parts[4])
+	}
+
+	var headerItem *PbItem
+	if len(headerName) > 0 {
+		for ii := range namedItems {
+			if namedItems[ii].Setting("name") == headerName {
+				headerItem = &namedItems[ii]
+				break
+			}
+		}
+	}
+
+	if headerItem != nil {
+		headerItemText := headerItem.Setting("text")
+		headerItemText = strings.ReplaceAll(headerItemText, "{{PageNumber}}", fmt.Sprintf("%v", curPage+1-leadingPages))
+		headerItemText = strings.ReplaceAll(headerItemText, "{{TotalPages}}", fmt.Sprintf("%v", totalPages-leadingPages-trailingPages))
+		textBlockLayouts := getOneTextDimensions(headerItem, headerItemText)
+		textImage, deltaXtilt, deltaYtilt := renderText(headerItem, textBlockLayouts, density)
+		if textImage != nil {
+			xDots := int(math.Round(dotsFromUnitsFloat(left, density))) - deltaXtilt
+			yDots := int(math.Round(dotsFromUnitsFloat(margin+offset*float64(marginOffsetSign), density))) - deltaYtilt - textImage.Bounds().Size().Y/2
+			draw.Draw(dst, image.Rect(xDots, yDots, xDots+textImage.Bounds().Size().X, yDots+textImage.Bounds().Size().Y), textImage, image.Point{}, draw.Over)
+		}
+	}
+}
+
 func renderPages(pbBook *PbBook, outPageRange string, outFilename string) {
 	n, err := writeHeader(outFilename)
 	if err != nil {
@@ -613,6 +713,7 @@ func renderPages(pbBook *PbBook, outPageRange string, outFilename string) {
 		page := &pbBook.pages[pp]
 		if isPageInRange(outPageRange, pp) || isCurrentPage(pbBook, pp) {
 			var top float64
+			var bottom float64
 			var left float64
 			var dst *image.NRGBA = nil
 			density := 1.0
@@ -624,7 +725,7 @@ func renderPages(pbBook *PbBook, outPageRange string, outFilename string) {
 
 			pageWidth, pageHeight := FloatSize(item.Setting("page-size"))
 			density = item.Density()
-			top, _, _, left = FourTwoOne(item.Setting("margin"))
+			top, _, bottom, left = FourTwoOne(item.Setting("margin"))
 			widthDots := int(math.Round(dotsFromUnitsFloat(pageWidth, density)))
 			heightDots := int(math.Round(dotsFromUnitsFloat(pageHeight, density)))
 			dst = image.NewNRGBA(image.Rect(0, 0, widthDots, heightDots))
@@ -633,64 +734,36 @@ func renderPages(pbBook *PbBook, outPageRange string, outFilename string) {
 			backColor := colorToNRGBA(item.Setting("background"))
 			draw.Draw(dst, dst.Bounds(), image.NewUniform(color.NRGBA{backColor.R, backColor.G, backColor.B, backColor.A}), image.Point{}, draw.Src)
 
+			header := item.Setting("header")
+			if len(header) > 0 {
+				renderHeader(dst, header, pp, len(pbBook.pages), left, top, -1, density, pbBook.namedItems)
+			}
+
+			footer := item.Setting("footer")
+			if len(footer) > 0 {
+				renderHeader(dst, footer, pp, len(pbBook.pages), left, pageHeight-bottom, 1, density, pbBook.namedItems)
+			}
+
 			for row := range page.rows {
 				for column := range page.rows[row].columns {
 					for columnItem := range page.rows[row].columns[column].items {
 						item = page.rows[row].columns[column].items[columnItem].item
 
 						if item.itemType == ItemTypeText {
-
-							var textImage image.Image
-							rotation := Atoi(item.Setting("rotate"))
-							switch rotation {
-							case -90, 270:
-								temp := item.textBlockLayouts[0].height
-								item.textBlockLayouts[0].height = item.textBlockLayouts[0].width
-								item.textBlockLayouts[0].width = temp
-								textImage = TextToImage(&item.textBlockLayouts[0], item.TextInfo())
-								temp = item.textBlockLayouts[0].height
-								item.textBlockLayouts[0].height = item.textBlockLayouts[0].width
-								item.textBlockLayouts[0].width = temp
-								textImage = imaging.Rotate90(textImage)
-							case 90, -270:
-								temp := item.textBlockLayouts[0].height
-								item.textBlockLayouts[0].height = item.textBlockLayouts[0].width
-								item.textBlockLayouts[0].width = temp
-								textImage = TextToImage(&item.textBlockLayouts[0], item.TextInfo())
-								temp = item.textBlockLayouts[0].height
-								item.textBlockLayouts[0].height = item.textBlockLayouts[0].width
-								item.textBlockLayouts[0].width = temp
-								textImage = imaging.Rotate270(textImage)
-							case 180, -180:
-								textImage = TextToImage(&item.textBlockLayouts[0], item.TextInfo())
-								textImage = imaging.Rotate180(textImage)
-							default:
-								textImage = TextToImage(&item.textBlockLayouts[0], item.TextInfo())
-							}
-
-							textImage = ApplyRoundedCorners(textImage, item.FloatSetting("superellipse"), item.Setting("corner-radius"), density)
-
-							tiltAngle := item.FloatSetting("tilt")
-							deltaXtilt := 0
-							deltaYtilt := 0
-							var picture image.Image
-							if tiltAngle != 0 {
-								picture, deltaXtilt, deltaYtilt = tilt(textImage, tiltAngle)
-							} else {
-								picture = textImage
-							}
-
-							if sSize := item.Setting("float"); sSize != "" {
-								if sSizeParts := strings.SplitN(sSize, ",", 2); len(sSizeParts) == 2 {
-									item.xOffset = Atof(sSizeParts[0])
-									item.yOffset = Atof(sSizeParts[1])
+							textImage, deltaXtilt, deltaYtilt := renderText(item, item.textBlockLayouts, density)
+							if textImage != nil {
+								if sSize := item.Setting("float"); sSize != "" {
+									if sSizeParts := strings.SplitN(sSize, ",", 2); len(sSizeParts) == 2 {
+										item.xOffset = Atof(sSizeParts[0])
+										item.yOffset = Atof(sSizeParts[1])
+									}
 								}
+
+								xDots := int(math.Round(dotsFromUnitsFloat(left+item.xOffset, density))) - deltaXtilt
+								yDots := int(math.Round(dotsFromUnitsFloat(top+item.yOffset, density))) - deltaYtilt
+
+								draw.Draw(dst, image.Rect(xDots, yDots, xDots+textImage.Bounds().Size().X, yDots+textImage.Bounds().Size().Y), textImage, image.Point{}, draw.Over)
 							}
-
-							xDots := int(math.Round(dotsFromUnitsFloat(left+item.xOffset, density))) - deltaXtilt
-							yDots := int(math.Round(dotsFromUnitsFloat(top+item.yOffset, density))) - deltaYtilt
-
-							draw.Draw(dst, image.Rect(xDots, yDots, xDots+picture.Bounds().Size().X, yDots+picture.Bounds().Size().Y), picture, image.Point{}, draw.Over)
 						}
 
 						if item.itemType == ItemTypeImage {
