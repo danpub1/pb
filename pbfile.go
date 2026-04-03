@@ -24,6 +24,11 @@ func escapeValue(s string) string {
 func escapeText(s string) string {
 	s = strings.ReplaceAll(s, "\\", "\\\\")
 	s = strings.ReplaceAll(s, "\t", "\\t")
+	s = strings.ReplaceAll(s, "\x01", "\\1")
+	s = strings.ReplaceAll(s, "\x02", "\\2")
+	s = strings.ReplaceAll(s, "\x03", "\\3")
+	s = strings.ReplaceAll(s, "\x04", "\\4")
+	s = strings.ReplaceAll(s, "\n", "\\n")
 	return s
 }
 
@@ -152,6 +157,11 @@ func unescape(line string) string {
 
 func unescapeText(text string) string {
 	text = strings.ReplaceAll(text, "\\t", "\t")
+	text = strings.ReplaceAll(text, "\\1", "\x01")
+	text = strings.ReplaceAll(text, "\\2", "\x02")
+	text = strings.ReplaceAll(text, "\\3", "\x03")
+	text = strings.ReplaceAll(text, "\\4", "\x04")
+	text = strings.ReplaceAll(text, "\\n", "\n")
 	return strings.ReplaceAll(text, "\\\\", "\\")
 }
 
@@ -517,7 +527,11 @@ var rxRootPath, _ = regexp.Compile(`^([a-z]:|[/\\])`)
 
 func localizePath(path string, basePath string) string {
 	if !rxRootPath.MatchString(path) {
-		path = basePath + path
+		pieces := strings.Split(path, ",")
+		for ii := range pieces {
+			pieces[ii] = basePath + pieces[ii]
+		}
+		path = strings.Join(pieces, ",")
 	}
 
 	return path

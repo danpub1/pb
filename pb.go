@@ -233,7 +233,6 @@ func main() {
 // TTD:
 // Frame
 // Background
-// Justify text
 // is there something wrong with settings that column settings for break, distribute, don't work?
 //   (some) header settings for text seem to have to be on a row instead of on a column
 //
@@ -242,4 +241,3 @@ func main() {
 // highlights, midtones, shadows
 // Image, font https://... downloaded and then cached (in a zip file?)
 // HSL Adjustment
-// Italics, Bold, Bold-Italics

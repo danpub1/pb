@@ -495,7 +495,7 @@ func (item *PbItem) TextInfo() *TextInfo {
 		density: item.Density(), padding: FourTwoOneTRBL(item.Setting("padding")), lineSpacing: item.FloatSetting("linespacing"),
 		letterSpacing: item.FloatSetting("letterspacing"), wordSpacing: item.FloatSetting("wordspacing"), breakChars: item.Setting("breakchars"),
 		textColor: colorToNRGBA(item.Setting("text-color")), backColor: colorToNRGBA(item.Setting("text-back-color")),
-		textAlign: item.TextAlign(), textWrap: item.TextWrap(), justifyWeight: item.IntSetting("justify-weight"),
+		textAlign: item.TextAlign(), textWrap: item.TextWrap(), justifyWeight: item.FloatSetting("justify-weight"),
 		frameColor: frameInfo.color, frameSize: &frameInfo.size,
 	}
 }
@@ -1016,7 +1016,7 @@ var defaultSettings = map[string]string{
 	"text-width":         "100%",
 	"text-color":         "#0",
 	"text-back-color":    "#0000",
-	"justify-weight":     "10",
+	"justify-weight":     "2.5",
 	"breakchars":         "",
 	"text":               "",
 	"image":              "",

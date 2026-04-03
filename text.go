@@ -11,6 +11,7 @@ import (
 	"math"
 	"os"
 	"regexp"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -34,14 +35,15 @@ type TextInfo struct {
 	breakChars    string
 	textColor     color.NRGBA
 	backColor     color.NRGBA
-	textAlign     int // TextAlignLeft TextAlignCenter TextAlignRight TextAlignJustified
-	textWrap      int // TextWrapNormal TextWrapBalanced
-	justifyWeight int // Give spaces this many more dots than non-spaces when justifying
+	textAlign     int     // TextAlignLeft TextAlignCenter TextAlignRight TextAlignJustified
+	textWrap      int     // TextWrapNormal TextWrapBalanced
+	justifyWeight float64 // Give spaces this much more weight than non-spaces when justifying
 }
 
 type TextLineLayout struct {
-	line    string
-	advance fixed.Int26_6
+	line             string
+	advance          fixed.Int26_6
+	endedWithNewLine bool
 }
 
 type TextBlockLayout struct {
@@ -105,83 +107,134 @@ func ReadFontFile(path string) ([]byte, error) {
 
 var fontCache map[string]font.Face = map[string]font.Face{}
 
-func openFont(textInfo *TextInfo) (font.Face, float64, float64) {
+func openFonts(textInfo *TextInfo) ([]font.Face, float64, float64) {
 	size := lengthToPoints(textInfo.height, textInfo.units)
 	dpi := dpi(textInfo.units, textInfo.density)
-	key := fmt.Sprintf("%v:%v:%v", textInfo.font, size, dpi)
 
-	var face font.Face
-	var exists bool
-	if face, exists = fontCache[key]; !exists {
-		fontData, err := ReadFontFile(textInfo.font)
-		if err != nil {
-			log.Print("Error opening font \"" + textInfo.font + "\"")
-			log.Fatal(err)
-		}
-		fnt, err := sfnt.Parse(fontData)
-		if err != nil {
-			log.Print("Error parsing font \"" + textInfo.font + "\"")
-			log.Fatal(err)
+	fonts := strings.Split(textInfo.font, ",")
+	faces := make([]font.Face, 0)
+	maxAscent := 0.0
+	maxLineHeight := 0.0
+
+	for _, fontName := range fonts {
+		key := fmt.Sprintf("%v:%v:%v", fontName, size, dpi)
+
+		var face font.Face
+		var exists bool
+		if face, exists = fontCache[key]; !exists {
+			fontData, err := ReadFontFile(fontName)
+			if err != nil {
+				log.Print("Error opening font \"" + fontName + "\"")
+				log.Fatal(err)
+			}
+			fnt, err := sfnt.Parse(fontData)
+			if err != nil {
+				log.Print("Error parsing font \"" + fontName + "\"")
+				log.Fatal(err)
+			}
+
+			face, err = opentype.NewFace(fnt, &opentype.FaceOptions{Size: size, DPI: dpi, Hinting: font.HintingFull})
+			if err != nil {
+				log.Print("Error initializing font \"" + fontName + "\"")
+				log.Fatal(err)
+			}
+
+			fontCache[key] = face
 		}
 
-		face, err = opentype.NewFace(fnt, &opentype.FaceOptions{Size: size, DPI: dpi, Hinting: font.HintingFull})
-		if err != nil {
-			log.Print("Error initializing font \"" + textInfo.font + "\"")
-			log.Fatal(err)
-		}
+		fontMetrics := face.Metrics()
 
-		fontCache[key] = face
+		fontHeight := floatFromFixed(fontMetrics.Height)
+		fontAscent := floatFromFixed(fontMetrics.Ascent)
+
+		lineHeight := fontHeight * textInfo.lineSpacing
+
+		faces = append(faces, face)
+		maxAscent = math.Max(maxAscent, fontAscent)
+		maxLineHeight = math.Max(maxLineHeight, lineHeight)
 	}
 
-	fontMetrics := face.Metrics()
-
-	fontHeight := floatFromFixed(fontMetrics.Height)
-	fontAscent := floatFromFixed(fontMetrics.Ascent)
-
-	lineHeight := fontHeight * textInfo.lineSpacing
-
-	return face, fontAscent, lineHeight
+	return faces, maxAscent, maxLineHeight
 }
 
 // drawString draws s at the dot and advances the dot's location.
-func drawString(d *font.Drawer, s string, letterSpacing fixed.Int26_6, wordSpacing fixed.Int26_6) []fixed.Int26_6 {
+func drawString(d []font.Drawer, s string, letterSpacing fixed.Int26_6, wordSpacing fixed.Int26_6, curFont int, justifyLetterDots fixed.Int26_6, justifySpaceDots fixed.Int26_6) ([]fixed.Int26_6, int) {
 	var prevC rune
 	advances := make([]fixed.Int26_6, utf8.RuneCountInString(s))
 	ii := 0
 	for _, c := range s {
+		isFont := false
+		switch c {
+		case '\x01':
+			curFont = 1
+			isFont = true
+		case '\x02':
+			curFont = 2
+			isFont = true
+		case '\x03':
+			curFont = 3
+			isFont = true
+		case '\x04':
+			curFont = 4
+			isFont = true
+		}
+		if c == '\n' {
+			continue
+		}
+		if isFont {
+			advances[ii] = 0
+			ii++
+			continue
+		}
 		if ii > 0 {
-			advanceAdjust := d.Face.Kern(prevC, c) + letterSpacing
+			advanceAdjust := d[curFont-1].Face.Kern(prevC, c) + letterSpacing
 			if prevC == rune(32) {
 				advanceAdjust += wordSpacing
 			}
-			d.Dot.X += advanceAdjust
+			for dd := range d {
+				d[dd].Dot.X += advanceAdjust
+			}
 			advances[ii-1] += advanceAdjust
 		}
-		dr, mask, maskp, advance, _ := d.Face.Glyph(d.Dot, c)
-		d.Dot.X += advance
-		if d.Dst != nil && d.Src != nil && !dr.Empty() {
-			draw.DrawMask(d.Dst, dr, d.Src, image.Point{}, mask, maskp, draw.Over)
+
+		dr, mask, maskp, advance, _ := d[curFont-1].Face.Glyph(d[curFont-1].Dot, c)
+
+		justifyDots := fixed.Int26_6(0)
+		if ii > 0 && justifySpaceDots != fixed.Int26_6(0) && c == ' ' {
+			justifyDots = justifySpaceDots
+		} else if ii > 0 && justifyLetterDots != fixed.Int26_6(0) && c != ' ' {
+			justifyDots = justifyLetterDots
+		}
+
+		for dd := range d {
+			d[dd].Dot.X += advance + justifyDots
+		}
+		if d[curFont-1].Dst != nil && d[curFont-1].Src != nil && !dr.Empty() {
+			draw.DrawMask(d[curFont-1].Dst, dr, d[curFont-1].Src, image.Point{}, mask, maskp, draw.Over)
 		}
 		advances[ii] = advance
 		prevC = c
 		ii++
 	}
 
-	return advances
+	return advances[:ii], curFont
 }
 
 func TextToImage(TextBlockLayout *TextBlockLayout, textInfo *TextInfo) *image.NRGBA {
-	face, fontAscent, lineHeight := openFont(textInfo)
+	faces, fontAscent, lineHeight := openFonts(textInfo)
 
 	widthDots := dotsFromUnitsFloat(TextBlockLayout.width, textInfo.density)
 	heightDots := dotsFromUnitsFloat(TextBlockLayout.height, textInfo.density)
 
 	dst := image.NewNRGBA(image.Rect(0, 0, int(math.Round(widthDots)), int(math.Round(heightDots))))
 
-	d := &font.Drawer{
-		Dst:  dst,
-		Src:  image.NewUniform(color.NRGBA{textInfo.textColor.R, textInfo.textColor.G, textInfo.textColor.B, textInfo.textColor.A}),
-		Face: face,
+	d := make([]font.Drawer, 0)
+	for ff := range faces {
+		d = append(d, font.Drawer{
+			Dst:  dst,
+			Src:  image.NewUniform(color.NRGBA{textInfo.textColor.R, textInfo.textColor.G, textInfo.textColor.B, textInfo.textColor.A}),
+			Face: faces[ff],
+		})
 	}
 
 	// fill the destination with the frame color
@@ -211,7 +264,11 @@ func TextToImage(TextBlockLayout *TextBlockLayout, textInfo *TextInfo) *image.NR
 	widthFixed := fixedFromFloat64(dotsFromUnitsFloat(TextBlockLayout.width-textInfo.padding.left-textInfo.padding.right-textInfo.frameSize.left-textInfo.frameSize.right, textInfo.density))
 
 	leftEdge := dotsFromUnitsFloat(textInfo.frameSize.left+textInfo.padding.left, textInfo.density)
-	d.Dot.Y = fixedFromFloat64(fontAscent + dotsFromUnitsFloat(textInfo.frameSize.top+textInfo.padding.top, textInfo.density))
+	for dd := range d {
+		d[dd].Dot.Y = fixedFromFloat64(fontAscent + dotsFromUnitsFloat(textInfo.frameSize.top+textInfo.padding.top, textInfo.density))
+	}
+
+	curFont := 1
 	for ii := range TextBlockLayout.lines {
 		parts := strings.SplitN(TextBlockLayout.lines[ii].line, "\t", 3)
 		for jj := range parts {
@@ -219,7 +276,7 @@ func TextToImage(TextBlockLayout *TextBlockLayout, textInfo *TextInfo) *image.NR
 			thisAdvance := TextBlockLayout.lines[ii].advance
 			line := TextBlockLayout.lines[ii].line
 			if len(parts) > 1 {
-				thisAdvance = advance(parts[jj], face, letterSpacing, wordSpacing)
+				thisAdvance, curFont = advance(parts[jj], faces, letterSpacing, wordSpacing, curFont)
 				line = parts[jj]
 				switch jj {
 				case 0:
@@ -231,18 +288,58 @@ func TextToImage(TextBlockLayout *TextBlockLayout, textInfo *TextInfo) *image.NR
 				}
 			}
 
-			switch textAlign {
-			case TextAlignLeft, TextAlignJustified:
-				d.Dot.X = fixedFromFloat64(leftEdge)
-			case TextAlignCenter:
-				d.Dot.X = fixedFromFloat64(leftEdge) + (widthFixed-thisAdvance)/2
-			case TextAlignRight:
-				d.Dot.X = fixedFromFloat64(leftEdge) + widthFixed - thisAdvance
+			if textAlign == TextAlignJustified && (ii == len(TextBlockLayout.lines)-1 || TextBlockLayout.lines[ii].endedWithNewLine) {
+				textAlign = TextAlignLeft
 			}
 
-			drawString(d, line, letterSpacing, wordSpacing)
+			justifySpaceDots := fixed.Int26_6(0)
+			justifyLetterDots := fixed.Int26_6(0)
+			switch textAlign {
+			case TextAlignLeft:
+				for dd := range d {
+					d[dd].Dot.X = fixedFromFloat64(leftEdge)
+				}
+			case TextAlignJustified:
+				letterCount := 0
+				spaceCount := 0
+				escapes := []rune{'\x01', '\x02', '\x03', '\x04', '\n'}
+				for _, rr := range line {
+					if rr == 0 {
+						continue
+					}
+					if rr == ' ' {
+						spaceCount++
+					} else if !slices.Contains(escapes, rr) {
+						letterCount++
+					}
+				}
+				// spaceCount * n * extraSpaceWeight + letterCount * n = extraDots
+				// (spaceCount * extraSpaceWeight + letterCount) * n = extraDots
+				// n = extraDots/(spaceCount * extraSpaceWeight + letterCount)
+				extraSpaceWeight := textInfo.justifyWeight
+				extraDots := widthFixed - thisAdvance
+				jld := floatFromFixed(extraDots) / (float64(spaceCount)*extraSpaceWeight + float64(letterCount))
+				spd := jld * float64(extraSpaceWeight)
+				justifyLetterDots = fixedFromFloat64(jld)
+				justifySpaceDots = fixedFromFloat64(spd)
+				for dd := range d {
+					d[dd].Dot.X = fixedFromFloat64(leftEdge)
+				}
+			case TextAlignCenter:
+				for dd := range d {
+					d[dd].Dot.X = fixedFromFloat64(leftEdge) + (widthFixed-thisAdvance)/2
+				}
+			case TextAlignRight:
+				for dd := range d {
+					d[dd].Dot.X = fixedFromFloat64(leftEdge) + widthFixed - thisAdvance
+				}
+			}
+
+			_, curFont = drawString(d, line, letterSpacing, wordSpacing, curFont, justifyLetterDots, justifySpaceDots)
 		}
-		d.Dot.Y += fixedFromFloat64(lineHeight)
+		for dd := range d {
+			d[dd].Dot.Y += fixedFromFloat64(lineHeight)
+		}
 	}
 
 	// out, err := os.Create("out.png")
@@ -257,34 +354,40 @@ func TextToImage(TextBlockLayout *TextBlockLayout, textInfo *TextInfo) *image.NR
 	return dst
 }
 
-func advance(text string, face font.Face, letterSpacing fixed.Int26_6, wordSpacing fixed.Int26_6) fixed.Int26_6 {
-	advances := drawString(&font.Drawer{Face: face}, text, letterSpacing, wordSpacing)
+func advance(text string, faces []font.Face, letterSpacing fixed.Int26_6, wordSpacing fixed.Int26_6, curFont int) (fixed.Int26_6, int) {
+	d := make([]font.Drawer, 0)
+	for ff := range faces {
+		d = append(d, font.Drawer{Face: faces[ff]})
+	}
+	var advances []fixed.Int26_6
+	advances, curFont = drawString(d, text, letterSpacing, wordSpacing, curFont, fixed.Int26_6(0), fixed.Int26_6(0))
 	advance := fixed.Int26_6(0)
 	for _, anAdvance := range advances {
 		advance += anAdvance
 	}
-	return advance
+	return advance, curFont
 }
 
 func layoutForWidth(text string, advances []fixed.Int26_6, width float64, lineHeight float64, textInfo *TextInfo) (*TextBlockLayout, float64) {
-	var layout TextBlockLayout
-	layout.lines = []TextLineLayout{}
-	curWidth := fixed.Int26_6(0)
-	lastSpace := fixed.Int26_6(0)
-	beginIdx := 0
-	breakIdx := 0
 	stringRunes := strings.Split(text, "")
-	widthDots := fixedFromFloat64(dotsFromUnitsFloat(width-textInfo.padding.left-textInfo.padding.right-textInfo.frameSize.left-textInfo.frameSize.right, textInfo.density))
 
+	// Calculate longestBlock
+	stringIdx := 0
 	longestBlock := fixed.Int26_6(0)
 	blockLength := fixed.Int26_6(0)
 	for idx := range advances {
-		if stringRunes[idx] == " " {
+		for {
+			if stringRunes[stringIdx] != "\n" {
+				break
+			}
+			stringIdx++
+		}
+		if stringRunes[stringIdx] == " " {
 			if longestBlock < blockLength {
 				longestBlock = blockLength
 			}
 			blockLength = 0
-		} else if strings.ContainsAny(stringRunes[idx], textInfo.breakChars) {
+		} else if strings.ContainsAny(stringRunes[stringIdx], textInfo.breakChars) {
 			if longestBlock < blockLength {
 				longestBlock = blockLength + advances[idx]
 			}
@@ -292,59 +395,92 @@ func layoutForWidth(text string, advances []fixed.Int26_6, width float64, lineHe
 		} else {
 			blockLength += advances[idx]
 		}
+		stringIdx++
 	}
 
 	if longestBlock < blockLength {
 		longestBlock = blockLength
 	}
 
+	var layout TextBlockLayout
+	layout.lines = []TextLineLayout{}
+	curWidth := fixed.Int26_6(0)
+	lastSpace := fixed.Int26_6(0)
 	breakWidth := fixed.Int26_6(0)
+	widthDots := fixedFromFloat64(dotsFromUnitsFloat(width-textInfo.padding.left-textInfo.padding.right-textInfo.frameSize.left-textInfo.frameSize.right, textInfo.density))
+
+	stringIdx = 0
+	beginIdx := 0
+	breakIdx := 0
+	beginStringIdx := 0
+	breakStringIdx := 0
 	for idx := 0; idx < len(advances); idx++ {
-		if curWidth+advances[idx] > widthDots {
-			if beginIdx == breakIdx && stringRunes[idx] != " " && !strings.ContainsAny(stringRunes[idx], textInfo.breakChars) {
+		forceBreak := false
+		for {
+			if stringRunes[stringIdx] != "\n" {
+				break
+			}
+			stringIdx++
+			forceBreak = true
+		}
+		if curWidth+advances[idx] > widthDots || forceBreak { // Need to break the line
+			if beginIdx == breakIdx && stringRunes[stringIdx] != " " && !forceBreak && !strings.ContainsAny(stringRunes[stringIdx], textInfo.breakChars) {
 				return nil, 0.0
 			}
-			if stringRunes[idx] == " " {
+			// Is the current character one we can break on?
+			if stringRunes[stringIdx] == " " {
 				breakIdx = idx
+				breakStringIdx = stringIdx
 				breakWidth = curWidth
-			} else if idx > 0 && strings.ContainsAny(stringRunes[idx-1], textInfo.breakChars) {
+			} else if (idx > 0 && strings.ContainsAny(stringRunes[stringIdx-1], textInfo.breakChars)) || forceBreak {
 				breakIdx = idx
+				breakStringIdx = stringIdx
 				breakWidth = curWidth
 			}
 			var textLineLayout TextLineLayout
 			textLineLayout.advance = breakWidth
-			textLineLayout.line = strings.Join(stringRunes[beginIdx:breakIdx], "")
+			textLineLayout.line = strings.Join(stringRunes[beginStringIdx:breakStringIdx], "")
+			textLineLayout.endedWithNewLine = forceBreak
 			layout.lines = append(layout.lines, textLineLayout)
 			beginIdx = breakIdx
+			beginStringIdx = breakStringIdx
 			idx = breakIdx
+			stringIdx = breakStringIdx
 			breakWidth = 0
 			curWidth = 0
-			if stringRunes[idx] == " " {
+			if stringRunes[stringIdx] == " " {
 				idx++
 				breakIdx++
 				beginIdx++
+
+				stringIdx++
+				breakStringIdx++
+				beginStringIdx++
 			}
 		}
-		if stringRunes[idx] == " " {
+		if stringRunes[stringIdx] == " " {
 			breakIdx = idx
+			breakStringIdx = stringIdx
 			breakWidth = curWidth
 			if lastSpace < curWidth {
 				lastSpace = curWidth
 			}
-		} else if idx > 0 && strings.ContainsAny(stringRunes[idx-1], textInfo.breakChars) {
+		} else if idx > 0 && strings.ContainsAny(stringRunes[stringIdx-1], textInfo.breakChars) {
 			breakIdx = idx
+			breakStringIdx = stringIdx
 			breakWidth = curWidth
 			if lastSpace < curWidth {
 				lastSpace = curWidth
 			}
 		}
 		curWidth += advances[idx]
+		stringIdx++
 	}
 
 	if curWidth > 0 {
 		var textLineLayout TextLineLayout
 		textLineLayout.advance = curWidth
-		textLineLayout.line = strings.Join(stringRunes[beginIdx:], "")
+		textLineLayout.line = strings.Join(stringRunes[beginStringIdx:], "")
 		layout.lines = append(layout.lines, textLineLayout)
 	}
 
@@ -389,7 +525,7 @@ func layoutForBalanced(text string, advances []fixed.Int26_6, width float64, lin
 	return lastLayout
 }
 
-var rxSpace, _ = regexp.Compile("([[:space:]]+)")
+var rxSpace, _ = regexp.Compile("( +)")
 
 func MeasureText(text string, maxWidth float64, maxHeight float64, textInfo *TextInfo) []TextBlockLayout {
 	if strings.ContainsRune(text, '\t') {
@@ -439,17 +575,20 @@ func MeasureText(text string, maxWidth float64, maxHeight float64, textInfo *Tex
 		return destLayout
 	}
 
-	face, _, lineHeight := openFont(textInfo)
+	faces, _, lineHeight := openFonts(textInfo)
 
 	letterSpacing := fixedFromFloat64(textInfo.letterSpacing)
 	wordSpacing := fixedFromFloat64(textInfo.wordSpacing)
 
-	d := &font.Drawer{Face: face}
+	d := make([]font.Drawer, 0)
+	for ff := range faces {
+		d = append(d, font.Drawer{Face: faces[ff]})
+	}
 
 	// Collapse whitespace
 	text = strings.Trim(rxSpace.ReplaceAllString(text, " "), " ")
 
-	advances := drawString(d, text, letterSpacing, wordSpacing)
+	advances, _ := drawString(d, text, letterSpacing, wordSpacing, 1, fixed.Int26_6(0), fixed.Int26_6(0))
 
 	// Calculate the TextBlockLayout for a specific maxWidth
 	if maxHeight == 0 && textInfo.textWrap != TextWrapBalanced {
