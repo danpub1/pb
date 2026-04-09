@@ -1,17 +1,17 @@
 # pb
 
-pb is a text-to-photo book conversion tool which allows focusing on the content of a book rather than layout and formatting.
-The first design goal is to be able to simply list photos interspersed with text,
+pb is a text-to-photo book conversion tool.
+The first design goal was to be able to simply list photos interspersed with text,
 and convert that to a nicely formatted photo book.
 But a photo book should also be a nice finished product, so the second design goal
-is to support enough formatting to make that possible. 
+was to support enough formatting to make that possible. 
 
 Uses:
 * A nicely arranged photo book with captions and text describing the photos
 * A contact sheet of all the photos in a folder
 * A nicely arranged collection of all the photos in a folder - not as small as a contact sheet, but not as finished as a photo book
 * Layout pictures on a page in specific sizes for printing
-* A collage for a calendar page
+* A collage for a calendar page or a greeting card
 
 ## Introduction
 
@@ -103,12 +103,12 @@ A pb file is assumed to be UTF-8.
 `+++` = starts a new page, defines settings for the page  
 `---` = starts a new row, defines settings for the row  
 `...` = starts a new column, defines settings for the column  
-`$$$` = define style
-`@@@` = include another pb file
+`$$$` = defines style
+`@@@` = includes another pb file
 `///` = comment
 
 Given a list of images and text, pb will arrange them into columns and rows and pages.  
-That layout is controlled through the settings for pages, rows, and columns, which follow the directive.
+How they are arranged is controlled through settingsss.
 
     *** size:621x810 margin:36
 

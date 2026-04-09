@@ -980,6 +980,7 @@ var defaultSettings = map[string]string{
 	"tilt":          "0",
 	"superellipse":  "0",
 	"corner-radius": "0",
+	"name":          "",
 
 	// image
 	"max-size":     "100%",
@@ -997,8 +998,10 @@ var defaultSettings = map[string]string{
 	"sharpen":      "0.0",
 	"blur":         "0.0",
 	"rotate":       "0", // 0, 90, 180, 270
+	"shadow":       "",
 	"recurse":      "true",
 	"float":        "", // X,Y,width,height
+	"image":        "",
 
 	// text
 	"caption-position":   "below",
@@ -1016,11 +1019,10 @@ var defaultSettings = map[string]string{
 	"text-width":         "100%",
 	"text-color":         "#0",
 	"text-back-color":    "#0000",
+	"text-shadow":        "",
 	"justify-weight":     "2.5",
 	"breakchars":         "",
 	"text":               "",
-	"image":              "",
-	"name":               "",
 }
 
 func (item *PbItem) Set(setting string, value string) {

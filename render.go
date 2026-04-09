@@ -695,6 +695,55 @@ func renderHeader(dst *image.NRGBA, header string, curPage int, totalPages int, 
 	}
 }
 
+func DropShadow(picture image.Image, width int, height int, density float64, sDropShadow string) (image.Image, int, int, int, int) {
+	parts := strings.SplitN(sDropShadow, ",", 4) // color, blur, x, y
+
+	bcolor := color.NRGBA{0, 0, 0, 0}
+	bcolor = bcolor
+	if len(parts[0]) > 0 {
+		bcolor = colorToNRGBA(parts[0])
+	}
+
+	blur := 0.0
+	if len(parts) > 1 && len(parts[1]) > 0 {
+		blur = Atof(parts[1])
+	}
+
+	xOffset := 0
+	if len(parts) > 2 && len(parts[2]) > 0 {
+		x := Atof(parts[2])
+		xOffset = int(math.Round(dotsFromUnitsFloat(x, density)))
+	}
+
+	yOffset := 0
+	if len(parts) > 3 && len(parts[3]) > 0 {
+		y := Atof(parts[3])
+		yOffset = int(math.Round(dotsFromUnitsFloat(y, density)))
+	}
+
+	newWidth := int(math.Round(blur*2*3 + math.Abs(float64(xOffset)) + float64(width)))
+	newHeight := int(math.Round(blur*2*3 + math.Abs(float64(yOffset)) + float64(height)))
+
+	newPicture := image.NewNRGBA(image.Rect(0, 0, newWidth, newHeight))
+	newPicture = imaging.AdjustFunc(newPicture, func(c color.NRGBA) color.NRGBA { return color.NRGBA{c.R, c.G, c.B, 0} })
+	dXOffset := int(math.Round(math.Max(0, float64(xOffset)) + blur*3))
+	dYOffset := int(math.Round(math.Max(0, float64(yOffset)) + blur*3))
+	draw.Draw(newPicture, image.Rect(dXOffset, dYOffset, dXOffset+width, dYOffset+height), picture, image.Point{}, draw.Over)
+
+	setShadowColor := func(c color.NRGBA) color.NRGBA {
+		return color.NRGBA{bcolor.R, bcolor.G, bcolor.B, uint8(math.Round(float64(c.A) * float64(bcolor.A) / 255.0))}
+	}
+	newPicture = imaging.AdjustFunc(newPicture, setShadowColor)
+
+	newPicture = imaging.Blur(newPicture, blur)
+
+	newXOffset := int(math.Round(math.Max(0, blur*3-float64(xOffset))))
+	newYOffset := int(math.Round(math.Max(0, blur*3-float64(yOffset))))
+	draw.Draw(newPicture, image.Rect(newXOffset, newYOffset, newXOffset+width, newYOffset+height), picture, image.Point{}, draw.Over)
+
+	return newPicture, newWidth, newHeight, newXOffset, newYOffset
+}
+
 func renderPages(pbBook *PbBook, outPageRange string, outFilename string) {
 	n, err := writeHeader(outFilename)
 	if err != nil {
@@ -761,6 +810,14 @@ func renderPages(pbBook *PbBook, outPageRange string, outFilename string) {
 
 								xDots := int(math.Round(dotsFromUnitsFloat(left+item.xOffset, density))) - deltaXtilt
 								yDots := int(math.Round(dotsFromUnitsFloat(top+item.yOffset, density))) - deltaYtilt
+
+								if sDropShadow := item.Setting("text-shadow"); len(sDropShadow) > 0 {
+									xOffset := 0
+									yOffset := 0
+									textImage, _, _, xOffset, yOffset = DropShadow(textImage, textImage.Bounds().Size().X, textImage.Bounds().Size().Y, density, sDropShadow)
+									xDots -= xOffset
+									yDots -= yOffset
+								}
 
 								draw.Draw(dst, image.Rect(xDots, yDots, xDots+textImage.Bounds().Size().X, yDots+textImage.Bounds().Size().Y), textImage, image.Point{}, draw.Over)
 							}
@@ -886,6 +943,14 @@ func renderPages(pbBook *PbBook, outPageRange string, outFilename string) {
 
 							xDots := int(math.Round(dotsFromUnitsFloat(left+item.xOffset, density)))
 							yDots := int(math.Round(dotsFromUnitsFloat(top+item.yOffset, density)))
+
+							if sDropShadow := item.Setting("shadow"); len(sDropShadow) > 0 {
+								dropXOff := 0
+								dropYOff := 0
+								picture, imageWidthDots, imageHeightDots, dropXOff, dropYOff = DropShadow(picture, imageWidthDots, imageHeightDots, density, sDropShadow)
+								xDots -= dropXOff
+								yDots -= dropYOff
+							}
 
 							draw.Draw(dst, image.Rect(xDots-deltaXtilt, yDots-deltaYtilt, xDots+imageWidthDots+deltaXtilt, yDots+imageHeightDots+deltaYtilt), picture, image.Point{}, draw.Over)
 						}
