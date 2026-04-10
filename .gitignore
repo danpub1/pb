@@ -5,10 +5,13 @@ example
 js
 legacy
 test
-out.png
-out-*.png
-out.pdf
+Fira
 .pbimagecache
 .pbresizecache
 pb
-settings.pdf
+*.pdf
+*.zip
+*.png
+*.jpg
+*.jpeg
+*.pb

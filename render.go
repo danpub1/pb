@@ -318,6 +318,10 @@ func writePage(img image.Image, objNum int, curPage int, outFilename string, isP
 func scaleToRect(picture image.Image, item *PbItem) image.Image {
 	zoom, zoomXOffset, zoomYOffset, dstAspect, offset := item.ImageRectSetting()
 
+	if zoom == -1 { // squish
+		return picture
+	}
+
 	wr, hr, _, _ := calcStraighten(float64(item.imageWidthPx), float64(item.imageHeightPx), item.FloatSetting("straighten"))
 
 	srcAspect := wr / hr
@@ -364,7 +368,7 @@ func scaleToRect(picture image.Image, item *PbItem) image.Image {
 		} else {
 			return picture
 		}
-	} else { // zoom == 100 == fit
+	} else if zoom == 100 { // zoom == 100 == fit
 		if dstAspect > srcAspect { // dst is wider than src, pad left & right
 			dstWidth = int(math.Round(float64(int(math.Round(hr))) * dstAspect))
 			dstXOffset = int(math.Round(float64(dstWidth-int(math.Round(wr))) * float64(offset) / 100.0))
@@ -382,6 +386,8 @@ func scaleToRect(picture image.Image, item *PbItem) image.Image {
 		} else {
 			return picture
 		}
+	} else {
+		return picture
 	}
 }
 

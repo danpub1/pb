@@ -231,14 +231,9 @@ func main() {
 }
 
 // TTD:
+// Background: background (page), image-background, text-background: color/name
 // Frame: frame (image), text-frame: size,color/name,below/above
-// Background: background (page), text-background: color/name
-// rect:squish,x:y - useful for frame?
-// is there something wrong with settings that column settings for break, distribute, don't work?
-//   (some) header settings for text seem to have to be on a row instead of on a column
-// Remove row-weight, column-weight, image-weight
-// TRBL # / #x# / #x#x#x# (margin, padding, frame)
-//
+// input and output handlers for different file types
 // Output sigmoidal brightness/lightness?
 // eyelevel, spreadeyelevel, mouthlevel, spreadmouthlevel?
 // highlights, midtones, shadows

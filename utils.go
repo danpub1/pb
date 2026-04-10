@@ -87,9 +87,9 @@ type FrameInfo struct {
 	color color.NRGBA
 }
 
-// margins: t,r,b,l / tb,rl / tbrl -> t, r, b, l
+// margins: txrxbxl / tbxrl / tbrl -> t, r, b, l
 func FourTwoOne(sFourTwoOne string) (float64, float64, float64, float64) {
-	parts := strings.SplitN(sFourTwoOne, ",", 4)
+	parts := strings.SplitN(sFourTwoOne, "x", 4)
 	if len(parts) == 1 {
 		val := Atof(parts[0])
 		return val, val, val, val

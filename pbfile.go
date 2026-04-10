@@ -267,8 +267,10 @@ func parse(line string, styles map[string]string) PbItem {
 		parts[ii] = strings.TrimSpace(parts[ii])
 		pieces := strings.SplitN(parts[ii], ":", 2)
 		if len(pieces) == 2 {
-			if pieces[0] == "trim" || pieces[0] == "fit" {
+			if pieces[0] == "trim" || pieces[0] == "fit" || pieces[0] == "squish" {
 				pieces[1] = pieces[0] + "," + pieces[1]
+				pieces[0] = "rect"
+			} else if pieces[0] == "crop" {
 				pieces[0] = "rect"
 			}
 			theItem.Set(pieces[0], unescape(pieces[1]))

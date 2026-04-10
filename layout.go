@@ -329,7 +329,7 @@ func resizeItem(itemColumnItemNum int, itemColumnNum int, itemRowNum int, pbPage
 		return false
 	}
 
-	amount := 1.0 / pbItem.Density() * pbColumnItem.weight
+	amount := 1.0 / pbItem.Density()
 
 	oldColumnWidth := pbColumn.width()
 	oldRowHeight := pbRow.height()

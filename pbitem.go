@@ -83,13 +83,11 @@ const (
 )
 
 type PbColumnItem struct {
-	item   *PbItem
-	weight float64
+	item *PbItem
 }
 
 type PbColumn struct {
 	xOffset float64
-	weight  float64
 	items   []PbColumnItem
 }
 
@@ -113,7 +111,6 @@ func (theColumn *PbColumn) height() float64 {
 
 type PbRow struct {
 	yOffset float64
-	weight  float64
 	columns []PbColumn
 }
 
@@ -208,7 +205,6 @@ func ToPbBook(items []PbItem) *PbBook {
 			book.pages[curPage].rows = append(book.pages[curPage].rows, PbRow{})
 			book.pages[curPage].rows[curRow].columns = make([]PbColumn, 0)
 			book.pages[curPage].rows[curRow].yOffset = item.yOffset
-			book.pages[curPage].rows[curRow].weight = item.FloatSetting("row-weight")
 		}
 
 		if item.column != curColumn {
@@ -218,7 +214,6 @@ func ToPbBook(items []PbItem) *PbBook {
 			book.pages[curPage].rows[curRow].columns = append(book.pages[curPage].rows[curRow].columns, PbColumn{})
 			book.pages[curPage].rows[len(book.pages[curPage].rows)-1].columns[curColumn].items = make([]PbColumnItem, 0)
 			book.pages[curPage].rows[curRow].columns[curColumn].xOffset = item.xOffset
-			book.pages[curPage].rows[curRow].columns[curColumn].weight = item.FloatSetting("column-weight")
 		}
 
 		if item.itemType == ItemTypeImage || item.itemType == ItemTypeText {
@@ -235,36 +230,7 @@ func ToPbBook(items []PbItem) *PbBook {
 				if curItem == 0 && curColumn == 0 {
 					book.pages[curPage].rows[curRow].yOffset = items[ii].yOffset
 				}
-
-				if item.itemType == ItemTypeImage {
-					book.pages[curPage].rows[curRow].columns[curColumn].items[curItem].weight = item.FloatSetting("image-weight")
-				} else {
-					book.pages[curPage].rows[curRow].columns[curColumn].items[curItem].weight = 1
-				}
 			}
-		}
-	}
-
-	for _, page := range book.pages {
-		maxWeight := 0.0
-		for _, row := range page.rows {
-			for _, column := range row.columns {
-				for _, item := range column.items {
-					aWeight := row.weight * column.weight * item.weight
-					if aWeight > maxWeight {
-						maxWeight = aWeight
-					}
-				}
-			}
-		}
-		for _, row := range page.rows {
-			for _, column := range row.columns {
-				for _, item := range column.items {
-					item.weight = row.weight * column.weight * item.weight / maxWeight
-				}
-				column.weight = 1
-			}
-			row.weight = 1
 		}
 	}
 
@@ -477,7 +443,7 @@ func (item *PbItem) Frame(whichFrame string) *FrameInfo {
 	return &frameInfo
 }
 
-var rxRect, _ = regexp.Compile(`^(fit|trim|crop),\d+:\d+,\d+(\.\d+)?(,\d+(\.\d+)?)?$`)
+var rxRect, _ = regexp.Compile(`^(fit|trim|squish),\d+:\d+(,\d+(\.\d+)?(,\d+(\.\d+)?)?)?$`)
 
 func (item *PbItem) Aspect() float64 {
 	_, _, _, aspect, _ := item.ImageRectSetting()
@@ -750,6 +716,7 @@ func (item *PbItem) ImageRectSetting() (int, int, int, float64, int) {
 
 	//rect:fit,x:y,o
 	//rect:trim,x:y,o
+	//rect:squish,x:y
 	//rect:#,xo,yo,x:y,o
 
 	if len(parts) > 5 || len(parts) < 1 {
@@ -769,7 +736,9 @@ func (item *PbItem) ImageRectSetting() (int, int, int, float64, int) {
 		zoom = 100
 	} else if parts[0] == "trim" {
 		zoom = 0
-	} else if len(parts[0]) > 0 {
+	} else if parts[0] == "squish" {
+		zoom = -1
+	} else if len(parts[0]) > 0 { // crop
 		zoom = Atoi(parts[0])
 		zoom = int(math.Min(math.Max(float64(zoom), 0), 100))
 
@@ -964,13 +933,11 @@ var defaultSettings = map[string]string{
 	// row
 	"row-distribute":    "spreadcenter", // how columns are distributed horizontally in a row
 	"row-column-gutter": "6",            // gutter between columns
-	"row-weight":        "1",
 	"page-break":        "false",
 
 	// column
 	"column-distribute":     "spreadmiddle", // how images or text are distributed vertically in a column
 	"column-item-gutter":    "6",
-	"column-weight":         "1",
 	"row-break":             "false",
 	"keep-columns-together": "false",
 
@@ -985,8 +952,7 @@ var defaultSettings = map[string]string{
 	// image
 	"max-size":     "100%",
 	"size":         "25%",
-	"rect":         "100", // fit,3:2,50  trim,3:2,50  #,x:y,50,50  #=zoom level 0-100, Missing aspect=image aspect, Missing position=50
-	"image-weight": "1",
+	"rect":         "100", // fit,3:2,50  trim,3:2,50  squish,3:2  #,x:y,50,50  #=zoom level 0-100, Missing aspect=image aspect, Missing position=50
 	"image-frame":  "#0000,0",
 	"straighten":   "0.0",
 	"brightness":   "0.0",
