@@ -96,6 +96,21 @@ func getImageDimensions(items []PbItem) int {
 	return numImages
 }
 
+func MeasureText2(text string, maxWidth float64, maxHeight float64, item *PbItem) []TextBlockLayout {
+	textInfo := item.TextInfo()
+	textBlockLayouts := MeasureText(text, maxWidth, maxHeight, textInfo)
+
+	textHeight := item.FloatSetting("text-height")
+	if maxHeight == 0 && len(textBlockLayouts) == 1 && textHeight > textBlockLayouts[0].height {
+		extra := textHeight - textBlockLayouts[0].height
+		textInfo.padding.top += extra / 2.0
+		textInfo.padding.bottom += extra / 2.0
+		textBlockLayouts = MeasureText(text, maxWidth, maxHeight, textInfo)
+	}
+
+	return textBlockLayouts
+}
+
 func getOneTextDimensions(item *PbItem, text string) []TextBlockLayout {
 	rotate := item.IntSetting("rotate")
 	var width float64
@@ -105,7 +120,7 @@ func getOneTextDimensions(item *PbItem, text string) []TextBlockLayout {
 	} else {
 		width = WidthForContainer(item.Setting("text-width"), item.PageSetting("page-size"), item.PageSetting("margin"))
 	}
-	textBlockLayouts := MeasureText(text, width, 0.0, item.TextInfo())
+	textBlockLayouts := MeasureText2(text, width, 0.0, item)
 	if bRotate {
 		for jj := range textBlockLayouts {
 			temp := textBlockLayouts[jj].height
@@ -129,7 +144,7 @@ func getTextDimensions(items []PbItem) int {
 		} else if items[ii].itemType == ItemTypeImage && len(items[ii].Setting("text")) > 0 {
 			maxWidth := ContainerWidth(items[ii].PageSetting("page-size"), items[ii].PageSetting("margin"))
 			maxHeight := ContainerHeight(items[ii].PageSetting("page-size"), items[ii].PageSetting("margin"))
-			items[ii].textBlockLayouts = MeasureText(items[ii].Setting("text"), maxWidth, maxHeight, items[ii].TextInfo())
+			items[ii].textBlockLayouts = MeasureText2(items[ii].Setting("text"), maxWidth, maxHeight, &items[ii])
 			numTexts++
 		}
 	}

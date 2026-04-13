@@ -57,7 +57,7 @@ func hasSettingsToPrint(theItem *PbItem) bool {
 	return false
 }
 
-func printItems(items []PbItem) string {
+func printItems(items []PbItem, comments bool) string {
 	var o strings.Builder
 
 	for ii, theItem := range items {
@@ -99,12 +99,16 @@ func printItems(items []PbItem) string {
 				o.WriteString(escapeText(theItem.Setting("text")))
 			}
 			o.WriteString("\n")
-			o.WriteString(fmt.Sprintf("/// ImageWidth:%v, ImageHeight:%v\n", theItem.imageWidthPx, theItem.imageHeightPx))
+			if comments {
+				o.WriteString(fmt.Sprintf("/// ImageWidth:%v, ImageHeight:%v\n", theItem.imageWidthPx, theItem.imageHeightPx))
+			}
 		}
-		if theItem.textBlockLayouts != nil {
-			o.WriteString(fmt.Sprintf("/// TextBlockLayouts: %v\n", theItem.textBlockLayouts))
+		if comments {
+			if theItem.textBlockLayouts != nil {
+				o.WriteString(fmt.Sprintf("/// TextBlockLayouts: %v\n", theItem.textBlockLayouts))
+			}
+			o.WriteString(fmt.Sprintf("/// Item %v: Page:%v, Row:%v, Column:%v, TextWidth:%v, TextHeight:%v, ImageWidth:%v, ImageHeight:%v, X:%v, Y:%v\n\n", ii, theItem.page, theItem.row, theItem.column, theItem.textWidth, theItem.textHeight, theItem.imageWidth, theItem.imageHeight, theItem.xOffset, theItem.yOffset))
 		}
-		o.WriteString(fmt.Sprintf("/// Item %v: Page:%v, Row:%v, Column:%v, TextWidth:%v, TextHeight:%v, ImageWidth:%v, ImageHeight:%v, X:%v, Y:%v\n\n", ii, theItem.page, theItem.row, theItem.column, theItem.textWidth, theItem.textHeight, theItem.imageWidth, theItem.imageHeight, theItem.xOffset, theItem.yOffset))
 	}
 
 	return o.String()

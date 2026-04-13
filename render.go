@@ -373,14 +373,14 @@ func scaleToRect(picture image.Image, item *PbItem) image.Image {
 			dstWidth = int(math.Round(float64(int(math.Round(hr))) * dstAspect))
 			dstXOffset = int(math.Round(float64(dstWidth-int(math.Round(wr))) * float64(offset) / 100.0))
 			dst := image.NewNRGBA(image.Rect(0, 0, dstWidth, dstHeight))
-			backColor := colorToNRGBA(item.Setting("background"))
+			backColor := colorToNRGBA(item.Setting("image-background"))
 			draw.Draw(dst, dst.Bounds(), image.NewUniform(color.NRGBA{backColor.R, backColor.G, backColor.B, backColor.A}), image.Point{}, draw.Src)
 			return imaging.Paste(dst, picture, image.Point{dstXOffset, dstYOffset})
 		} else if dstAspect < srcAspect { // dst is taller than src, pad top & bottom
 			dstHeight = int(math.Round(float64(int(math.Round(wr))) / dstAspect))
 			dstYOffset = int(math.Round(float64(dstHeight-int(math.Round(hr))) * float64(offset) / 100.0))
 			dst := image.NewNRGBA(image.Rect(0, 0, dstWidth, dstHeight))
-			backColor := colorToNRGBA(item.Setting("background"))
+			backColor := colorToNRGBA(item.Setting("image-background"))
 			draw.Draw(dst, dst.Bounds(), image.NewUniform(color.NRGBA{backColor.R, backColor.G, backColor.B, backColor.A}), image.Point{}, draw.Src)
 			return imaging.Paste(dst, picture, image.Point{dstXOffset, dstYOffset})
 		} else {
@@ -601,7 +601,7 @@ func writeJPEG(picture image.Image, out io.Writer, compressionLevel int, samplin
 	return bytesWritten, errReturn
 }
 
-func renderText(item *PbItem, textBlockLayouts []TextBlockLayout, density float64) (image.Image, int, int) {
+func renderText(item *PbItem, textBlockLayouts []TextBlockLayout, left float64, top float64, density float64) (image.Image, int, int) {
 
 	if len(textBlockLayouts) == 0 {
 		return nil, 0, 0
@@ -645,6 +645,29 @@ func renderText(item *PbItem, textBlockLayouts []TextBlockLayout, density float6
 		picture, deltaXtilt, deltaYtilt = tilt(textImage, tiltAngle)
 	} else {
 		picture = textImage
+	}
+
+	if sSize := item.Setting("float"); sSize != "" {
+		if sSizeParts := strings.SplitN(sSize, ",", 2); len(sSizeParts) == 2 {
+			item.xOffset = Atof(sSizeParts[0]) - left
+			item.yOffset = Atof(sSizeParts[1]) - top
+		}
+	}
+
+	if sOutline := item.Setting("text-outline"); len(sOutline) > 0 {
+		xOffset := 0
+		yOffset := 0
+		picture, _, _, xOffset, yOffset = Outline(picture, picture.Bounds().Size().X, picture.Bounds().Size().Y, density, sOutline)
+		deltaXtilt -= xOffset
+		deltaYtilt -= yOffset
+	}
+
+	if sDropShadow := item.Setting("text-shadow"); len(sDropShadow) > 0 {
+		xOffset := 0
+		yOffset := 0
+		picture, _, _, xOffset, yOffset = DropShadow(picture, picture.Bounds().Size().X, picture.Bounds().Size().Y, density, sDropShadow)
+		deltaXtilt -= xOffset
+		deltaYtilt -= yOffset
 	}
 
 	return picture, deltaXtilt, deltaYtilt
@@ -692,7 +715,7 @@ func renderHeader(dst *image.NRGBA, header string, curPage int, totalPages int, 
 		headerItemText = strings.ReplaceAll(headerItemText, "{{PageNumber}}", fmt.Sprintf("%v", curPage+1-leadingPages))
 		headerItemText = strings.ReplaceAll(headerItemText, "{{TotalPages}}", fmt.Sprintf("%v", totalPages-leadingPages-trailingPages))
 		textBlockLayouts := getOneTextDimensions(headerItem, headerItemText)
-		textImage, deltaXtilt, deltaYtilt := renderText(headerItem, textBlockLayouts, density)
+		textImage, deltaXtilt, deltaYtilt := renderText(headerItem, textBlockLayouts, left, margin, density)
 		if textImage != nil {
 			xDots := int(math.Round(dotsFromUnitsFloat(left, density))) - deltaXtilt
 			yDots := int(math.Round(dotsFromUnitsFloat(margin+offset*float64(marginOffsetSign), density))) - deltaYtilt - textImage.Bounds().Size().Y/2
@@ -705,7 +728,6 @@ func DropShadow(picture image.Image, width int, height int, density float64, sDr
 	parts := strings.SplitN(sDropShadow, ",", 4) // color, blur, x, y
 
 	bcolor := color.NRGBA{0, 0, 0, 0}
-	bcolor = bcolor
 	if len(parts[0]) > 0 {
 		bcolor = colorToNRGBA(parts[0])
 	}
@@ -731,7 +753,8 @@ func DropShadow(picture image.Image, width int, height int, density float64, sDr
 	newHeight := int(math.Round(blur*2*3 + math.Abs(float64(yOffset)) + float64(height)))
 
 	newPicture := image.NewNRGBA(image.Rect(0, 0, newWidth, newHeight))
-	newPicture = imaging.AdjustFunc(newPicture, func(c color.NRGBA) color.NRGBA { return color.NRGBA{c.R, c.G, c.B, 0} })
+	draw.Draw(newPicture, newPicture.Bounds(), image.NewUniform(color.NRGBA{0, 0, 0, 0}), image.Point{}, draw.Src)
+
 	dXOffset := int(math.Round(math.Max(0, float64(xOffset)) + blur*3))
 	dYOffset := int(math.Round(math.Max(0, float64(yOffset)) + blur*3))
 	draw.Draw(newPicture, image.Rect(dXOffset, dYOffset, dXOffset+width, dYOffset+height), picture, image.Point{}, draw.Over)
@@ -750,6 +773,285 @@ func DropShadow(picture image.Image, width int, height int, density float64, sDr
 	return newPicture, newWidth, newHeight, newXOffset, newYOffset
 }
 
+func Outline(picture image.Image, width int, height int, density float64, sOutline string) (image.Image, int, int, int, int) {
+	parts := strings.SplitN(sOutline, ",", 2) // color,amount
+
+	bcolor := color.NRGBA{0, 0, 0, 0}
+	if len(parts[0]) > 0 {
+		bcolor = colorToNRGBA(parts[0])
+	}
+
+	offset := 0
+	if len(parts) > 1 && len(parts[1]) > 0 {
+		x := Atof(parts[1])
+		offset = int(math.Abs(math.Round(dotsFromUnitsFloat(x, density))))
+	}
+
+	newWidth := int(math.Round(math.Abs(float64(offset*2)) + float64(width)))
+	newHeight := int(math.Round(math.Abs(float64(offset*2)) + float64(height)))
+
+	newPicture := image.NewNRGBA(image.Rect(0, 0, newWidth, newHeight))
+	draw.Draw(newPicture, newPicture.Bounds(), image.NewUniform(color.NRGBA{0, 0, 0, 0}), image.Point{}, draw.Src)
+
+	// for ii := 0; ii <= offset*2; ii++ {
+	// 	for jj := 0; jj <= offset*2; jj++ {
+	// 		draw.Draw(newPicture, image.Rect(ii, jj, ii+width, jj+height), picture, image.Point{}, draw.Over)
+	// 	}
+	// }
+
+	for ii := 0; ii <= offset*2; ii++ {
+		draw.Draw(newPicture, image.Rect(0, ii, 0+width, ii+height), picture, image.Point{}, draw.Over)
+		draw.Draw(newPicture, image.Rect(offset*2, ii, offset*2+width, ii+height), picture, image.Point{}, draw.Over)
+		if ii != 0 {
+			draw.Draw(newPicture, image.Rect(ii, 0, ii+width, 0+height), picture, image.Point{}, draw.Over)
+		}
+		if ii != offset*2 {
+			draw.Draw(newPicture, image.Rect(ii, offset*2, ii+width, offset*2+height), picture, image.Point{}, draw.Over)
+		}
+	}
+
+	setOutlineColor := func(c color.NRGBA) color.NRGBA {
+		return color.NRGBA{bcolor.R, bcolor.G, bcolor.B, uint8(math.Round(float64(c.A) * float64(bcolor.A) / 255.0))}
+	}
+	newPicture = imaging.AdjustFunc(newPicture, setOutlineColor)
+
+	draw.Draw(newPicture, image.Rect(offset, offset, offset+width, offset+height), picture, image.Point{}, draw.Over)
+
+	return newPicture, newWidth, newHeight, -offset, -offset
+}
+
+func GetNamedImage(sImage string, left float64, top float64, density float64, pbBook *PbBook, cache []BackgroundCacheItem) (*BackgroundCacheItem, []BackgroundCacheItem) {
+	cacheItem := FindBackgroundCacheItem(cache, sImage)
+	if cacheItem == nil {
+		var backgroundItem *PbItem
+		for ii := range pbBook.namedItems {
+			if pbBook.namedItems[ii].Setting("name") == sImage {
+				backgroundItem = &pbBook.namedItems[ii]
+				break
+			}
+		}
+		if backgroundItem != nil {
+			picture, xDots, yDots, deltaXtilt, deltaYtilt, imageWidthDots, imageHeightDots, newCache := renderImage(backgroundItem, left, top, density, pbBook, cache)
+			cache = newCache
+			cacheItem = &BackgroundCacheItem{sImage, picture, xDots, yDots, deltaXtilt, deltaYtilt, imageWidthDots, imageHeightDots}
+			cache = AddBackgourndCacheItem(cache, cacheItem)
+		}
+	}
+	return cacheItem, cache
+}
+
+func ApplyFrame(picture image.Image, item *PbItem, density float64, pbBook *PbBook, cache []BackgroundCacheItem) (image.Image, int, int, []BackgroundCacheItem) {
+	frameInfo := item.ImageFrame()
+	if frameInfo.color.A == 0 && len(frameInfo.name) == 0 {
+		return picture, 0, 0, cache
+	}
+
+	addedHeight := dotsFromUnitsFloat(frameInfo.size.top+frameInfo.size.bottom, density)
+	addedWidth := dotsFromUnitsFloat(frameInfo.size.left+frameInfo.size.right, density)
+	newWidth := int(math.Round(float64(picture.Bounds().Dx()) + addedWidth))
+	newHeight := int(math.Round(float64(picture.Bounds().Dy()) + addedHeight))
+	newPicture := image.NewNRGBA(image.Rect(0, 0, newWidth, newHeight))
+
+	if frameInfo.color.A > 0 {
+		draw.Draw(newPicture, newPicture.Bounds(), image.NewUniform(color.NRGBA{frameInfo.color.R, frameInfo.color.G, frameInfo.color.B, frameInfo.color.A}), image.Point{}, draw.Src)
+	}
+
+	if !frameInfo.above && len(frameInfo.name) > 0 {
+		var cacheItem *BackgroundCacheItem
+		cacheItem, cache = GetNamedImage(frameInfo.name, 0, 0, density, pbBook, cache)
+		if cacheItem != nil {
+			framePic := imaging.Resize(cacheItem.picture, newWidth, newHeight, imaging.Lanczos)
+			draw.Draw(newPicture, image.Rect(0, 0, newWidth, newHeight), framePic, image.Point{}, draw.Over)
+		}
+	}
+
+	xOffset := int(math.Round(dotsFromUnitsFloat(frameInfo.size.left, density)))
+	yOffset := int(math.Round(dotsFromUnitsFloat(frameInfo.size.top, density)))
+	draw.Draw(newPicture, image.Rect(xOffset, yOffset, picture.Bounds().Dx()+xOffset, picture.Bounds().Dy()+yOffset), picture, image.Point{}, draw.Src)
+
+	if frameInfo.above && len(frameInfo.name) > 0 {
+		var cacheItem *BackgroundCacheItem
+		cacheItem, cache = GetNamedImage(frameInfo.name, 0, 0, density, pbBook, cache)
+		if cacheItem != nil {
+			framePic := imaging.Resize(cacheItem.picture, newWidth, newHeight, imaging.Lanczos)
+			draw.Draw(newPicture, image.Rect(0, 0, newWidth, newHeight), framePic, image.Point{}, draw.Over)
+		}
+	}
+
+	return newPicture, xOffset, yOffset, cache
+}
+
+func renderImage(item *PbItem, left float64, top float64, density float64, pbBook *PbBook, cache []BackgroundCacheItem) (image.Image, int, int, int, int, int, int, []BackgroundCacheItem) {
+	picture := item.GetImage()
+	if picture == nil {
+		return nil, 0, 0, 0, 0, 0, 0, cache
+	}
+
+	straightenAngle := item.FloatSetting("straighten")
+	if straightenAngle != 0 {
+		picture = straighten(picture, straightenAngle)
+	}
+
+	rotation := Atoi(item.Setting("rotate"))
+	switch rotation {
+	case -90, 270:
+		picture = imaging.Rotate90(picture)
+	case 90, -270:
+		picture = imaging.Rotate270(picture)
+	case 180, -180:
+		picture = imaging.Rotate180(picture)
+	}
+
+	brightness := item.FloatSetting("brightness")
+	if brightness != 0 {
+		picture = imaging.AdjustBrightness(picture, brightness)
+	}
+	contrast := item.FloatSetting("contrast")
+	if contrast != 0 {
+		picture = imaging.AdjustContrast(picture, contrast)
+	}
+	gamma := item.FloatSetting("gamma")
+	if gamma != 1.0 {
+		picture = imaging.AdjustGamma(picture, gamma)
+	}
+	saturation := item.FloatSetting("saturation")
+	if saturation != 0 {
+		picture = imaging.AdjustSaturation(picture, saturation)
+	}
+	factor, midpoint := item.SigmoidalSetting()
+	if factor != 0 {
+		picture = imaging.AdjustSigmoid(picture, midpoint, factor)
+	}
+
+	if sSize := item.Setting("float"); sSize != "" {
+		if sSizeParts := strings.SplitN(sSize, ",", 4); len(sSizeParts) == 4 {
+			item.xOffset = Atof(sSizeParts[0]) - left
+			item.yOffset = Atof(sSizeParts[1]) - top
+			item.imageWidth = Atof(sSizeParts[2])
+			item.imageHeight = Atof(sSizeParts[3])
+		}
+	}
+
+	picture = scaleToRect(picture, item)
+
+	// Resize the cropped image to width = 200px preserving the aspect ratio.
+	imageWidthDots := int(math.Round(dotsFromUnitsFloat(item.imageWidth, density)))
+	imageHeightDots := int(math.Round(dotsFromUnitsFloat(item.imageHeight, density)))
+
+	picture = imaging.Resize(picture, imageWidthDots, imageHeightDots, imaging.Lanczos)
+
+	blur := item.FloatSetting("blur")
+	if blur != 0 {
+		picture = imaging.Blur(picture, blur)
+	}
+	sharpen := item.FloatSetting("sharpen")
+	if sharpen != 0 {
+		picture = imaging.Sharpen(picture, sharpen)
+	}
+
+	picture = ApplyRoundedCorners(picture, item.FloatSetting("superellipse"), item.Setting("corner-radius"), density)
+
+	frameXOffset, frameYOffset := 0, 0
+	picture, frameXOffset, frameYOffset, cache = ApplyFrame(picture, item, density, pbBook, cache)
+	imageWidthDots = picture.Bounds().Dx()
+	imageHeightDots = picture.Bounds().Dy()
+
+	outlineXOffset, outlineYOffset := 0, 0
+	if sOutline := item.Setting("image-outline"); len(sOutline) > 0 {
+		picture, _, _, outlineXOffset, outlineYOffset = Outline(picture, picture.Bounds().Size().X, picture.Bounds().Size().Y, density, sOutline)
+		imageWidthDots = picture.Bounds().Dx()
+		imageHeightDots = picture.Bounds().Dy()
+	}
+
+	itemXOffset := item.xOffset - unitsFromDots(float64(frameXOffset+outlineXOffset), density)
+	itemYOffset := item.yOffset - unitsFromDots(float64(frameYOffset+outlineYOffset), density)
+
+	if len(item.textBlockLayouts) > 0 {
+		captionGutterDots := int(math.Round(dotsFromUnitsFloat(item.FloatSetting("caption-gutter"), density)))
+		textBlockLayout := TextBlockLayout{}
+		if item.bestTextBlockLayout >= 0 {
+			textBlockLayout = item.textBlockLayouts[item.bestTextBlockLayout]
+		}
+
+		var textImage image.Image = TextToImage(&textBlockLayout, item.TextInfo())
+		textImage = ApplyRoundedCorners(textImage, item.FloatSetting("superellipse"), item.Setting("corner-radius"), density)
+
+		captionWidthDots := int(math.Round(dotsFromUnitsFloat(textBlockLayout.width, density)))
+		captionHeightDots := int(math.Round(dotsFromUnitsFloat(textBlockLayout.height, density)))
+
+		combinedWidthDots := int(math.Max(float64(captionWidthDots), float64(imageWidthDots)))
+		combinedHeightDots := imageHeightDots + captionGutterDots + captionHeightDots
+		combined := image.NewNRGBA(image.Rect(0, 0, combinedWidthDots, combinedHeightDots))
+
+		captionX := 0
+		captionY := 0
+		imageX := 0
+		imageY := 0
+		if captionWidthDots < imageWidthDots {
+			captionX = (imageWidthDots - captionWidthDots) / 2
+		} else if imageWidthDots < captionWidthDots {
+			imageX = (captionWidthDots - imageWidthDots) / 2
+		}
+
+		if item.Setting("caption-position") == "below" {
+			captionY = imageHeightDots + captionGutterDots
+		} else {
+			imageY = captionHeightDots + captionGutterDots
+		}
+
+		draw.Draw(combined, image.Rect(captionX, captionY, captionX+captionWidthDots, captionY+captionHeightDots), textImage, image.Point{}, draw.Over)
+		draw.Draw(combined, image.Rect(imageX, imageY, imageX+imageWidthDots, imageY+imageHeightDots), picture, image.Point{}, draw.Over)
+
+		picture = combined
+		imageWidthDots = combinedWidthDots
+		imageHeightDots = combinedHeightDots
+	}
+
+	tiltAngle := item.FloatSetting("tilt")
+	deltaXtilt := 0
+	deltaYtilt := 0
+	if tiltAngle != 0 {
+		picture, deltaXtilt, deltaYtilt = tilt(picture, tiltAngle)
+	}
+
+	xDots := int(math.Round(dotsFromUnitsFloat(left+itemXOffset, density)))
+	yDots := int(math.Round(dotsFromUnitsFloat(top+itemYOffset, density)))
+
+	dropXOff, dropYOff := 0, 0
+	if sDropShadow := item.Setting("shadow"); len(sDropShadow) > 0 {
+		picture, imageWidthDots, imageHeightDots, dropXOff, dropYOff = DropShadow(picture, imageWidthDots, imageHeightDots, density, sDropShadow)
+	}
+
+	return picture, xDots, yDots, deltaXtilt + dropXOff, deltaYtilt + dropYOff, imageWidthDots, imageHeightDots, cache
+}
+
+type BackgroundCacheItem struct {
+	name            string
+	picture         image.Image
+	xDots           int
+	yDots           int
+	deltaXtilt      int
+	deltaYtilt      int
+	imageWidthDots  int
+	imageHeightDots int
+}
+
+func FindBackgroundCacheItem(cache []BackgroundCacheItem, name string) *BackgroundCacheItem {
+	for ii := range cache {
+		if cache[ii].name == name {
+			return &cache[ii]
+		}
+	}
+	return nil
+}
+
+func AddBackgourndCacheItem(cache []BackgroundCacheItem, item *BackgroundCacheItem) []BackgroundCacheItem {
+	if foundItem := FindBackgroundCacheItem(cache, item.name); foundItem == nil {
+		cache = append(cache, *item)
+	}
+	return cache
+}
+
 func renderPages(pbBook *PbBook, outPageRange string, outFilename string) {
 	n, err := writeHeader(outFilename)
 	if err != nil {
@@ -760,6 +1062,7 @@ func renderPages(pbBook *PbBook, outPageRange string, outFilename string) {
 
 	offsets := []PageInfo{}
 	objNum := 1
+	backgroundCache := make([]BackgroundCacheItem, 0)
 	for pp := range pbBook.pages {
 		changed := false
 		if changed, _ = fileChanged(*inFileFlag, lastModTime); changed {
@@ -785,9 +1088,20 @@ func renderPages(pbBook *PbBook, outPageRange string, outFilename string) {
 			heightDots := int(math.Round(dotsFromUnitsFloat(pageHeight, density)))
 			dst = image.NewNRGBA(image.Rect(0, 0, widthDots, heightDots))
 
-			// fill the destination with the background color
-			backColor := colorToNRGBA(item.Setting("background"))
-			draw.Draw(dst, dst.Bounds(), image.NewUniform(color.NRGBA{backColor.R, backColor.G, backColor.B, backColor.A}), image.Point{}, draw.Src)
+			// fill the destination with the background
+			sBackground := item.Setting("background")
+			if strings.HasPrefix(sBackground, "#") {
+				backColor := colorToNRGBA(sBackground)
+				draw.Draw(dst, dst.Bounds(), image.NewUniform(color.NRGBA{backColor.R, backColor.G, backColor.B, backColor.A}), image.Point{}, draw.Src)
+			} else {
+				if len(sBackground) > 0 {
+					var cacheItem *BackgroundCacheItem
+					cacheItem, backgroundCache = GetNamedImage(sBackground, left, top, density, pbBook, backgroundCache)
+					if cacheItem != nil {
+						draw.Draw(dst, image.Rect(cacheItem.xDots-cacheItem.deltaXtilt, cacheItem.yDots-cacheItem.deltaYtilt, cacheItem.xDots+cacheItem.imageWidthDots+cacheItem.deltaXtilt, cacheItem.yDots+cacheItem.imageHeightDots+cacheItem.deltaYtilt), cacheItem.picture, image.Point{}, draw.Over)
+					}
+				}
+			}
 
 			header := item.Setting("header")
 			if len(header) > 0 {
@@ -805,159 +1119,17 @@ func renderPages(pbBook *PbBook, outPageRange string, outFilename string) {
 						item = page.rows[row].columns[column].items[columnItem].item
 
 						if item.itemType == ItemTypeText {
-							textImage, deltaXtilt, deltaYtilt := renderText(item, item.textBlockLayouts, density)
+							textImage, deltaXtilt, deltaYtilt := renderText(item, item.textBlockLayouts, left, top, density)
 							if textImage != nil {
-								if sSize := item.Setting("float"); sSize != "" {
-									if sSizeParts := strings.SplitN(sSize, ",", 2); len(sSizeParts) == 2 {
-										item.xOffset = Atof(sSizeParts[0])
-										item.yOffset = Atof(sSizeParts[1])
-									}
-								}
-
 								xDots := int(math.Round(dotsFromUnitsFloat(left+item.xOffset, density))) - deltaXtilt
 								yDots := int(math.Round(dotsFromUnitsFloat(top+item.yOffset, density))) - deltaYtilt
-
-								if sDropShadow := item.Setting("text-shadow"); len(sDropShadow) > 0 {
-									xOffset := 0
-									yOffset := 0
-									textImage, _, _, xOffset, yOffset = DropShadow(textImage, textImage.Bounds().Size().X, textImage.Bounds().Size().Y, density, sDropShadow)
-									xDots -= xOffset
-									yDots -= yOffset
-								}
-
 								draw.Draw(dst, image.Rect(xDots, yDots, xDots+textImage.Bounds().Size().X, yDots+textImage.Bounds().Size().Y), textImage, image.Point{}, draw.Over)
 							}
 						}
 
 						if item.itemType == ItemTypeImage {
-							picture := item.GetImage()
-							if picture == nil {
-								continue
-							}
-
-							straightenAngle := item.FloatSetting("straighten")
-							if straightenAngle != 0 {
-								picture = straighten(picture, straightenAngle)
-							}
-
-							rotation := Atoi(item.Setting("rotate"))
-							switch rotation {
-							case -90, 270:
-								picture = imaging.Rotate90(picture)
-							case 90, -270:
-								picture = imaging.Rotate270(picture)
-							case 180, -180:
-								picture = imaging.Rotate180(picture)
-							}
-
-							brightness := item.FloatSetting("brightness")
-							if brightness != 0 {
-								picture = imaging.AdjustBrightness(picture, brightness)
-							}
-							contrast := item.FloatSetting("contrast")
-							if contrast != 0 {
-								picture = imaging.AdjustContrast(picture, contrast)
-							}
-							gamma := item.FloatSetting("gamma")
-							if gamma != 1.0 {
-								picture = imaging.AdjustGamma(picture, gamma)
-							}
-							saturation := item.FloatSetting("saturation")
-							if saturation != 0 {
-								picture = imaging.AdjustSaturation(picture, saturation)
-							}
-							factor, midpoint := item.SigmoidalSetting()
-							if factor != 0 {
-								picture = imaging.AdjustSigmoid(picture, midpoint, factor)
-							}
-
-							picture = scaleToRect(picture, item)
-
-							if sSize := item.Setting("float"); sSize != "" {
-								if sSizeParts := strings.SplitN(sSize, ",", 4); len(sSizeParts) == 4 {
-									item.xOffset = Atof(sSizeParts[0])
-									item.yOffset = Atof(sSizeParts[1])
-									item.imageWidth = Atof(sSizeParts[2])
-									item.imageHeight = Atof(sSizeParts[3])
-								}
-							}
-
-							// Resize the cropped image to width = 200px preserving the aspect ratio.
-							imageWidthDots := int(math.Round(dotsFromUnitsFloat(item.imageWidth, density)))
-							imageHeightDots := int(math.Round(dotsFromUnitsFloat(item.imageHeight, density)))
-
-							picture = imaging.Resize(picture, imageWidthDots, imageHeightDots, imaging.Lanczos)
-
-							blur := item.FloatSetting("blur")
-							if blur != 0 {
-								picture = imaging.Blur(picture, blur)
-							}
-							sharpen := item.FloatSetting("sharpen")
-							if sharpen != 0 {
-								picture = imaging.Sharpen(picture, sharpen)
-							}
-
-							picture = ApplyRoundedCorners(picture, item.FloatSetting("superellipse"), item.Setting("corner-radius"), density)
-
-							if len(item.textBlockLayouts) > 0 {
-								captionGutterDots := int(math.Round(dotsFromUnitsFloat(item.FloatSetting("caption-gutter"), density)))
-								textBlockLayout := TextBlockLayout{}
-								if item.bestTextBlockLayout >= 0 {
-									textBlockLayout = item.textBlockLayouts[item.bestTextBlockLayout]
-								}
-
-								var textImage image.Image = TextToImage(&textBlockLayout, item.TextInfo())
-								textImage = ApplyRoundedCorners(textImage, item.FloatSetting("superellipse"), item.Setting("corner-radius"), density)
-
-								captionWidthDots := int(math.Round(dotsFromUnitsFloat(textBlockLayout.width, density)))
-								captionHeightDots := int(math.Round(dotsFromUnitsFloat(textBlockLayout.height, density)))
-
-								combinedWidthDots := int(math.Max(float64(captionWidthDots), float64(imageWidthDots)))
-								combinedHeightDots := imageHeightDots + captionGutterDots + captionHeightDots
-								combined := image.NewNRGBA(image.Rect(0, 0, combinedWidthDots, combinedHeightDots))
-
-								captionX := 0
-								captionY := 0
-								imageX := 0
-								imageY := 0
-								if captionWidthDots < imageWidthDots {
-									captionX = (imageWidthDots - captionWidthDots) / 2
-								} else if imageWidthDots < captionWidthDots {
-									imageX = (captionWidthDots - imageWidthDots) / 2
-								}
-
-								if item.Setting("caption-position") == "below" {
-									captionY = imageHeightDots + captionGutterDots
-								} else {
-									imageY = captionHeightDots + captionGutterDots
-								}
-
-								draw.Draw(combined, image.Rect(captionX, captionY, captionX+captionWidthDots, captionY+captionHeightDots), textImage, image.Point{}, draw.Over)
-								draw.Draw(combined, image.Rect(imageX, imageY, imageX+imageWidthDots, imageY+imageHeightDots), picture, image.Point{}, draw.Over)
-
-								picture = combined
-								imageWidthDots = combinedWidthDots
-								imageHeightDots = combinedHeightDots
-							}
-
-							tiltAngle := item.FloatSetting("tilt")
-							deltaXtilt := 0
-							deltaYtilt := 0
-							if tiltAngle != 0 {
-								picture, deltaXtilt, deltaYtilt = tilt(picture, tiltAngle)
-							}
-
-							xDots := int(math.Round(dotsFromUnitsFloat(left+item.xOffset, density)))
-							yDots := int(math.Round(dotsFromUnitsFloat(top+item.yOffset, density)))
-
-							if sDropShadow := item.Setting("shadow"); len(sDropShadow) > 0 {
-								dropXOff := 0
-								dropYOff := 0
-								picture, imageWidthDots, imageHeightDots, dropXOff, dropYOff = DropShadow(picture, imageWidthDots, imageHeightDots, density, sDropShadow)
-								xDots -= dropXOff
-								yDots -= dropYOff
-							}
-
+							picture, xDots, yDots, deltaXtilt, deltaYtilt, imageWidthDots, imageHeightDots, newCache := renderImage(item, left, top, density, pbBook, backgroundCache)
+							backgroundCache = newCache
 							draw.Draw(dst, image.Rect(xDots-deltaXtilt, yDots-deltaYtilt, xDots+imageWidthDots+deltaXtilt, yDots+imageHeightDots+deltaYtilt), picture, image.Point{}, draw.Over)
 						}
 					}

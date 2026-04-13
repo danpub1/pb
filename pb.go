@@ -151,11 +151,6 @@ func main() {
 			bNoRender = Atob(val)
 		}
 
-		globalVerboseFlag = *verboseFlag
-		if val, exists := options["v"]; exists {
-			globalVerboseFlag = Atoi(val)
-		}
-
 		bWatch := *watchFlag
 		if val, exists := options["w"]; exists {
 			bWatch = Atob(val)
@@ -173,6 +168,10 @@ func main() {
 
 		if globalVerboseFlag&4 != 0 {
 			log.Printf("Read input file")
+		}
+
+		if globalVerboseFlag&1 != 0 {
+			fmt.Println(printItems(items, false))
 		}
 
 		numImages := getImageDimensions(items)
@@ -211,8 +210,8 @@ func main() {
 			renderPages(pbBook, outputPageRange, outputFile)
 		}
 
-		if globalVerboseFlag&1 != 0 {
-			fmt.Println(printItems(items))
+		if globalVerboseFlag&8 != 0 {
+			fmt.Println(printItems(items, true))
 		}
 
 		if !bWatch {
@@ -231,8 +230,8 @@ func main() {
 }
 
 // TTD:
-// Background: background (page), image-background, text-background: color/name
 // Frame: frame (image), text-frame: size,color/name,below/above
+// Output a text as an image (can do already, need to get height from verbose output)
 // input and output handlers for different file types
 // Output sigmoidal brightness/lightness?
 // eyelevel, spreadeyelevel, mouthlevel, spreadmouthlevel?

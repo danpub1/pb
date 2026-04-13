@@ -85,6 +85,8 @@ type TRBL struct {
 type FrameInfo struct {
 	size  TRBL
 	color color.NRGBA
+	name  string
+	above bool
 }
 
 // margins: txrxbxl / tbxrl / tbrl -> t, r, b, l

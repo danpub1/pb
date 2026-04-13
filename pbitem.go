@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bufio"
 	"image"
+	"image/color"
 	"io"
 	"log"
 	"maps"
@@ -429,15 +430,42 @@ func (item *PbItem) RowAlign() int {
 	}
 }
 
-func (item *PbItem) Frame(whichFrame string) *FrameInfo {
+func (item *PbItem) ImageFrame() *FrameInfo {
 	var frameInfo FrameInfo
-	frameString := item.Setting(whichFrame)
-	frameParts := strings.SplitN(frameString, ",", 2)
-	if len(frameParts) > 0 {
-		frameInfo.color = colorToNRGBA(frameParts[0])
-		if len(frameParts) > 1 {
-			frameInfo.size = *FourTwoOneTRBL(frameParts[1])
+	frameString := item.Setting("image-frame")
+	frameParts := strings.SplitN(frameString, ",", 4)
+	if len(frameParts) > 0 && len(frameParts[0]) > 0 {
+		frameInfo.size = *FourTwoOneTRBL(frameParts[0])
+		frameInfo.size.top = math.Max(frameInfo.size.top, 0)
+		frameInfo.size.bottom = math.Max(frameInfo.size.bottom, 0)
+		frameInfo.size.left = math.Max(frameInfo.size.left, 0)
+		frameInfo.size.right = math.Max(frameInfo.size.right, 0)
+	}
+	if len(frameParts) > 1 && len(frameParts[1]) > 0 {
+		if strings.HasPrefix(frameParts[1], "#") {
+			frameInfo.color = colorToNRGBA(frameParts[1])
+			frameInfo.name = ""
+		} else {
+			frameInfo.color = color.NRGBA{0, 0, 0, 0}
+			frameInfo.name = frameParts[1]
 		}
+	}
+	if len(frameParts) > 2 && len(frameParts[2]) > 0 {
+		frameInfo.above = Atob(frameParts[2])
+	}
+
+	return &frameInfo
+}
+
+func (item *PbItem) TextFrame() *FrameInfo {
+	var frameInfo FrameInfo
+	frameString := item.Setting("text-frame")
+	frameParts := strings.SplitN(frameString, ",", 2)
+	if len(frameParts) > 0 && len(frameParts[0]) > 0 {
+		frameInfo.size = *FourTwoOneTRBL(frameParts[0])
+	}
+	if len(frameParts) > 1 && len(frameParts[1]) > 0 {
+		frameInfo.color = colorToNRGBA(frameParts[1])
 	}
 
 	return &frameInfo
@@ -455,12 +483,12 @@ func (item *PbItem) Density() float64 {
 }
 
 func (item *PbItem) TextInfo() *TextInfo {
-	frameInfo := item.Frame("text-frame")
+	frameInfo := item.TextFrame()
 	return &TextInfo{
 		font: item.Setting("font"), height: item.FloatSetting("font-size"), units: item.Units(),
 		density: item.Density(), padding: FourTwoOneTRBL(item.Setting("padding")), lineSpacing: item.FloatSetting("linespacing"),
 		letterSpacing: item.FloatSetting("letterspacing"), wordSpacing: item.FloatSetting("wordspacing"), breakChars: item.Setting("breakchars"),
-		textColor: colorToNRGBA(item.Setting("text-color")), backColor: colorToNRGBA(item.Setting("text-back-color")),
+		textColor: colorToNRGBA(item.Setting("text-color")), backColor: colorToNRGBA(item.Setting("text-background")),
 		textAlign: item.TextAlign(), textWrap: item.TextWrap(), justifyWeight: item.FloatSetting("justify-weight"),
 		frameColor: frameInfo.color, frameSize: &frameInfo.size,
 	}
@@ -950,31 +978,33 @@ var defaultSettings = map[string]string{
 	"name":          "",
 
 	// image
-	"max-size":     "100%",
-	"size":         "25%",
-	"rect":         "100", // fit,3:2,50  trim,3:2,50  squish,3:2  #,x:y,50,50  #=zoom level 0-100, Missing aspect=image aspect, Missing position=50
-	"image-frame":  "#0000,0",
-	"straighten":   "0.0",
-	"brightness":   "0.0",
-	"contrast":     "0.0",
-	"gamma":        "1.0",
-	"saturation":   "0.0",
-	"sigmoidal":    "0.0,0.50",
-	"s-saturation": "0.0,0.50",
-	"sharpen":      "0.0",
-	"blur":         "0.0",
-	"rotate":       "0", // 0, 90, 180, 270
-	"shadow":       "",
-	"recurse":      "true",
-	"float":        "", // X,Y,width,height
-	"image":        "",
+	"max-size":         "100%",
+	"size":             "25%",
+	"rect":             "100", // fit,3:2,50  trim,3:2,50  squish,3:2  #,x:y,50,50  #=zoom level 0-100, Missing aspect=image aspect, Missing position=50
+	"image-frame":      "0",
+	"image-outline":    "",
+	"straighten":       "0.0",
+	"brightness":       "0.0",
+	"contrast":         "0.0",
+	"gamma":            "1.0",
+	"saturation":       "0.0",
+	"sigmoidal":        "0.0,0.50",
+	"s-saturation":     "0.0,0.50",
+	"sharpen":          "0.0",
+	"blur":             "0.0",
+	"rotate":           "0", // 0, 90, 180, 270
+	"shadow":           "",
+	"recurse":          "true",
+	"float":            "", // X,Y,width,height
+	"image":            "",
+	"image-background": "#0000",
 
 	// text
 	"caption-position":   "below",
 	"caption-squareness": "100",
 	"caption-gutter":     "0",
 	"text-align":         "left",
-	"text-frame":         "#0000,0",
+	"text-frame":         "0",
 	"font":               "",
 	"font-size":          "14",
 	"linespacing":        "1",
@@ -984,11 +1014,13 @@ var defaultSettings = map[string]string{
 	"text-wrap":          "balanced",
 	"text-width":         "100%",
 	"text-color":         "#0",
-	"text-back-color":    "#0000",
+	"text-background":    "#0000",
 	"text-shadow":        "",
+	"text-outline":       "",
 	"justify-weight":     "2.5",
 	"breakchars":         "",
 	"text":               "",
+	"text-height":        "0",
 }
 
 func (item *PbItem) Set(setting string, value string) {
