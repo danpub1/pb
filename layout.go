@@ -149,7 +149,7 @@ func breakIntoPages(items []PbItem) *PbBook {
 			items[ii].column = 0
 			s.columnsInRow = 0
 			s.itemsInColumn = 0
-			s.curRowYOffset = s.curRowYOffset + s.curRowHeight + items[ii].FloatSetting("page-row-gutter")
+			s.curRowYOffset = s.curRowYOffset + s.curRowHeight + items[ii].FloatPageSetting("row-gutter")
 			s.curRowHeight = 0
 			s.curColumnXOffset = 0
 			s.curColumnWidth = 0
@@ -165,7 +165,7 @@ func breakIntoPages(items []PbItem) *PbBook {
 				items[ii].column = 0
 			}
 			s.itemsInColumn = 0
-			s.curColumnXOffset = s.curColumnXOffset + s.curColumnWidth + items[ii].FloatSetting("row-column-gutter")
+			s.curColumnXOffset = s.curColumnXOffset + s.curColumnWidth + items[ii].FloatRowSetting("column-gutter")
 			s.curColumnWidth = 0
 			s.curColumnHeight = 0
 			items[ii].xOffset = s.curColumnXOffset
@@ -178,15 +178,15 @@ func breakIntoPages(items []PbItem) *PbBook {
 
 			columnItemGutter := 0.0
 			if s.itemsInColumn > 0 && !isNotInLayout {
-				columnItemGutter = items[ii].FloatSetting("column-item-gutter")
+				columnItemGutter = items[ii].FloatColumnSetting("item-gutter")
 			}
 			rowColumnGutter := 0.0
 			if s.columnsInRow > 0 && !isNotInLayout {
-				rowColumnGutter = items[ii].FloatSetting("row-column-gutter")
+				rowColumnGutter = items[ii].FloatRowSetting("column-gutter")
 			}
 			pageRowGutter := 0.0
 			if s.rowsOnPage > 0 && !isNotInLayout {
-				pageRowGutter = items[ii].FloatSetting("page-row-gutter")
+				pageRowGutter = items[ii].FloatPageSetting("row-gutter")
 			}
 			startOfColumn := ii
 			for startOfColumn > 0 && items[startOfColumn-1].column == items[ii].column && items[startOfColumn-1].row == items[ii].row && items[startOfColumn-1].page == items[ii].page {
@@ -235,7 +235,7 @@ func breakIntoPages(items []PbItem) *PbBook {
 					ii = startOfColumn - 1
 					s = stateStack[ii].DeepCopy()
 				} else { // Column is too wide and there is not room for it in the next
-					if items[ii].BoolSetting("keep-columns-together") {
+					if items[ii].BoolColumnSetting("keep-columns-together") {
 						VerboseLog(fmt.Sprintf("/// VERBOSE: Column too wide, Moving column to next page at %v\n", ii))
 						items[startOfColumn].Set("page-break", "true")
 						ii = startOfColumn - 1
@@ -277,9 +277,9 @@ func breakIntoPages(items []PbItem) *PbBook {
 func loadResizeCache() map[string]string {
 	cache := map[string]string{}
 
-	if *cacheMode == CacheModeNone || *cacheMode == CacheModeDuring {
-		if *cacheMode == CacheModeDuring {
-			*cacheMode = CacheModeFull
+	if Opts.Cache()&CacheModeResizeNone != 0 || Opts.Cache()&CacheModeResizeDuring != 0 {
+		if Opts.Cache()&CacheModeResizeDuring != 0 {
+			Opts.argsOptions.cacheMode = (Opts.argsOptions.cacheMode & (CacheModeAll ^ CacheModeResizeDuring)) | CacheModeResizeFull
 		}
 		return cache
 	}
@@ -448,7 +448,7 @@ func resizePages(pb *PbBook, outPageRange string) {
 	for pp := range pb.pages {
 		if isPageInRange(outPageRange, pp) || isCurrentPage(pb, pp) {
 			changed := false
-			if changed, _ = fileChanged(*inFileFlag, lastModTime); changed {
+			if changed, _ = fileChanged(Opts.InFile(), lastModTime); changed {
 				break
 			}
 			page := &pb.pages[pp]
@@ -577,7 +577,7 @@ func layoutPages(pbBook *PbBook, outPageRange string) {
 					if extraColumnHeight > 0 {
 						columnDistribute := AlignTop
 						if NumItemLayout(page.rows[row].columns[column].items) > 0 {
-							columnDistribute = page.rows[row].columns[column].items[0].item.Align("column-distribute")
+							columnDistribute = page.rows[row].columns[column].items[0].item.Align("distribute-items")
 						}
 						switch BindingAlign(columnDistribute, binding, pp) {
 						case AlignBottom:
@@ -642,7 +642,7 @@ func layoutPages(pbBook *PbBook, outPageRange string) {
 				if extraRowWidth > 0 {
 					rowDistribute := AlignLeft
 					if NumItemLayout(page.rows[row].columns[0].items) > 0 {
-						rowDistribute = page.rows[row].columns[0].items[0].item.Align("row-distribute")
+						rowDistribute = page.rows[row].columns[0].items[0].item.Align("distribute-columns")
 					}
 					switch BindingAlign(rowDistribute, binding, pp) {
 					case AlignRight:
@@ -729,7 +729,7 @@ func layoutPages(pbBook *PbBook, outPageRange string) {
 			if extraPageHeight > 0 {
 				pageDistribute := AlignTop
 				if NumItemLayout(page.rows[0].columns[0].items) > 0 {
-					pageDistribute = page.rows[0].columns[0].items[0].item.Align("page-distribute")
+					pageDistribute = page.rows[0].columns[0].items[0].item.Align("distribute-rows")
 				}
 				switch BindingAlign(pageDistribute, binding, pp) {
 				case AlignBottom:

@@ -1,19 +1,20 @@
 # pb
 
-pb is a text-to-photo book conversion tool.
-The first design goal was to be able to simply list photos interspersed with text,
-and convert that to a nicely formatted photo book.
-But a photo book should also be a nice finished product, so the second design goal
-was to support enough formatting to make that possible. 
+pb is a text-to-photobook conversion tool.
+From a simple list of photos interspersed with text, it generates a reasonably formatted photobook. Its markup language supports sufficient formatting to make a nicely finished product.
 
 Uses:
-* A nicely arranged photo book with captions and text describing the photos
-* A contact sheet of all the photos in a folder
-* A nicely arranged collection of all the photos in a folder - not as small as a contact sheet, but not as finished as a photo book
+* Make a nicely arranged photo book with captions and text describing the photos
+* Output a contact sheet of all the photos in a folder
+* Output a nicely arranged collection of all the photos in a folder - not as small as a contact sheet, but not as finished as a photo book
 * Layout pictures on a page in specific sizes for printing
-* A collage for a calendar page or a greeting card
+* Create a collage for a calendar page or a greeting card
 
 ## Introduction
+
+The input file format is line-oriented: each line represents one item in the photobook. Some items are visible, like images and blocks of text. Other items are structural: columns, rows, and pages. Items have settings: name-value pairs that determine how they look or work.
+
+A photobook is made up of pages, each of which has rows. Each row has columns, and each column has images and/or text item.
 
 ### Content: Images and Text
 
@@ -85,7 +86,7 @@ The backtick or grave accent is used to escape a few special cases:
 * A space in a setting value  must be replaced with `` `_ `` (Possible in font name.)
 * Backtick must be replaced with two backticks ``` `` ``` in image filenames or settings.
 * Internally, `` `_ `` is replaced with space. Anything else after a backtick is replaced with that thing.
-* Only image filenames and setting values need to be escaped, not text after a `#`
+* Only image filenames and setting values need to be escaped with backticks, not text after a `#`
 
 Example, first without escaping, then with escaping:
 ```
@@ -93,22 +94,37 @@ Example, first without escaping, then with escaping:
 `---images---\image`_#.jpg $ font:\folder\Wierd`_#`_Name # Old Faithful's #$!@% Erupting
 ```
 
+### Escaping Text
+
+Text contains special characters:
+* `\n` is a new line
+* `\t` is a tab, used for alignment
+* `\1`, `\2`, `\3`, `\4` select the font in a block of text
+* `\0` is a kind of NOP, it does nothing to the final text
+* `\\` is a slash
+
+Example:
+```
+# Hello\nWorld!
+# Left\tCenter\tRight
+# \1Normal, \2Bold, \3Italic, \4Bold-Italic
+```
 ### Character Set
 
 A pb file is assumed to be UTF-8.
 
-## Directives: Formatting & Styling Content
+## Structural Items and Directives: Formatting & Styling Content
 
-`***` = defines settings for the book  
-`+++` = starts a new page, defines settings for the page  
-`---` = starts a new row, defines settings for the row  
-`...` = starts a new column, defines settings for the column  
-`$$$` = defines style
-`@@@` = includes another pb file
-`///` = comment
+`***` = A book and its settings.  There must only be one in the file  
+`+++` = A page and its setetings  
+`---` = A row and its settings  
+`...` = A column and its settings  
+`$$$` = defines style  
+`@@@` = includes another pb file  
+`///` = comment  
+`>>>` = an option
 
-Given a list of images and text, pb will arrange them into columns and rows and pages.  
-How they are arranged is controlled through settingsss.
+Given a list of images and text, pb arranges them into columns and rows and pages. ***How*** they are arranged is controlled through settings.
 
     *** size:621x810 margin:36
 
@@ -116,7 +132,7 @@ How they are arranged is controlled through settingsss.
     Steamboat Geyser.jpg
     # Two of the famous geysers in Yellowstone.
 
-Directives have settings (in the example above, size and margin are the settings), and settings have names and values 
+The structural items (book, page, row, column) have settings (in the example above, size and margin are the settings), and settings have names and values 
 (the value of the size setting above is 621x810).  Settings have default values, which are used if the setting is not
 specified.  For example, the setting 'units' has a default value of 'pt' (points).  Since it was not specified in the book directive,
 the size is assumed to be in points, 621 points wide by 810 points tall (or 8.625 x 11.25 inches).
@@ -142,10 +158,10 @@ Styles can reference other styles, as long as they have been defined previously
 
 Examples:
 
-    image.jpg $ {{bold}} size:larger # Caption{{copyright}}
-    image.jpg $bold size:larger # Caption{{copyright}}
-    image.jpg $bold size:larger #3 Caption{{copyright}}
-    image.jpg $bold size:larger ### Caption{{copyright}}
+    image.jpg $ {{bold}} size:larger # Caption {{copyright}}
+    image.jpg $bold size:larger # Caption {{copyright}}
+    image.jpg $bold size:larger #3 Caption {{copyright}}
+    image.jpg $bold size:larger ### Caption {{copyright}}
 
 The three sources of settings in the above content lines have the following priority from highest to lowest:
 1. The explicit settings in the $ section
@@ -153,17 +169,22 @@ The three sources of settings in the above content lines have the following prio
 1. The settings applied by $name
 
 Example:
-    $$$ 1 size:11pt
-    $$$ 2 font:Arial-Italic.ttf
-    $$$ 3 font:Arial-Bold.ttf
-    $$$ 4 font:Arial.ttf
+```
+$$$ 1 size:11pt
+$$$ 2 font:Arial-Italic.ttf
+$$$ 3 font:Arial-Bold.ttf
+$$$ 4 font:Arial.ttf
 
-    $2 {{3}} # This text is in Arial-Bold.ttf.  The explicit style takes precedence over both the # and $ styles.
-    $ {{2}} {{1}} {{3}} # This text is in Arial-Bold.ttf.  Equivalent of above.
-    $2 #4 This text is in Arial.ttf.  The style for # takes precedence over the style for $
-    $2 # This text is in Arial-Italic.ttf. Style 1 is applied but doesn't specify a font
-    # This text is in whatever font is specified for the row, page, or book.  Style 1 is applied but doesn't specify a font
+$2 {{3}} # This text is in Arial-Bold.ttf.  The explicit style takes precedence over both the # and $ styles.
 
+$ {{2}} {{1}} {{3}} # This text is in Arial-Bold.ttf.  Equivalent of above.
+
+$2 #4 This text is in Arial.ttf.  The style for # takes precedence over the style for $
+
+$2 # This text is in Arial-Italic.ttf. Style 1 is applied but doesn't specify a font
+
+# This text is in whatever font is specified for the column, row, page, or book.  Style 1 is applied but doesn't specify a font
+```
 Because styles replace references to themselves, styles that have settings values need to escape those values as needed. Styles used to replace text do not need escaping because text does not need escaping
 
     $$$ 1 font:Neon`_Sans.ttf
@@ -179,17 +200,22 @@ Alignment may also be applied in the #, by appending:
 * R for Right
 * L for Left
 * J for Justified
-* B for Bindingtitle Yellowstone Vacation Photos
+* B for Binding
 * E for Edge
 
 The following lines are roughly equivalent (assuming that what's in style 1 and style 3 are for different settings)
 
-    $3 align:center # Two of the famous geysers in Yellowstone.
-    $ {{3}} align:center # Two of the famous geysers in Yellowstone.
-    $ align:center #3 Two of the famous geysers in Yellowstone.
-    #3C Two of the famous geysers in Yellowstone.
-    ###C Two of the famous geysers in Yellowstone.
+```
+$3 align:center # Two of the famous geysers in Yellowstone.
 
+$ {{3}} align:center # Two of the famous geysers in Yellowstone.
+
+$ align:center #3 Two of the famous geysers in Yellowstone.
+
+#3C Two of the famous geysers in Yellowstone.
+
+###C Two of the famous geysers in Yellowstone.
+```
 Since # is by definition style 1, a typical setup would be to use style 1 for body text, 
 style 2 for sub headings, and style 3 for main-headings. Note that this makes the usage of multiple #'s the opposite of Markdown.
 
@@ -210,12 +236,12 @@ Styles are just replacement text, and can be used in image filenames as well:
 
 There are several pre-defined styles, useful as part of texts in headers and footers:
 
-{{Date}} (Current date, not the date of the image file)  
-{{Year}}  
-{{Filename}} (the name of an image file without the path, useful with wildcards)  
-{{Fullname}} (the name of an image file with the path, useful with wildcards)  
-{{PageNumber}}  
-{{TotalPages}}  
+* `{{Date}}`: Replaced by the current date, not the date of the image file
+* `{{Year}}`: Replaced by the four digit year
+* `{{Filename}}` Replaced by the name of an image file without the path, useful with wildcards
+* `{{Fullname}}`: Replaced by the name of an image file with the path, useful with wildcards
+* `{{PageNumber}}`: Replaced by the current page number, useable in headers or footers
+* `{{TotalPages}}`: Replaced by the total number of pages in the book, useable in headers or footers
 
 ## Special Texts
 
@@ -241,74 +267,77 @@ Setting values that are indicated as `yes` or `no` may equivalently be `on` or `
 Setting values that are colors may be specified as:
 
 * \#A - Equivalent to #AA, i.e. a gray of value AA
-* \#BC - Equivalent to #BCBCBC, i.e. a gray of value BC
-* \#ABC - Equivalent to #AABBCC
+* \#BC - Equivalent to #BCBCBCFF, i.e. a gray of value BC
+* \#ABC - Equivalent to #AABBCCFF
 * \#ABCD - Equivalent to #AABBCCDD, 
-* \#ABCDEF - An RGB triple with 100% opacity
+* \#89ABCD - Equivalent to #89ABCDFF, an RGB triple with 100% opacity
 * \#89ABCDEF - An RGB triple with opacity EF
 
 Settings specified at the book level apply to all the content in the book.  
 Settings specified at the page level apply to all the content of the page.  
 Settings specified at the row level apply to all the content in the row.  
+Settings specified at the column level apply to all the content in the column.  
 Settings specified for an individual image or text apply only to that content.  
-But some settings only apply at a higher level, so it doesn't make sense to specify them lower down.
+Some settings only apply at a higher level, and many not be specified lower down.
 
 Book-Level Settings
 -------------------
 
 * `units:pt`: the units of measure used in laying out the book.  One of `in`, `cm`, `mm`, `pt`
-* `density:2`: pixels per unit when converting the content to a final bitmap.  2 pixels per pt (144 ppi) could be considered for a preview quality, and 5 pixels per pt (360 ppi) could be appropriate for printing.
-* `output-gamma:1.0`: apply a gamma correction to the final output. This is useful to lighten or darken printed output so it better matches the onscreen experience.
-* `output-sharpen:4,1,0.5,0`: apply octave sharpening to the final bitmap after resizing is complete.
-* `output-mozjpeg:yes`: use the mozjpeg compressor to create the final bitmap.
-* `output-compression:97`: define the jpeg compression level when creating the final bitmap
-* `binding:side`: define the binding location, one of `side`, `top`, `none`.  Controls if margins are alternated by even/odd pages, and how the UI displays spreads
-* `background-first`, `background-even`, `background-odd`, `background-last`
-* `header-first`, `header-even`, `header-odd`, `header-last`
-* `footer-first`, `footer-even`, `footer-odd`, `footer-last`
+* `density:2.0`: pixels per unit when converting the content to a page bitmap.  2 pixels per pt (144 ppi) could be considered for a preview quality, and 5 pixels per pt (360 ppi) could be appropriate for printing.
+* `binding:side`: define the binding location, one of `side`, `top`, `none`.  Controls if margins are alternated by even/odd pages
+* `output-gamma:1.0`: apply a gamma correction to the page bitmap. This is useful to lighten or darken printed output so it better matches the onscreen experience.
+* `output-sharpen:0.0`: apply octave sharpening to the page bitmap after resizing is complete.
+* `output-compression:92`: define the jpeg compression level when creating the page bitmap
+* `output-mozjpeg:false`: use the mozjpeg compressor to create the page bitmap.
+* `output-mozjpeg-sampling:1x1`: specify the subsampling used by mozjpeg
 
 Page-Level Settings
 -------------------
 
 * `size:576x576`: Page size, width x height, in units.
-* `margin:0,0,0,0`: Margins in the order Top, Right, Bottom, Left (binding:none), Top, Binding, Bottom, Edge (for binding:side), or Binding Right Edge Left (binding:top).  In units or percent.
-* `margin:0,0`: Margins in the order Top/Bottom, Right/Left
-* `margin:0`: Margins, all the same
-* `background:color:#F,image:name,stretch:no,trim:x%,fit:x%,ninepatch:border,gradient:#F-#F,tile:?`
-* `header`
-* `footer`
-* `page-distribute:spreadmiddle`: vertical spacing of rows on the page.  Specifies how extra space is distributed after rows are laid out.  One of:
-  * `middle`: gutter is placed between rows, any extra is divided equally between the top and bottom
-  * `justify`: extra is evenly distributed between rows
-  * `top`: extra is placed at the bottom
-  * `bottom`: extra is placed at the top
-  * `binding`: extra is placed at the binding edge (if binding is top)
-  * `edge`: extra is placed opposite the binding edge (if binding is top)
-  * `spreadtop`: extra is distributed between rows and at the bottom
-  * `spreadbottom`: extra is distributed between rows and at the top
-  * `spreadmiddle`: extra is distributed between rows and at the top and bottom
-  * `spreadedge`
-  * `spreadbinding`
+* `margin:0.0x0.0x0.0x0.0`: Margins in the order Top, Right, Bottom, Left (binding:none), Top, Binding, Bottom, Edge (for binding:side), or Binding Right Edge Left (binding:top).  In units or percent.
+* `margin:0.0x0.0`: Margins in the order Top/Bottom, Right/Left
+* `margin:0.0`: Margins, all the same
+* `background:#color/name`: Color or named image to use as the page background
+* `header:even-header,odd-header,offset,leading-pages,trailing-pages`: Named text to use as the header
+* `footer:even-footer,odd-footer,offset,leading-pages,trailing-pages`:  Named text to use as the header
+* `current-page`: false.  Set to true to output the page when previewing. As a shortcut, `current-page` by itself is equivalent to `current-page:true`
+* `row-gutter:6.0`:
+* `distribute-rows:spreadmiddle`: vertical spacing of rows on the page.  Specifies how extra space is distributed after rows are laid out with gutter in between rows.  One of:
+  * `middle`: Divided equally between the top and bottom
+  * `justify`: Evenly distributed between rows
+  * `top`: Extra is placed at the bottom
+  * `bottom`: Extra is placed at the top
+  * `binding`: Extra is placed at the binding (if binding is top)
+  * `edge`: Extra is placed opposite the binding (if binding is top)
+  * `spreadtop`: Distributed between rows and at the bottom
+  * `spreadbottom`: Distributed between rows and at the top
+  * `spreadmiddle`: Distributed between rows and at the top and bottom
+  * `spreadedge`: Distributed between rows and at the binding (if binding is top)
+  * `spreadbinding`: Distributed between rows and opposite the binding (if binding is top)
 
 Row-Level Settings
 ------------------
-* `minsize:0`, `minsize:0%`: Minimum size in units (or in percent of shorter dimension of page) of any dimension of image, used during layout
-* `row-weight:1`: Make rows bigger to fill the page.
-* `row-distribute:spreadcenter`: horizontal spacing of columns in a row.  Specifies how extra space is distributed after images are laid out.
-  * `center`: gutter is placed between images, any extra is divided equally between the left and right
-  * `justify`: extra is evenly distributed between images
-  * `left`: extra is placed at the right
-  * `right`: extra is placed at the left
-  * `binding`: extra is placed at the binding edge (if binding is side)
-  * `edge`: extra is placed opposite the binding edge (if binding is side)
-  * `spreadleft`: extra is distributed between pictures and at the right
-  * `spreadright`: extra is distributed between pictures and at the left
-  * `spreadcenter`: extra is distributed between pictures and at the right and left
+* `column-gutter:6.0`:
+* `distribute-columns:spreadcenter`: horizontal spacing of columns in a row.  Specifies how extra space is distributed after columns are laid out with gutter in between columns.  One of:
+  * `center`: Divided equally between the left and right
+  * `justify`: Evenly distributed between columns
+  * `left`: Extra is placed at the right
+  * `right`: Extra is placed at the left
+  * `binding`: Extra is placed opposite the binding (if binding is side)
+  * `edge`: Extra is placed at the edge (if binding is side)
+  * `spreadleft`: Distributed between columns and at the right
+  * `spreadright`: Distributed between columns and at the left
+  * `spreadmiddle`: Distributed between columns and at the left and right
+  * `spreadedge`: Distributed between columns and at the binding (if binding is side)
+  * `spreadbinding`: Distributed between rows and opposite the binding (if binding is side)
 
 Column-Level Settings
 ---------------------
-* `column-distribute`: vertical spacing of items in a column (same values as for page-distribute)
-* `column-weight:1`
+* `distribute-item`: vertical spacing of items in a column (same values as for page-distribute)
+* `item-gutter:6.0`: 
+* `keep-columns-together`: false
 
 Image Settings
 --------------
@@ -323,13 +352,9 @@ Image Settings
 * `trim:#:#,#%`: Trim & Crop to fit in aspect ratio (Center, Left/Top, Right/Bottom, 0-100% [50%])
 * `fit:#:#,#%`: Shrink to fit in aspect ratio (Center, Left/Top, Right/Bottom, 0-100% [50%]))
 * `frame:size:#,name:image,color:#F,border-size:#px,ninepatch:#px`
-* `sorted-by:name`: identifies the sort order for images with wildcards
-  * `name`
-  * `date`
 
 Image Settings Affecting Layout
 -------------------------------
-* `weight:1` - when laying out, resize this image to use this proportion of remaining space 
 * `size` - indicates size before Layout
   * `normal` - minimum size (default) = scale:1
   * `larger` - minimum size * 1.25 = scale:1.25
@@ -350,8 +375,8 @@ Text Settings
 -------------
 * `textAlign:left,right,center,justified,binding,edge` (binding & edge allowed if binding:side)
 * `font:name`: font name
-* `size:11`: font size in units
-* `linespacing:120`: line spacing in percent
+* `font-size:11`: font size in units
+* `linespacing:1.2`: line spacing in percent
 * `letterspacing:0`: letter spacing in units, positive or negative, real number
 * `padding:0,0,0,0`: Text padding in the order Top, Right, Bottom, Left, or Top, Binding, Bottom, Edge for align:binding or align:edge
 * `padding:0,0`: Text padding in the order Top/Bottom, Right/Left
@@ -367,6 +392,7 @@ Text or Image Settings
 * `page-break:yes,no`
 * `float:WxH+X+Y` - takes image / text out of layout
 * `rotate`: after layout or float
+* `page-break`: false
 
 ## Design
 

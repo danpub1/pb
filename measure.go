@@ -14,9 +14,9 @@ type ImageCacheEntry struct {
 func loadImageCache() map[string]ImageCacheEntry {
 	cache := map[string]ImageCacheEntry{}
 
-	if *cacheMode == CacheModeNone || *cacheMode == CacheModeDuring {
-		if *cacheMode == CacheModeDuring {
-			*cacheMode = CacheModeFull
+	if Opts.Cache()&CacheModeImageNone != 0 || Opts.Cache()&CacheModeImageDuring != 0 {
+		if Opts.Cache()&CacheModeImageDuring != 0 {
+			Opts.argsOptions.cacheMode = (Opts.argsOptions.cacheMode & (CacheModeAll ^ CacheModeImageDuring)) | CacheModeImageFull
 		}
 		return cache
 	}
@@ -80,12 +80,14 @@ func getImageDimensions(items []PbItem) int {
 
 			config := items[ii].GetImageConfig()
 
-			if rotation == 90 || rotation == -90 || rotation == 270 || rotation == -270 {
-				items[ii].imageWidthPx = config.Height
-				items[ii].imageHeightPx = config.Width
-			} else {
-				items[ii].imageWidthPx = config.Width
-				items[ii].imageHeightPx = config.Height
+			if config.Width > 0 && config.Height > 0 {
+				if rotation == 90 || rotation == -90 || rotation == 270 || rotation == -270 {
+					items[ii].imageWidthPx = config.Height
+					items[ii].imageHeightPx = config.Width
+				} else {
+					items[ii].imageWidthPx = config.Width
+					items[ii].imageHeightPx = config.Height
+				}
 			}
 
 			updateCacheEntry(&cache, filename, config.Width, config.Height)

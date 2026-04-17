@@ -165,6 +165,8 @@ func drawString(d []font.Drawer, s string, letterSpacing fixed.Int26_6, wordSpac
 	for _, c := range s {
 		isFont := false
 		switch c {
+		case '\x00':
+			isFont = true
 		case '\x01':
 			curFont = 1
 			isFont = true
@@ -177,6 +179,9 @@ func drawString(d []font.Drawer, s string, letterSpacing fixed.Int26_6, wordSpac
 		case '\x04':
 			curFont = 4
 			isFont = true
+		}
+		if curFont > len(d) {
+			curFont = len(d)
 		}
 		if c == '\n' {
 			continue
@@ -277,6 +282,9 @@ func TextToImage(TextBlockLayout *TextBlockLayout, textInfo *TextInfo) *image.NR
 			line := TextBlockLayout.lines[ii].line
 			if len(parts) > 1 {
 				thisAdvance, curFont = advance(parts[jj], faces, letterSpacing, wordSpacing, curFont)
+				if curFont > len(d) {
+					curFont = len(d)
+				}
 				line = parts[jj]
 				switch jj {
 				case 0:
@@ -302,7 +310,7 @@ func TextToImage(TextBlockLayout *TextBlockLayout, textInfo *TextInfo) *image.NR
 			case TextAlignJustified:
 				letterCount := 0
 				spaceCount := 0
-				escapes := []rune{'\x01', '\x02', '\x03', '\x04', '\n'}
+				escapes := []rune{'\x00', '\x01', '\x02', '\x03', '\x04', '\n'}
 				for _, rr := range line {
 					if rr == 0 {
 						continue

@@ -17,7 +17,7 @@ const (
 )
 
 func VerboseLog(message string) {
-	if globalVerboseFlag&2 != 0 {
+	if Opts.Verbose("L") {
 		log.Print(message)
 	}
 }

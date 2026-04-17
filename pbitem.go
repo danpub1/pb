@@ -5,6 +5,7 @@ import (
 	"bufio"
 	"image"
 	"image/color"
+	"image/draw"
 	"io"
 	"log"
 	"maps"
@@ -306,7 +307,7 @@ func (item *PbItem) SigmoidalSetting() (float64, float64) {
 }
 
 func (item *PbItem) Units() int {
-	switch item.Setting("units") {
+	switch item.BookSetting("units") {
 	case "pt":
 		return UnitsPt
 	case "in":
@@ -367,11 +368,11 @@ func (item *PbItem) Align(whichAlign string) int {
 	settingVal := ""
 
 	switch whichAlign {
-	case "column-distribute", "column-align":
+	case "distribute-items":
 		settingVal = item.ColumnSetting(whichAlign)
-	case "row-distribute", "row-align":
+	case "distribute-columns":
 		settingVal = item.RowSetting(whichAlign)
-	case "page-distribute":
+	case "distribute-rows":
 		settingVal = item.PageSetting(whichAlign)
 	default:
 		settingVal = item.Setting(whichAlign)
@@ -414,19 +415,6 @@ func (item *PbItem) Align(whichAlign string) int {
 		return AlignSpreadRight
 	default:
 		return AlignUnknown
-	}
-}
-
-func (item *PbItem) RowAlign() int {
-	switch item.Setting("row-align") {
-	case "top":
-		return RowAlignTop
-	case "middle":
-		return RowAlignMiddle
-	case "bottom":
-		return RowAlignBottom
-	default:
-		return RowAlignUnknown
 	}
 }
 
@@ -630,6 +618,10 @@ type ImageReader struct {
 }
 
 func (imageReader *ImageReader) Reader() io.Reader {
+	if imageReader == nil {
+		return nil
+	}
+
 	if imageReader.file != nil && imageReader.fileReader != nil {
 		return imageReader.fileReader
 	}
@@ -705,6 +697,11 @@ func (item *PbItem) GetImage() image.Image {
 	// }
 
 	imageFile := item.OpenImage()
+	if imageFile == nil {
+		dst := image.NewNRGBA(image.Rect(0, 0, 128, 128))
+		draw.Draw(dst, dst.Bounds(), image.NewUniform(color.NRGBA{0, 0, 0, 0}), image.Point{}, draw.Src)
+		return dst
+	}
 	decodedImage, _, err := image.Decode(imageFile.Reader())
 	imageFile.Close()
 	if err != nil {
@@ -730,6 +727,9 @@ func (item *PbItem) GetImageConfig() image.Config {
 	// }
 
 	imageFile := item.OpenImage()
+	if imageFile == nil {
+		return image.Config{}
+	}
 	imageConfig, _, err := image.DecodeConfig(imageFile.Reader())
 	imageFile.Close()
 	if err != nil {
@@ -939,50 +939,55 @@ func (source *PbItem) DeepCopy() PbItem {
 
 var defaultSettings = map[string]string{
 	// book
-	"units":              "pt",
-	"density":            "2",
-	"binding":            "side",
-	"output-gamma":       "1.0",
-	"output-sharpen":     "0",
-	"output-compression": "92",
-	"mozjpeg":            "false",
-	"mozjpeg-sampling":   "1x1",
+	"units":                   "pt",
+	"density":                 "2.0",
+	"binding":                 "side",
+	"output-gamma":            "1.0",
+	"output-sharpen":          "0.0",
+	"output-compression":      "92",
+	"output-mozjpeg":          "false",
+	"output-mozjpeg-sampling": "1x1",
 
 	// page
 	"page-size":       "576x576",
 	"margin":          "24",
 	"background":      "#F",
-	"page-distribute": "spreadmiddle", // how rows are distributed vertically on the page
-	"page-row-gutter": "6",            // gutter between rows
+	"distribute-rows": "spreadmiddle", // how rows are distributed vertically on the page
+	"row-gutter":      "6",            // gutter between rows
 	"current-page":    "false",
 	"header":          "",
 	"footer":          "",
 
 	// row
-	"row-distribute":    "spreadcenter", // how columns are distributed horizontally in a row
-	"row-column-gutter": "6",            // gutter between columns
-	"page-break":        "false",
+	"distribute-columns": "spreadcenter", // how columns are distributed horizontally in a row
+	"column-gutter":      "6",            // gutter between columns
 
 	// column
-	"column-distribute":     "spreadmiddle", // how images or text are distributed vertically in a column
-	"column-item-gutter":    "6",
-	"row-break":             "false",
+	"distribute-items":      "spreadmiddle", // how images or text are distributed vertically in a column
+	"item-gutter":           "6",
 	"keep-columns-together": "false",
 
-	// image or text
-	"column-break":  "true",
+	// image or text (or similar related settings)
 	"item-align":    "center", // left center right - how images or text of different width are aligned in a column
 	"tilt":          "0",
-	"superellipse":  "0",
-	"corner-radius": "0",
+	"corner-radius": "0", // size[%],superellipse
 	"name":          "",
+	"page-break":    "false",
+	"row-break":     "false",
+	"column-break":  "true",
+	"text-frame":    "0", // size,color
+	"text-outline":  "",  // color,size
+	"text-shadow":   "",  // color, blur, x, y
+	"image-frame":   "0", // size,color/name,above
+	"image-outline": "",  // color,size
+	"image-shadow":  "",  // color, blur, x, y
+	"rotate":        "0", // 0, 90, 180, 270
+	"float":         "",  // X,Y,width,height
 
 	// image
 	"max-size":         "100%",
 	"size":             "25%",
 	"rect":             "100", // fit,3:2,50  trim,3:2,50  squish,3:2  #,x:y,50,50  #=zoom level 0-100, Missing aspect=image aspect, Missing position=50
-	"image-frame":      "0",
-	"image-outline":    "",
 	"straighten":       "0.0",
 	"brightness":       "0.0",
 	"contrast":         "0.0",
@@ -992,10 +997,7 @@ var defaultSettings = map[string]string{
 	"s-saturation":     "0.0,0.50",
 	"sharpen":          "0.0",
 	"blur":             "0.0",
-	"rotate":           "0", // 0, 90, 180, 270
-	"shadow":           "",
 	"recurse":          "true",
-	"float":            "", // X,Y,width,height
 	"image":            "",
 	"image-background": "#0000",
 
@@ -1004,7 +1006,6 @@ var defaultSettings = map[string]string{
 	"caption-squareness": "100",
 	"caption-gutter":     "0",
 	"text-align":         "left",
-	"text-frame":         "0",
 	"font":               "",
 	"font-size":          "14",
 	"linespacing":        "1",
@@ -1015,8 +1016,6 @@ var defaultSettings = map[string]string{
 	"text-width":         "100%",
 	"text-color":         "#0",
 	"text-background":    "#0000",
-	"text-shadow":        "",
-	"text-outline":       "",
 	"justify-weight":     "2.5",
 	"breakchars":         "",
 	"text":               "",

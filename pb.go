@@ -94,136 +94,265 @@ func fileChanged(filename string, lastModTime time.Time) (bool, time.Time) {
 }
 
 const (
-	CacheModeNone = iota
-	CacheModeDuring
-	CacheModeFull
+	CacheModeUnknown      = 0
+	CacheModeImageNone    = 1
+	CacheModeImageDuring  = 2
+	CacheModeImageFull    = 4
+	CacheModeResizeNone   = 8
+	CacheModeResizeDuring = 16
+	CacheModeResizeFull   = 32
+	CacheModeAll          = 63
+)
+const (
+	WatchModeUnknown = -1
+	WatchModeOff     = 0
+	WatchModeOn      = 1
+)
+const (
+	NoresizeModeUnknown = -1
+	NoresizeModeOff     = 0
+	NoresizeModeOn      = 1
+)
+const (
+	NolayoutModeUnknown = -1
+	NolayoutModeOff     = 0
+	NolayoutModeOn      = 1
+)
+const (
+	NorenderModeUnknown = -1
+	NorenderModeOff     = 0
+	NorenderModeOn      = 1
 )
 
-var globalVerboseFlag = 0
-var cacheMode *int
 var lastModTime time.Time
-var inFileFlag *string
+
+type OptionSet struct {
+	inFile    string
+	outFile   string
+	verbose   string
+	pageRange string
+	cjpegCmd  string
+	watch     int
+	cacheMode int
+	noresize  int
+	nolayout  int
+	norender  int
+}
+
+type Options struct {
+	fileOptions OptionSet
+	argsOptions OptionSet
+}
+
+var Opts Options
+
+func (this *Options) ParseFileOptions(options map[string]string) {
+	if val, exists := options["o"]; exists {
+		this.fileOptions.outFile = val
+	}
+
+	if val, exists := options["v"]; exists {
+		this.fileOptions.verbose = val
+	}
+
+	if val, exists := options["p"]; exists {
+		this.fileOptions.pageRange = val
+	}
+
+	if val, exists := options["w"]; exists {
+		this.fileOptions.watch = Atoi(val)
+	}
+
+	if val, exists := options["cache"]; exists {
+		this.fileOptions.cacheMode = Atoi(val)
+	}
+
+	if val, exists := options["noresize"]; exists {
+		this.fileOptions.noresize = Atoi(val)
+	}
+
+	if val, exists := options["nolayout"]; exists {
+		this.fileOptions.nolayout = Atoi(val)
+	}
+
+	if val, exists := options["norender"]; exists {
+		this.fileOptions.norender = Atoi(val)
+	}
+
+	if val, exists := options["cjpeg"]; exists {
+		this.fileOptions.cjpegCmd = val
+	}
+}
+
+func (this *Options) InFile() string {
+	return this.argsOptions.inFile
+}
+
+func (this *Options) OutFile() string {
+	if len(this.argsOptions.outFile) > 0 {
+		return this.argsOptions.outFile
+	} else {
+		return this.fileOptions.outFile
+	}
+}
+
+func (this *Options) Verbose(level string) bool {
+	return (len(this.argsOptions.verbose) > 0 && strings.Contains(this.argsOptions.verbose, level)) ||
+		(len(this.argsOptions.verbose) == 0 && len(this.fileOptions.verbose) > 0 && strings.Contains(this.fileOptions.verbose, level))
+}
+
+func (this *Options) PageRange() string {
+	if len(this.argsOptions.pageRange) > 0 {
+		return this.argsOptions.pageRange
+	} else {
+		return this.fileOptions.pageRange
+	}
+}
+
+func (this *Options) Watch() bool {
+	if this.argsOptions.watch != WatchModeUnknown {
+		return this.argsOptions.watch == WatchModeOn
+	} else {
+		return this.fileOptions.watch == WatchModeOn
+	}
+}
+
+func (this *Options) Cache() int {
+	if this.argsOptions.cacheMode != CacheModeUnknown {
+		return this.argsOptions.cacheMode
+	} else {
+		return this.fileOptions.cacheMode
+	}
+}
+
+func (this *Options) Noresize() bool {
+	if this.argsOptions.noresize != NoresizeModeUnknown {
+		return this.argsOptions.noresize == NoresizeModeOn
+	} else {
+		return this.fileOptions.noresize == NoresizeModeOn
+	}
+}
+
+func (this *Options) Nolayout() bool {
+	if this.argsOptions.nolayout != NolayoutModeUnknown {
+		return this.argsOptions.nolayout == NolayoutModeOn
+	} else {
+		return this.fileOptions.nolayout == NolayoutModeOn
+	}
+}
+
+func (this *Options) Norender() bool {
+	if this.argsOptions.norender != NorenderModeUnknown {
+		return this.argsOptions.norender == NorenderModeOn
+	} else {
+		return this.fileOptions.norender == NorenderModeOn
+	}
+}
+
+func (this *Options) CjpegCmd() string {
+	if len(this.argsOptions.cjpegCmd) > 0 {
+		return this.argsOptions.cjpegCmd
+	} else {
+		return this.fileOptions.cjpegCmd
+	}
+}
 
 func main() {
-	var (
-		pageFlag     = flag.String("p", "", "page range")
-		verboseFlag  = flag.Int("v", 0, "verbose")
-		watchFlag    = flag.Bool("w", false, "watch")
-		outFileFlag  = flag.String("o", "out.png", "output filename")
-		noresizeFlag = flag.Bool("noresize", false, "noresize")
-		nolayoutFlag = flag.Bool("nolayout", false, "nolayout")
-		norenderFlag = flag.Bool("norender", false, "norender")
-	)
+	Opts.fileOptions = OptionSet{
+		inFile:    "",
+		outFile:   "",
+		verbose:   "",
+		pageRange: "-",
+		cacheMode: CacheModeImageNone | CacheModeResizeNone,
+		watch:     WatchModeOff,
+		noresize:  NoresizeModeOff,
+		nolayout:  NolayoutModeOff,
+		norender:  NorenderModeOff,
+		cjpegCmd:  "",
+	}
 
-	inFileFlag = flag.String("i", "", "input filename")
-	cacheMode = flag.Int("cache", CacheModeDuring, "cache mode")
-
+	flag.StringVar(&(Opts.argsOptions.inFile), "i", "", "Input File")
+	flag.StringVar(&(Opts.argsOptions.outFile), "o", "", "Output File")
+	flag.StringVar(&(Opts.argsOptions.verbose), "v", "", "Verbose Level")
+	flag.StringVar(&(Opts.argsOptions.pageRange), "p", "", "Page Range")
+	flag.IntVar(&(Opts.argsOptions.watch), "w", WatchModeUnknown, "Watch Level")
+	flag.IntVar(&(Opts.argsOptions.cacheMode), "cache", CacheModeUnknown, "Cache Level")
+	flag.IntVar(&(Opts.argsOptions.noresize), "noresize", NoresizeModeUnknown, "No Resize")
+	flag.IntVar(&(Opts.argsOptions.nolayout), "nolayout", NolayoutModeUnknown, "No Layout")
+	flag.IntVar(&(Opts.argsOptions.norender), "norender", NorenderModeUnknown, "No Render")
+	flag.StringVar(&(Opts.argsOptions.cjpegCmd), "cjpeg", "", "cjpeg path")
 	flag.Parse()
-	globalVerboseFlag = *verboseFlag
 
-	if *inFileFlag == "" {
+	if Opts.InFile() == "" {
 		flag.Usage()
 		log.Fatal("no input file specified")
 	}
 
-	_, lastModTime = fileChanged(*inFileFlag, time.Time{})
+	_, lastModTime = fileChanged(Opts.InFile(), time.Time{})
 
 	for {
-		items, options := ReadPbFile(*inFileFlag)
+		items, options := ReadPbFile(Opts.InFile())
 
-		globalVerboseFlag = *verboseFlag
-		if val, exists := options["v"]; exists {
-			globalVerboseFlag = Atoi(val)
-		}
+		Opts.ParseFileOptions(options)
 
-		bNoResize := *noresizeFlag
-		if val, exists := options["noresize"]; exists {
-			bNoResize = Atob(val)
-		}
-
-		bNoLayout := *nolayoutFlag
-		if val, exists := options["nolayout"]; exists {
-			bNoLayout = Atob(val)
-		}
-
-		bNoRender := *norenderFlag
-		if val, exists := options["norender"]; exists {
-			bNoRender = Atob(val)
-		}
-
-		bWatch := *watchFlag
-		if val, exists := options["w"]; exists {
-			bWatch = Atob(val)
-		}
-
-		outputPageRange := *pageFlag
-		if val, exists := options["p"]; exists {
-			outputPageRange = val
-		}
-
-		outputFile := *outFileFlag
-		if val, exists := options["o"]; exists {
-			outputFile = val
-		}
-
-		if globalVerboseFlag&4 != 0 {
+		if Opts.Verbose("D") {
 			log.Printf("Read input file")
 		}
 
-		if globalVerboseFlag&1 != 0 {
+		if Opts.Verbose("P") {
 			fmt.Println(printItems(items, false))
 		}
 
 		numImages := getImageDimensions(items)
 		numTexts := getTextDimensions(items)
 
-		if globalVerboseFlag&4 != 0 {
+		if Opts.Verbose("D") {
 			log.Printf("Got Dimensions for %v Images and Measured %v Texts", numImages, numTexts)
 		}
 
 		// break into columns, rows
 		pbBook := breakIntoPages(items)
 
-		if globalVerboseFlag&4 != 0 {
+		if Opts.Verbose("D") {
 			log.Printf("Paginated: %v pages", len(pbBook.pages))
 		}
 
 		// calculate sizes that fills available space
-		if !bNoResize {
-			resizePages(pbBook, outputPageRange)
+		if !Opts.Noresize() {
+			resizePages(pbBook, Opts.PageRange())
 
-			if globalVerboseFlag&4 != 0 {
+			if Opts.Verbose("D") {
 				log.Printf("Resized pages")
 			}
 		}
 
 		// determine positions on page
-		if !bNoLayout {
-			layoutPages(pbBook, outputPageRange)
+		if !Opts.Nolayout() {
+			layoutPages(pbBook, Opts.PageRange())
 
-			if globalVerboseFlag&4 != 0 {
+			if Opts.Verbose("D") {
 				log.Printf("Laid out pages")
 			}
 		}
 
-		if !bNoRender {
-			renderPages(pbBook, outputPageRange, outputFile)
+		if !Opts.Norender() {
+			renderPages(pbBook, Opts.PageRange(), Opts.OutFile())
 		}
 
-		if globalVerboseFlag&8 != 0 {
+		if Opts.Verbose("X") {
 			fmt.Println(printItems(items, true))
 		}
 
-		if !bWatch {
+		if !Opts.Watch() {
 			break
 		}
 
-		if globalVerboseFlag&4 != 0 {
+		if Opts.Verbose("D") {
 			log.Printf("Refreshed")
 		}
 
 		changed := false
-		for changed, lastModTime = fileChanged(*inFileFlag, lastModTime); !changed; changed, lastModTime = fileChanged(*inFileFlag, lastModTime) {
+		for changed, lastModTime = fileChanged(Opts.InFile(), lastModTime); !changed; changed, lastModTime = fileChanged(Opts.InFile(), lastModTime) {
 			time.Sleep(time.Duration(int64(1) * 1000 * 1000 * 1000))
 		}
 	}
@@ -234,6 +363,7 @@ func main() {
 // Output a text as an image (can do already, need to get height from verbose output)
 // input and output handlers for different file types
 // Output sigmoidal brightness/lightness?
+// spreadedge, spreadbinding
 // eyelevel, spreadeyelevel, mouthlevel, spreadmouthlevel?
 // highlights, midtones, shadows
 // Image, font https://... downloaded and then cached (in a zip file?)

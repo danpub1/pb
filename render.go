@@ -96,8 +96,16 @@ func ApplyMask(picture image.Image, mask image.Image) image.Image {
 	return dst
 }
 
-func ApplyRoundedCorners(picture image.Image, power float64, sCornerRadius string, density float64) image.Image {
-	if sCornerRadius != "0" {
+func ApplyRoundedCorners(picture image.Image, sCornerRadius string, density float64) image.Image {
+	power := 1.0
+	parts := strings.SplitN(sCornerRadius, ",", 2)
+	if len(parts) > 0 && len(parts[0]) > 0 {
+		sCornerRadius = parts[0]
+	}
+	if len(parts) > 1 && len(parts[1]) > 0 {
+		power = Atof(parts[1])
+	}
+	if len(sCornerRadius) > 0 && sCornerRadius != "0" {
 		mask := GetMask(picture.Bounds().Dx(), picture.Bounds().Dy(), power, sCornerRadius, density)
 		return ApplyMask(picture, mask)
 	}
@@ -272,7 +280,7 @@ func writePage(img image.Image, objNum int, curPage int, outFilename string, isP
 			}
 			return bytesWritten, nil
 		} else {
-			if globalVerboseFlag&4 != 0 {
+			if Opts.Verbose("D") {
 				log.Print("Writing JPEG")
 			}
 			options := jpeg.Options{Quality: compressionLevel}
@@ -280,7 +288,7 @@ func writePage(img image.Image, objNum int, curPage int, outFilename string, isP
 				log.Print(err)
 				return 0, err
 			}
-			if globalVerboseFlag&4 != 0 {
+			if Opts.Verbose("D") {
 				log.Print("Wrote JPEG")
 			}
 			return 0, nil
@@ -296,7 +304,7 @@ func writePage(img image.Image, objNum int, curPage int, outFilename string, isP
 				return 0, err
 			}
 		} else {
-			if globalVerboseFlag&4 != 0 {
+			if Opts.Verbose("D") {
 				log.Print("Writing JPEG")
 			}
 			options := jpeg.Options{Quality: compressionLevel}
@@ -304,7 +312,7 @@ func writePage(img image.Image, objNum int, curPage int, outFilename string, isP
 				log.Print(err)
 				return 0, err
 			}
-			if globalVerboseFlag&4 != 0 {
+			if Opts.Verbose("D") {
 				log.Print("Wrote JPEG")
 			}
 		}
@@ -356,7 +364,8 @@ func scaleToRect(picture image.Image, item *PbItem) image.Image {
 	dstXOffset := 0
 	dstYOffset := 0
 
-	if zoom == 0 { // zoom == 0 == trim
+	switch zoom {
+	case 0: // zoom == 0 == trim
 		if dstAspect > srcAspect { // dst is wider than src, crop top & bottom
 			dstHeight = int(math.Round(float64(dstWidth) / dstAspect))
 			dstYOffset = int(math.Round(float64(int(math.Round(hr))-dstHeight) * float64(offset) / 100.0))
@@ -368,7 +377,7 @@ func scaleToRect(picture image.Image, item *PbItem) image.Image {
 		} else {
 			return picture
 		}
-	} else if zoom == 100 { // zoom == 100 == fit
+	case 100: // zoom == 100 == fit
 		if dstAspect > srcAspect { // dst is wider than src, pad left & right
 			dstWidth = int(math.Round(float64(int(math.Round(hr))) * dstAspect))
 			dstXOffset = int(math.Round(float64(dstWidth-int(math.Round(wr))) * float64(offset) / 100.0))
@@ -386,7 +395,7 @@ func scaleToRect(picture image.Image, item *PbItem) image.Image {
 		} else {
 			return picture
 		}
-	} else {
+	default:
 		return picture
 	}
 }
@@ -517,7 +526,11 @@ func convertImage(picture image.Image) image.Image {
 }
 
 func writeJPEG(picture image.Image, out io.Writer, compressionLevel int, samplingFactor string) (int, error) {
-	cmd := exec.Command("/home/dms/programming/mozjpeg-4.1.1/mozjpeg-4.1.1/cjpeg-static", "-quality", fmt.Sprintf("%v", compressionLevel), "-sample", samplingFactor)
+	cjpegCmd := Opts.CjpegCmd()
+	if len(cjpegCmd) == 0 {
+		cjpegCmd = "/home/dms/programming/mozjpeg-4.1.1/mozjpeg-4.1.1/cjpeg-static"
+	}
+	cmd := exec.Command(cjpegCmd, "-quality", fmt.Sprintf("%v", compressionLevel), "-sample", samplingFactor)
 
 	bytesWritten := 0
 	var errReturn error
@@ -635,7 +648,7 @@ func renderText(item *PbItem, textBlockLayouts []TextBlockLayout, left float64, 
 		textImage = TextToImage(&textBlockLayouts[0], item.TextInfo())
 	}
 
-	textImage = ApplyRoundedCorners(textImage, item.FloatSetting("superellipse"), item.Setting("corner-radius"), density)
+	textImage = ApplyRoundedCorners(textImage, item.Setting("corner-radius"), density)
 
 	tiltAngle := item.FloatSetting("tilt")
 	deltaXtilt := 0
@@ -949,7 +962,7 @@ func renderImage(item *PbItem, left float64, top float64, density float64, pbBoo
 		picture = imaging.Sharpen(picture, sharpen)
 	}
 
-	picture = ApplyRoundedCorners(picture, item.FloatSetting("superellipse"), item.Setting("corner-radius"), density)
+	picture = ApplyRoundedCorners(picture, item.Setting("corner-radius"), density)
 
 	frameXOffset, frameYOffset := 0, 0
 	picture, frameXOffset, frameYOffset, cache = ApplyFrame(picture, item, density, pbBook, cache)
@@ -974,7 +987,7 @@ func renderImage(item *PbItem, left float64, top float64, density float64, pbBoo
 		}
 
 		var textImage image.Image = TextToImage(&textBlockLayout, item.TextInfo())
-		textImage = ApplyRoundedCorners(textImage, item.FloatSetting("superellipse"), item.Setting("corner-radius"), density)
+		textImage = ApplyRoundedCorners(textImage, item.Setting("corner-radius"), density)
 
 		captionWidthDots := int(math.Round(dotsFromUnitsFloat(textBlockLayout.width, density)))
 		captionHeightDots := int(math.Round(dotsFromUnitsFloat(textBlockLayout.height, density)))
@@ -1018,7 +1031,7 @@ func renderImage(item *PbItem, left float64, top float64, density float64, pbBoo
 	yDots := int(math.Round(dotsFromUnitsFloat(top+itemYOffset, density)))
 
 	dropXOff, dropYOff := 0, 0
-	if sDropShadow := item.Setting("shadow"); len(sDropShadow) > 0 {
+	if sDropShadow := item.Setting("image-shadow"); len(sDropShadow) > 0 {
 		picture, imageWidthDots, imageHeightDots, dropXOff, dropYOff = DropShadow(picture, imageWidthDots, imageHeightDots, density, sDropShadow)
 	}
 
@@ -1065,7 +1078,7 @@ func renderPages(pbBook *PbBook, outPageRange string, outFilename string) {
 	backgroundCache := make([]BackgroundCacheItem, 0)
 	for pp := range pbBook.pages {
 		changed := false
-		if changed, _ = fileChanged(*inFileFlag, lastModTime); changed {
+		if changed, _ = fileChanged(Opts.InFile(), lastModTime); changed {
 			break
 		}
 		page := &pbBook.pages[pp]
@@ -1081,15 +1094,15 @@ func renderPages(pbBook *PbBook, outPageRange string, outFilename string) {
 			}
 			item := page.rows[0].columns[0].items[0].item
 
-			pageWidth, pageHeight := FloatSize(item.Setting("page-size"))
+			pageWidth, pageHeight := FloatSize(item.PageSetting("page-size"))
 			density = item.Density()
-			top, _, bottom, left = FourTwoOne(item.Setting("margin"))
+			top, _, bottom, left = FourTwoOne(item.PageSetting("margin"))
 			widthDots := int(math.Round(dotsFromUnitsFloat(pageWidth, density)))
 			heightDots := int(math.Round(dotsFromUnitsFloat(pageHeight, density)))
 			dst = image.NewNRGBA(image.Rect(0, 0, widthDots, heightDots))
 
 			// fill the destination with the background
-			sBackground := item.Setting("background")
+			sBackground := item.PageSetting("background")
 			if strings.HasPrefix(sBackground, "#") {
 				backColor := colorToNRGBA(sBackground)
 				draw.Draw(dst, dst.Bounds(), image.NewUniform(color.NRGBA{backColor.R, backColor.G, backColor.B, backColor.A}), image.Point{}, draw.Src)
@@ -1103,12 +1116,12 @@ func renderPages(pbBook *PbBook, outPageRange string, outFilename string) {
 				}
 			}
 
-			header := item.Setting("header")
+			header := item.PageSetting("header")
 			if len(header) > 0 {
 				renderHeader(dst, header, pp, len(pbBook.pages), left, top, -1, density, pbBook.namedItems)
 			}
 
-			footer := item.Setting("footer")
+			footer := item.PageSetting("footer")
 			if len(footer) > 0 {
 				renderHeader(dst, footer, pp, len(pbBook.pages), left, pageHeight-bottom, 1, density, pbBook.namedItems)
 			}
@@ -1146,12 +1159,12 @@ func renderPages(pbBook *PbBook, outPageRange string, outFilename string) {
 
 			w, h := item.PageSizePts()
 			offsets = append(offsets, PageInfo{n, w, h})
-			thisn, thisErr := writePage(dst, objNum, pp, outFilename, isPageRangeMulti, item.IntBookSetting("output-compression"), item.BoolBookSetting("mozjpeg"), item.BookSetting("mozjpeg-sampling"))
+			thisn, thisErr := writePage(dst, objNum, pp, outFilename, isPageRangeMulti, item.IntBookSetting("output-compression"), item.BoolBookSetting("output-mozjpeg"), item.BookSetting("output-mozjpeg-sampling"))
 			if thisErr != nil {
 				return
 			}
 
-			if globalVerboseFlag&4 != 0 {
+			if Opts.Verbose("D") {
 				log.Printf("Rendered Page %v / %v", pp+1, len(pbBook.pages))
 			}
 

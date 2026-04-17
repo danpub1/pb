@@ -24,6 +24,7 @@ func escapeValue(s string) string {
 func escapeText(s string) string {
 	s = strings.ReplaceAll(s, "\\", "\\\\")
 	s = strings.ReplaceAll(s, "\t", "\\t")
+	s = strings.ReplaceAll(s, "\x00", "\\0")
 	s = strings.ReplaceAll(s, "\x01", "\\1")
 	s = strings.ReplaceAll(s, "\x02", "\\2")
 	s = strings.ReplaceAll(s, "\x03", "\\3")
@@ -155,17 +156,60 @@ var rxEscapeSpace, _ = regexp.Compile("`_")
 var rxEscape, _ = regexp.Compile("`(.)")
 
 func unescape(line string) string {
-	line = rxEscapeSpace.ReplaceAllString(line, " ")
-	return rxEscape.ReplaceAllString(line, "$1")
+	line = unescapeEscapee(line, "`_", " ")
+	line = unescapeEscapee(line, "`[^`]", "$2")
+	return strings.ReplaceAll(line, "``", "`")
+}
+
+func unescapeEscapee(text string, replacee string, replacement string) string {
+	runes := strings.Split(replacee, "")
+	if len(runes) < 2 {
+		return text
+	}
+	escape := runes[0]
+	if escape == `\` {
+		escape = escape + escape
+	}
+	replacee = strings.Join(runes[1:], "")
+	if rex, rerr := regexp.Compile(fmt.Sprintf(`^(%[1]v%[2]v)`, escape, replacee)); rerr == nil {
+		for {
+			if rex.MatchString(text) {
+				text = rex.ReplaceAllString(text, replacement)
+			} else {
+				break
+			}
+		}
+	}
+	if rex, rerr := regexp.Compile(fmt.Sprintf(`([^%[1]v])(%[1]v%[2]v)`, escape, replacee)); rerr == nil {
+		for {
+			if rex.MatchString(text) {
+				text = rex.ReplaceAllString(text, fmt.Sprintf("$1%v", replacement))
+			} else {
+				break
+			}
+		}
+	}
+	if rex, rerr := regexp.Compile(fmt.Sprintf(`((%[1]v%[1]v)+)(%[1]v%[2]v)`, escape, replacee)); rerr == nil {
+		for {
+			if rex.MatchString(text) {
+				text = rex.ReplaceAllString(text, fmt.Sprintf("$1%v", replacement))
+			} else {
+				break
+			}
+		}
+	}
+	return text
 }
 
 func unescapeText(text string) string {
-	text = strings.ReplaceAll(text, "\\t", "\t")
-	text = strings.ReplaceAll(text, "\\1", "\x01")
-	text = strings.ReplaceAll(text, "\\2", "\x02")
-	text = strings.ReplaceAll(text, "\\3", "\x03")
-	text = strings.ReplaceAll(text, "\\4", "\x04")
-	text = strings.ReplaceAll(text, "\\n", "\n")
+	text = unescapeEscapee(text, `\n`, "\n")
+	text = unescapeEscapee(text, `\t`, "\t")
+	text = unescapeEscapee(text, `\0`, "\x00")
+	text = unescapeEscapee(text, `\1`, "\x01")
+	text = unescapeEscapee(text, `\2`, "\x02")
+	text = unescapeEscapee(text, `\3`, "\x03")
+	text = unescapeEscapee(text, `\4`, "\x04")
+	text = unescapeEscapee(text, `\[^\\]`, "$2")
 	return strings.ReplaceAll(text, "\\\\", "\\")
 }
 
@@ -271,10 +315,11 @@ func parse(line string, styles map[string]string) PbItem {
 		parts[ii] = strings.TrimSpace(parts[ii])
 		pieces := strings.SplitN(parts[ii], ":", 2)
 		if len(pieces) == 2 {
-			if pieces[0] == "trim" || pieces[0] == "fit" || pieces[0] == "squish" {
+			switch pieces[0] {
+			case "trim", "fit", "squish":
 				pieces[1] = pieces[0] + "," + pieces[1]
 				pieces[0] = "rect"
-			} else if pieces[0] == "crop" {
+			case "crop":
 				pieces[0] = "rect"
 			}
 			theItem.Set(pieces[0], unescape(pieces[1]))
