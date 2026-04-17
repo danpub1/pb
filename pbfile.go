@@ -135,17 +135,17 @@ func decodeTextDirective(directive string) string {
 	if len(parts[2]) > 0 {
 		switch parts[2][0] {
 		case 'L':
-			textAlign = " text-align:left"
+			textAlign = " text-align:left caption-align:left"
 		case 'R':
-			textAlign = " text-align:right"
+			textAlign = " text-align:right caption-align:right"
 		case 'C':
-			textAlign = " text-align:center"
+			textAlign = " text-align:center caption-align:center"
 		case 'J':
-			textAlign = " text-align:justified"
+			textAlign = " text-align:justified caption-align:justified"
 		case 'B':
-			textAlign = " text-align:binding"
+			textAlign = " text-align:binding caption-align:binding"
 		case 'E':
-			textAlign = " text-align:edge"
+			textAlign = " text-align:edge caption-align:edge"
 		}
 	}
 

@@ -285,12 +285,12 @@ Book-Level Settings
 
 * `units:pt`: the units of measure used in laying out the book.  One of `in`, `cm`, `mm`, `pt`
 * `density:2.0`: pixels per unit when converting the content to a page bitmap.  2 pixels per pt (144 ppi) could be considered for a preview quality, and 5 pixels per pt (360 ppi) could be appropriate for printing.
-* `binding:side`: define the binding location, one of `side`, `top`, `none`.  Controls if margins are alternated by even/odd pages
+* `binding:side`: the book's binding location, one of `side`, `top`, `none`.  Controls if margins are alternated by even/odd pages
 * `output-gamma:1.0`: apply a gamma correction to the page bitmap. This is useful to lighten or darken printed output so it better matches the onscreen experience.
-* `output-sharpen:0.0`: apply octave sharpening to the page bitmap after resizing is complete.
-* `output-compression:92`: define the jpeg compression level when creating the page bitmap
+* `output-sharpen:0.0`: apply sharpening to the page bitmap after resizing is complete.
+* `output-compression:92`: the jpeg compression level when creating the page bitmap
 * `output-mozjpeg:false`: use the mozjpeg compressor to create the page bitmap.
-* `output-mozjpeg-sampling:1x1`: specify the subsampling used by mozjpeg
+* `output-mozjpeg-sampling:1x1`: the subsampling used by mozjpeg
 
 Page-Level Settings
 -------------------
@@ -300,8 +300,8 @@ Page-Level Settings
 * `margin:0.0x0.0`: Margins in the order Top/Bottom, Right/Left
 * `margin:0.0`: Margins, all the same
 * `background:#color/name`: Color or named image to use as the page background
-* `header:even-header,odd-header,offset,leading-pages,trailing-pages`: Named text to use as the header
-* `footer:even-footer,odd-footer,offset,leading-pages,trailing-pages`:  Named text to use as the header
+* `header:even-header,odd-header,offse-from-margin,t,leading-pages,trailing-pages`: Named text to use as the header
+* `footer:even-footer,odd-footer,offset-from-margin,,leading-pages,trailing-pages`:  Named text to use as the header
 * `current-page`: false.  Set to true to output the page when previewing. As a shortcut, `current-page` by itself is equivalent to `current-page:true`
 * `row-gutter:6.0`:
 * `distribute-rows:spreadmiddle`: vertical spacing of rows on the page.  Specifies how extra space is distributed after rows are laid out with gutter in between rows.  One of:
@@ -337,37 +337,84 @@ Column-Level Settings
 ---------------------
 * `distribute-item`: vertical spacing of items in a column (same values as for page-distribute)
 * `item-gutter:6.0`: 
-* `keep-columns-together`: false
+* `keep-columns-together:false`: indicates how to break columns when they overflow row width. 
+If a column is too wide, should it be broken and continued on the next page, 
+or should the whole column be moved to the next page?
 
 Image Settings
 --------------
-* `straighten` degrees (Rotate Image)
-* `brightness`: Amount
-* `contrast`: Amount
-* `gamma`: Amount
-* `saturation`: Amount
-* `scontrast`: sigmoidal contrast Amount, Knee
-* `ssaturation`: sigmoidal saturation Amount, Knee
-* `crop:WxH+X+Y` or `crop:WxH+X%+Y%`
-* `trim:#:#,#%`: Trim & Crop to fit in aspect ratio (Center, Left/Top, Right/Bottom, 0-100% [50%])
-* `fit:#:#,#%`: Shrink to fit in aspect ratio (Center, Left/Top, Right/Bottom, 0-100% [50%]))
-* `frame:size:#,name:image,color:#F,border-size:#px,ninepatch:#px`
+* `straighten:0.0`: Rotates an image within its frame
+* `brightness:0.0`: Applies brightness adjustment, -100 to 100
+* `contrast:0.0`: Applies contrast adjustment, -100 to 100
+* `gamma:1.0`: Applies gamma adjustment
+* `saturation:0.0`: Applies saturation adjustment, -100 to 100
+* `sigmoidal:0.0,0.5`: Applies sigmoidal contrast adjustment. -10.0 < factor < 10.0, 0.0 <= midpoint <= 1.0
+* `trim:w:h,50`: (shortcut for rect:trim:w:h,50)
+* `fit:w:h,50`: (shortcut for rect:fit:w:h,50)
+* `squish:w:h` (shortcut for rect:squish:w:h)
+* `crop:100,0,0,#:#,50` (shortcut for rect:100,0,0,#:#,50)
+* `rect:trim:#:#,50`: Trim & Crop to fit in aspect ratio (Center, Left/Top, Right/Bottom, 0-100% [50%])
+* `rect:fit:#:#,50`: Shrink to fit in aspect ratio (Center, Left/Top, Right/Bottom, 0-100% [50%]))
+* `rect:squish:#:#`: Fit to specified aspect ratio without maintaining original aspect ratio
+* `rect:100,0,0,#:#,50`: Zoom to 100% [0-100] of the image, offset at 0%,0%, in the image's aspect ratio.
+Then trim it to the specified aspect ratio and offset
+* `image-frame:#x#x#x#,#color/name,true/false`: Apply an frame to the image of size # (or #x#, or #x#x#x#),
+with the specified color or named image, above/below the image.
+
+Image Size
+----------
+
+Image sizes are specified relative to a square image, so an image size of 100 specifies an image with an area of 100*100.
+If the image being sized has the 3:2 aspect ratio, the area for that width is a = w * w * 2 / 3.
+So to get the equivalent 100*100 area, the width needs to be multipled by sqrt(3/2).
+
+Image size is typically set at the page or book level and overridden when desired at the image level by using a relative size (e.g. larger or smaller).
+
+Example: Layout 3:2 images that fit 2 across and 3 down on a 612x792pt page 6 pt gutter between all of them and 36 pt margins
+```
+Available width = 612 - 36 - 36 - 6 = 534
+Want two images in that space = 267
+Width needed for a 3:2 image = 267 * sqrt(3 / 2) = 327
+
+Also want 3 image high in that space
+Available height = 792 - 36 - 36 - 6 - 6 = 708
+Want three images in that space = 236
+Height needed for a 3:2 image = 236 * sqrt(2 / 3) = 193
+Width for height = 192 * 3 / 2 = 289 
+
+So to fit 3 high it needs to be 289 wide
+```
+
+Example: Layout one 3:2 image and one 16:10 image 2 across and 2 down 612x792pt page 6 pt gutter between all of them and 36 pt margins
+
+```
+3:2 image: 267 * sqrt(3/2) = 327
+16:10 image: 267 * sqrt(16/10) = 338
+One of each = harmonic mean
+267 * 2 / (1/sqrt(3/2) + 1/sqrt(16/10)) = 332
+
+Similarly 2 down: 357 * sqrt(2/3) = 292, times 3/2 = 437
+357 * sqrt(10/16) = 282 * 16/10 = 452
+
+So the harmonic mean of 332 supports one of each across and two rows of either size.
+```
 
 Image Settings Affecting Layout
 -------------------------------
-* `size` - indicates size before Layout
-  * `normal` - minimum size (default) = scale:1
-  * `larger` - minimum size * 1.25 = scale:1.25
-  * `much-larger` minimum size * 1.25 * 1.25 = minimum size * 1.5625 = scale:1.5625
-  * `smaller` - minimum size / 1.25 = minimum size * 0.8 = scale:0.8
-  * `much-smaller` minimum size / 1.25 / 1.25 =  = minimum size / 1.5625 = minimum size * 0.64 = scale:0.64
-  * `scale:#` - minimum size * #
-  * `width:#` - specific width
-  * `width:#%` - % of total width
-  * `width:#%%` - % of remaining width
-  * `height:#` - specific height
-  * `height:#%` - % of total height
-  * `height:#%%` - % of remaining height
+* `size`, `max-size` - size indicates size before resizing, max-size is after resizing
+  * Named Relative Sizes - as shortcuts, these may be specified as is without "size:"
+    * `normal` - size (default) = scale:1
+    * `larger` - size * 1.25 = scale:1.25
+    * `much-larger` - size * 1.25 * 1.25 = size * 1.5625 = scale:1.5625
+    * `much-much-larger` - size * 1.25 * 1.25 = size * 1.953125 = scale:1.953125
+    * `much-much-much-larger` - size * 1.25 * 1.25 = size * 2.44140625 = scale:2.44140625
+    * `smaller` - size / 1.25 = size * 0.8 = scale:0.8
+    * `much-smaller` - size / 1.25 / 1.25 = size / 1.5625 = size * 0.64 = scale:0.64
+    * `much-much-smaller` - size / 1.25 / 1.25 / 1.25 = size / 1.953125 = size * 0.512 = scale:0.512
+    * `much-much-much-smaller` - size / 1.25 / 1.25 / 1.25 / 1.25 = size / 2.44140625 = size * 0.4096 = scale:0.4096
+  * `scale:#` - size * #
+  * `#` - specific size
+  * `#%` - % of total size
 * `caption-position:below`: `above` or `below`
 * `caption-squareness:100`: percentage of the weight of the actual image aspect ratio and square to give portrait images more space for captions.  0 means lay the caption out as if the image was square, and 100 means lay the caption out with the image's actual aspect ratio.
 
@@ -387,68 +434,10 @@ Text Settings
 Text or Image Settings
 ----------------------
 * `name`
-* `column-break:yes,no`
-* `row-break:yes,no`
-* `page-break:yes,no`
+* `column-break:yes,no` (as a shortcut, may be specified without ":yes")
+* `row-break:yes,no` (as a shortcut, may be specified without ":yes")
+* `page-break:yes,no` (as a shortcut, may be specified without ":yes")
 * `float:WxH+X+Y` - takes image / text out of layout
 * `rotate`: after layout or float
 * `page-break`: false
 
-## Design
-
-Functions in a pipeline
-
-```
-const (
-    ItemTypeBook = iota
-    ItemTypePage
-    ItemTypeRow
-    ItemTypeImage
-    ItemTypeText
-    ItemTypeGroup
-)
-
-type item struct {
-   itemType int
-   settings map[string]string
-}
-```
-
-* Read(fileName string) ([]string) 
-    * read file into a []byte, 
-    * cast to string, 
-    * split across line breaks to []string,
-    * Join continued lines (with leading space)
-    * filter out blank lines & comment lines
-    * filter out leading hash-bang line
-    * process include directives
-    * Prefix unprefixed lines based on whether they appear to be image or text
-    * Expand paths and wildcards in image and font lines 
-
-* Canonicalize(lines []string) ([]item)
-    * Create item based on type
-    * Convert image + caption into column
-    * Convert directives prefixed with > to children of parent item
-    * parse setting:value to settings
-
-* CalculateSizes(items []item) ([]item)
-    * lookup aspect ratio, minimum width, minimum height for every image item
-    * calculate height for every text item
-    * calculate minimum height, minimum width for every image item with a caption, 
-    * cache wherever possible
-
-* Paginate(items []item) ([]item)
-    * move image and text items into children members of row items, output []item
-        * Calculate height and width of each row
-    * move row items into children members of page items
-
-* LayoutPages(items []item) ([]item)
-    * Layout pages, assign each image and text item specific rectangles on the page
-
-* OutputPages(items []item)
-    * pb backend
-    * GMIC backend
-    * PDF backend
-    * ImageMagick backend
-    * SVG backend
-    * LibreOffice backend

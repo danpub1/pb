@@ -322,7 +322,11 @@ func (item *PbItem) Units() int {
 }
 
 func (item *PbItem) TextAlign() int {
-	switch item.Setting("text-align") {
+	settingName := "text-align"
+	if item.itemType == ItemTypeImage {
+		settingName = "caption-align"
+	}
+	switch item.Setting(settingName) {
 	case "left":
 		return TextAlignLeft
 	case "center":
@@ -439,7 +443,7 @@ func (item *PbItem) ImageFrame() *FrameInfo {
 		}
 	}
 	if len(frameParts) > 2 && len(frameParts[2]) > 0 {
-		frameInfo.above = Atob(frameParts[2])
+		frameInfo.above = frameParts[2] == "above"
 	}
 
 	return &frameInfo
@@ -773,11 +777,15 @@ func (item *PbItem) ImageRectSetting() (int, int, int, float64, int) {
 		if len(parts) > 1 && len(parts[1]) > 0 {
 			xOffset = Atoi(parts[1])
 			xOffset = int(math.Min(math.Max(float64(xOffset), 0), 100))
+		} else {
+			xOffset = (100 - zoom) / 2
 		}
 
 		if len(parts) > 2 && len(parts[2]) > 0 {
 			yOffset = Atoi(parts[2])
 			yOffset = int(math.Min(math.Max(float64(yOffset), 0), 100))
+		} else {
+			yOffset = (100 - zoom) / 2
 		}
 
 		nextPart = 3
@@ -968,58 +976,62 @@ var defaultSettings = map[string]string{
 	"keep-columns-together": "false",
 
 	// image or text (or similar related settings)
-	"item-align":    "center", // left center right - how images or text of different width are aligned in a column
+	"item-align":   "center", // left center right - how images or text of different width are aligned in a column
+	"rotate":       "0",      // 0, 90, 180, 270
+	"page-break":   "false",
+	"row-break":    "false",
+	"column-break": "true",
+	"float":        "", // X,Y,width,height
+	"name":         "",
+
 	"tilt":          "0",
 	"corner-radius": "0", // size[%],superellipse
-	"name":          "",
-	"page-break":    "false",
-	"row-break":     "false",
-	"column-break":  "true",
-	"text-frame":    "0", // size,color
-	"text-outline":  "",  // color,size
-	"text-shadow":   "",  // color, blur, x, y
-	"image-frame":   "0", // size,color/name,above
-	"image-outline": "",  // color,size
-	"image-shadow":  "",  // color, blur, x, y
-	"rotate":        "0", // 0, 90, 180, 270
-	"float":         "",  // X,Y,width,height
+
+	"text-frame":       "0", // size,color
+	"text-outline":     "",  // color,size
+	"text-shadow":      "",  // color, blur, x, y
+	"text-background":  "#0000",
+	"image-frame":      "0", // size,color/name,above/below
+	"image-outline":    "",  // color,size
+	"image-shadow":     "",  // color, blur, x, y
+	"image-background": "#0000",
 
 	// image
-	"max-size":         "100%",
-	"size":             "25%",
-	"rect":             "100", // fit,3:2,50  trim,3:2,50  squish,3:2  #,x:y,50,50  #=zoom level 0-100, Missing aspect=image aspect, Missing position=50
-	"straighten":       "0.0",
-	"brightness":       "0.0",
-	"contrast":         "0.0",
-	"gamma":            "1.0",
-	"saturation":       "0.0",
-	"sigmoidal":        "0.0,0.50",
-	"s-saturation":     "0.0,0.50",
-	"sharpen":          "0.0",
-	"blur":             "0.0",
-	"recurse":          "true",
-	"image":            "",
-	"image-background": "#0000",
+	"size":       "25%",
+	"max-size":   "100%",
+	"rect":       "100", // fit,3:2,50  trim,3:2,50  squish,3:2  #,x:y,50,50  #=zoom level 0-100, Missing aspect=image aspect, Missing position=50
+	"straighten": "0.0",
+	"brightness": "0.0",
+	"contrast":   "0.0",
+	"gamma":      "1.0",
+	"saturation": "0.0",
+	"sigmoidal":  "0.0,0.50",
+	"sharpen":    "0.0",
+	"blur":       "0.0",
+	"recurse":    "true",
+	"image":      "",
 
 	// text
 	"caption-position":   "below",
 	"caption-squareness": "100",
 	"caption-gutter":     "0",
-	"text-align":         "left",
-	"font":               "",
-	"font-size":          "14",
-	"linespacing":        "1",
-	"letterspacing":      "0",
-	"wordspacing":        "0",
-	"padding":            "3.5",
-	"text-wrap":          "balanced",
-	"text-width":         "100%",
-	"text-color":         "#0",
-	"text-background":    "#0000",
-	"justify-weight":     "2.5",
-	"breakchars":         "",
-	"text":               "",
-	"text-height":        "0",
+	"caption-align":      "center",
+
+	"text-align": "left",
+	"text-width": "100%",
+	"text-wrap":  "unbalanced",
+
+	"font":           "",
+	"font-size":      "11",
+	"linespacing":    "1",
+	"letterspacing":  "0",
+	"wordspacing":    "0",
+	"padding":        "3.5",
+	"text-color":     "#0",
+	"justify-weight": "2.5",
+	"breakchars":     "",
+	"text":           "",
+	"text-height":    "0",
 }
 
 func (item *PbItem) Set(setting string, value string) {
