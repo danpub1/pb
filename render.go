@@ -845,9 +845,11 @@ func GetNamedImage(sImage string, left float64, top float64, density float64, pb
 		}
 		if backgroundItem != nil {
 			picture, xDots, yDots, deltaXtilt, deltaYtilt, imageWidthDots, imageHeightDots, newCache := renderImage(backgroundItem, left, top, density, pbBook, cache)
-			cache = newCache
-			cacheItem = &BackgroundCacheItem{sImage, picture, xDots, yDots, deltaXtilt, deltaYtilt, imageWidthDots, imageHeightDots}
-			cache = AddBackgourndCacheItem(cache, cacheItem)
+			if picture != nil {
+				cache = newCache
+				cacheItem = &BackgroundCacheItem{sImage, picture, xDots, yDots, deltaXtilt, deltaYtilt, imageWidthDots, imageHeightDots}
+				cache = AddBackgourndCacheItem(cache, cacheItem)
+			}
 		}
 	}
 	return cacheItem, cache
@@ -1143,7 +1145,9 @@ func renderPages(pbBook *PbBook, outPageRange string, outFilename string) {
 						if item.itemType == ItemTypeImage {
 							picture, xDots, yDots, deltaXtilt, deltaYtilt, imageWidthDots, imageHeightDots, newCache := renderImage(item, left, top, density, pbBook, backgroundCache)
 							backgroundCache = newCache
-							draw.Draw(dst, image.Rect(xDots-deltaXtilt, yDots-deltaYtilt, xDots+imageWidthDots+deltaXtilt, yDots+imageHeightDots+deltaYtilt), picture, image.Point{}, draw.Over)
+							if picture != nil {
+								draw.Draw(dst, image.Rect(xDots-deltaXtilt, yDots-deltaYtilt, xDots+imageWidthDots+deltaXtilt, yDots+imageHeightDots+deltaYtilt), picture, image.Point{}, draw.Over)
+							}
 						}
 					}
 				}

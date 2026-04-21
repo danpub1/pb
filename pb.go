@@ -357,14 +357,3 @@ func main() {
 		}
 	}
 }
-
-// TTD:
-// Frame: frame (image), text-frame: size,color/name,below/above
-// Output a text as an image (can do already, need to get height from verbose output)
-// input and output handlers for different file types
-// Output sigmoidal brightness/lightness?
-// spreadedge, spreadbinding
-// eyelevel, spreadeyelevel, mouthlevel, spreadmouthlevel?
-// highlights, midtones, shadows
-// Image, font https://... downloaded and then cached (in a zip file?)
-// HSL Adjustment

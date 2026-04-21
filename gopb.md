@@ -401,9 +401,10 @@ So the harmonic mean of 332 supports one of each across and two rows of either s
 
 Image Settings Affecting Layout
 -------------------------------
+* `float:x,y,w,h`: - Displays an image that did not have space laid out for it
 * `size`, `max-size` - size indicates size before resizing, max-size is after resizing
   * Named Relative Sizes - as shortcuts, these may be specified as is without "size:"
-    * `normal` - size (default) = scale:1
+    * `normal` - size (default) = scale:1 (this is the same as not specifying size)
     * `larger` - size * 1.25 = scale:1.25
     * `much-larger` - size * 1.25 * 1.25 = size * 1.5625 = scale:1.5625
     * `much-much-larger` - size * 1.25 * 1.25 = size * 1.953125 = scale:1.953125
@@ -430,14 +431,95 @@ Text Settings
 * `padding:0`: Text padding, all the same
 * `text-wrap:balanced,unbalanced`: do not break lines to make lines equal in length
 * `width:`: width of text block in units, percent, or percent of remainder
+* `float:#,#`: Displays text that did not have space laid out of it. Specifies the offset X and Y where to put the text.
 
 Text or Image Settings
 ----------------------
-* `name`
+* `name`: creates a named image or text that can be used for headers, footers, backgrounds, frames, etc. 
 * `column-break:yes,no` (as a shortcut, may be specified without ":yes")
 * `row-break:yes,no` (as a shortcut, may be specified without ":yes")
 * `page-break:yes,no` (as a shortcut, may be specified without ":yes")
-* `float:WxH+X+Y` - takes image / text out of layout
-* `rotate`: after layout or float
-* `page-break`: false
+* `rotate`: after layout or float, only multiples of 90 are supported
 
+## Command Line Options
+
+With the exception of the input file name all command line options may be specified in the input file.  What is provided on the command line
+takes precedence.
+
+* `-i input-file`: Specify the input `.pb` file
+* `-o output-file`: Specify the output `.pdf`, `.png`, `.jpg`, or `.jpeg` file
+* `-p page-range`: Specify the pages to render
+* `-v verbosity`: 
+    * `D`: Details
+    * `P`: Print processed input file
+    * `X`: Print processed input file with comments
+    * `L`: Logging
+* `-w watch`: Specify `1` to watch the input file and reprocess when it changes.
+Otherwise, process the input file once and then exit
+* `-cjpeg path-to-cjpeg`: When using mozjpeg to render, specify the path to the executable
+
+### Developer Options
+* `-c cache`: 
+    * `1`: No image caching
+    * `2`: Cache image information only while watching
+    * `4`: Persist image cache and reuse always
+    * `8`: No resize caching
+    * `16`: Cache resiz information only while watching
+    * `32`: Persist image cache and reuse always
+* `-noresize`: Specify `1` to disable resizing step
+* `-nolayout`: Specify `1` to disable layout step
+* `-norender`: Specify `1` to disable rendering step
+
+## TIPS
+
+### Only one book item
+There is only one book `***` allowed.  If using an include file, either put the book in the include, or use it to define settings that are applied to the book.
+
+### Points are the default
+If using another base measurement, be sure to explicitly define everything in that measurement. Otherwise the default units will be used, which are in points
+
+### Listing Wildcarded Files
+To quickly create a list of the files that match a wildcard, use the command line option `-v P`, or the equivalent `>>> v P` in the file.
+Redirect the output to another file and cut and paste the listing.
+
+### Clear a setting for a page
+To clear the header for a page, for example: `+++ header:`
+
+### Use a text to make a rectangle
+```
+$ text-width:72 padding:72x0x0x0 font-size:0 text-background:#F0F # 
+```
+
+### Use a text to create a blank page
+```
++++
+#
+```
+
+### Aspects not included in layout
+
+Frames, outlines, shadows, and tilts are not included in the layout process
+
+### Align Heading Immediately above body
+
+Use `column-break:false` to put both the header and the body in a column,
+and set `item-gutter:0`
+
+### Construct a Cover
+
+Set margins and gutters to zero.  Size one picture to the back cover,
+a row of text whose height is the width of the spine, rotates 90 degrees,
+and then another picture sized to the front cover.
+
+## Things to Do
+
+* Output a text as an image (can do already, need to get height from verbose output)
+* Input and output handlers for more file types
+* Output sigmoidal brightness/lightness?  Existing output gamma is one type of this
+* spreadedge, spreadbinding - just not implemented
+* eyelevel, spreadeyelevel, mouthlevel, spreadmouthlevel - can do with blank texts as placeholders
+* highlights, midtones, shadows
+* Image, font https://... downloaded and then cached (in a zip file?)
+* HSL Adjustment
+* Named pages that could be embedded as an image in a page
+* Calendar pages

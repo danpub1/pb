@@ -321,6 +321,9 @@ func parse(line string, styles map[string]string) PbItem {
 				pieces[0] = "rect"
 			case "crop":
 				pieces[0] = "rect"
+			case "scale":
+				pieces[1] = pieces[0] + ":" + pieces[1]
+				pieces[0] = "size"
 			}
 			theItem.Set(pieces[0], unescape(pieces[1]))
 		} else if len(pieces) == 1 {
