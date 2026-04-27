@@ -9,9 +9,6 @@ $$$ 2 font:{{fz}}FiraMono-Regular.otf font-size:8
 $$$ 3 font:{{fz}}FiraSans-Bold.otf font-size:12
 $$$ spacer $ padding:6 font-size:0 # .
 
->>> o example/example.pdf
->>> p -
-
 $ font:{{fz}}FiraSans-Bold.otf font-size:24 linespacing:1.5 #C Examples
 
 ### Example 1: Pictures and text separate
@@ -90,6 +87,7 @@ $ font-size:16 #C Looking south across Love Ranch.
 # 2011_06_30_fco-bru_142\nThe Matterhorn. Zermatt is below the clouds behind it.
 # 2011_06_30_fco-bru_150\nThe Matterhorn. Zermatt is below the clouds behind it. Kleine Matterhorn is on the right. The largest of the two lakes is Lago di Goillet. You can see the ski trails coming down from the Swiss side to the Italian (near) side, into Brueil-Cervinia.
 
+#C Examples are from Doc Searls' Flickr site\nCC-by
 ##C 
  https://www.flickr.com/photos/docsearls/55094659211/in/album-72177720332025828
  https://www.flickr.com/photos/docsearls/51172938517/in/album-72157719209653980

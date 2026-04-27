@@ -1,7 +1,7 @@
 # pb
 
 pb is a text-to-photobook conversion tool.
-From a simple list of photos interspersed with text, it generates a reasonably formatted photobook. Its markup language supports sufficient formatting to make a nicely finished product.
+From a marked-up list of photos, it generates a reasonably formatted photobook. Its markup language supports sufficient formatting to make a nicely finished product.
 
 Uses:
 * Make a nicely arranged photo book with captions and text describing the photos
@@ -446,29 +446,29 @@ Text or Image Settings
 With the exception of the input file name all command line options may be specified in the input file.  What is provided on the command line
 takes precedence.
 
-* `-i input-file`: Specify the input `.pb` file
-* `-o output-file`: Specify the output `.pdf`, `.png`, `.jpg`, or `.jpeg` file
-* `-p page-range`: Specify the pages to render
-* `-v verbosity`: 
+* `input-file`: Specify the input `.pb` file
+* `--output-file`: Specify the output `.pdf`, `.png`, `.jpg`, or `.jpeg` file
+* `--page-range`: Specify the pages to render
+* `--verbose`: 
     * `D`: Details
     * `P`: Print processed input file
     * `X`: Print processed input file with comments
     * `L`: Logging
-* `-w watch`: Specify `1` to watch the input file and reprocess when it changes.
+* `--watch`: Specify `1` to watch the input file and reprocess when it changes.
 Otherwise, process the input file once and then exit
-* `-cjpeg path-to-cjpeg`: When using mozjpeg to render, specify the path to the executable
+* `--cjpeg-command path-to-cjpeg`: When using mozjpeg to render, specify the path to the executable
 
 ### Developer Options
-* `-c cache`: 
+* `--cache-mode`: 
     * `1`: No image caching
     * `2`: Cache image information only while watching
     * `4`: Persist image cache and reuse always
     * `8`: No resize caching
     * `16`: Cache resiz information only while watching
     * `32`: Persist image cache and reuse always
-* `-noresize`: Specify `1` to disable resizing step
-* `-nolayout`: Specify `1` to disable layout step
-* `-norender`: Specify `1` to disable rendering step
+* `--noresize`: Specify `1` to disable resizing step
+* `--nolayout`: Specify `1` to disable layout step
+* `--norender`: Specify `1` to disable rendering step
 
 ## TIPS
 

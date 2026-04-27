@@ -346,19 +346,16 @@ func parse(line string, styles map[string]string) PbItem {
 	return theItem
 }
 
-func processAsLinesFromBasePath(lines []string, basePath string, styles map[string]string, options map[string]string) ([]PbItem, map[string]string, map[string]string) {
+func processAsLinesFromBasePath(lines []string, basePath string, styles map[string]string) ([]PbItem, map[string]string) {
 	var items []PbItem
 	for _, s := range lines {
 		if strings.HasPrefix(s, "$$$ ") {
 			style := strings.Replace(s, "$$$ ", "", 1)
 			styles = defineStyle(style, styles)
-		} else if strings.HasPrefix(s, ">>> ") {
-			option := strings.Replace(s, ">>> ", "", 1)
-			options = defineOption(option, options)
 		} else if strings.HasPrefix(s, "@@@ ") {
 			file2 := strings.Replace(s, "@@@ ", "", 1)
 			var includedItems []PbItem
-			includedItems, styles, options = readInputFile(localizePath(file2, basePath), styles, options)
+			includedItems, styles = readInputFile(localizePath(file2, basePath), styles)
 			for _, includedItem := range includedItems {
 				items = append(items, includedItem)
 			}
@@ -375,7 +372,7 @@ func processAsLinesFromBasePath(lines []string, basePath string, styles map[stri
 		}
 	}
 
-	return items, styles, options
+	return items, styles
 }
 
 func glob(path string, recurse bool) ([]string, error) {
@@ -556,12 +553,6 @@ func expandWild(item *PbItem) []PbItem {
 	return newItems
 }
 
-func defineOption(line string, options map[string]string) map[string]string {
-	parts := strings.SplitN(line, " ", 2)
-	options[parts[0]] = parts[1]
-	return options
-}
-
 func defineStyle(line string, styles map[string]string) map[string]string {
 	parts := strings.SplitN(line, " ", 2)
 	styles[parts[0]] = applyStyles(parts[1], styles)
@@ -647,7 +638,7 @@ func ApplyItemSpecificStyles(items []PbItem) {
 	}
 }
 
-func readInputFile(inFile string, styles map[string]string, options map[string]string) ([]PbItem, map[string]string, map[string]string) {
+func readInputFile(inFile string, styles map[string]string) ([]PbItem, map[string]string) {
 	var inBytes []byte
 	var err error
 
@@ -667,10 +658,10 @@ func readInputFile(inFile string, styles map[string]string, options map[string]s
 	inStrings = makeIntoLines(inStrings)
 
 	var items []PbItem
-	items, styles, options = processAsLinesFromBasePath(inStrings, basePath, styles, options)
+	items, styles = processAsLinesFromBasePath(inStrings, basePath, styles)
 	ApplyItemSpecificStyles(items)
 
-	return items, styles, options
+	return items, styles
 }
 
 func BasePath(fileName string) string {
@@ -681,14 +672,25 @@ func BasePath(fileName string) string {
 	return basePath
 }
 
-func ReadPbFile(inFileFlag string) ([]PbItem, map[string]string) {
-	items, _, options := readInputFile(inFileFlag, map[string]string{}, map[string]string{})
+func ReadPbFile(inFileFlag string, args []string) []PbItem {
+	items, _ := readInputFile(inFileFlag, map[string]string{})
 
+	var book *PbItem = nil
 	for ii := range items {
 		items[ii].pb = items
+		if items[ii].itemType == ItemTypeBook && book == nil {
+			book = &items[ii]
+		}
+	}
+
+	for _, arg := range args {
+		if setting, found := strings.CutPrefix(arg, "--"); found {
+			parts := strings.SplitN(setting, ":", 2)
+			book.Set(parts[0], parts[1])
+		}
 	}
 
 	OptimizeSettings(items)
 
-	return items, options
+	return items
 }

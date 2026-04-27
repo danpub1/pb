@@ -1,7 +1,6 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -126,174 +125,64 @@ const (
 
 var lastModTime time.Time
 
-type OptionSet struct {
-	inFile    string
-	outFile   string
-	verbose   string
-	pageRange string
-	cjpegCmd  string
-	watch     int
-	cacheMode int
-	noresize  int
-	nolayout  int
-	norender  int
-}
-
 type Options struct {
-	fileOptions OptionSet
-	argsOptions OptionSet
+	book *PbItem
 }
 
 var Opts Options
 
-func (this *Options) ParseFileOptions(options map[string]string) {
-	if val, exists := options["o"]; exists {
-		this.fileOptions.outFile = val
-	}
-
-	if val, exists := options["v"]; exists {
-		this.fileOptions.verbose = val
-	}
-
-	if val, exists := options["p"]; exists {
-		this.fileOptions.pageRange = val
-	}
-
-	if val, exists := options["w"]; exists {
-		this.fileOptions.watch = Atoi(val)
-	}
-
-	if val, exists := options["cache"]; exists {
-		this.fileOptions.cacheMode = Atoi(val)
-	}
-
-	if val, exists := options["noresize"]; exists {
-		this.fileOptions.noresize = Atoi(val)
-	}
-
-	if val, exists := options["nolayout"]; exists {
-		this.fileOptions.nolayout = Atoi(val)
-	}
-
-	if val, exists := options["norender"]; exists {
-		this.fileOptions.norender = Atoi(val)
-	}
-
-	if val, exists := options["cjpeg"]; exists {
-		this.fileOptions.cjpegCmd = val
-	}
-}
-
-func (this *Options) InFile() string {
-	return this.argsOptions.inFile
-}
-
-func (this *Options) OutFile() string {
-	if len(this.argsOptions.outFile) > 0 {
-		return this.argsOptions.outFile
-	} else {
-		return this.fileOptions.outFile
+func (this *Options) Set(items []PbItem) {
+	this.book = nil
+	for ii := range items {
+		items[ii].pb = items
+		if items[ii].itemType == ItemTypeBook && this.book == nil {
+			this.book = &items[ii]
+		}
 	}
 }
 
 func (this *Options) Verbose(level string) bool {
-	return (len(this.argsOptions.verbose) > 0 && strings.Contains(this.argsOptions.verbose, level)) ||
-		(len(this.argsOptions.verbose) == 0 && len(this.fileOptions.verbose) > 0 && strings.Contains(this.fileOptions.verbose, level))
+	return strings.Contains(this.book.BookSetting("verbose"), level)
 }
 
 func (this *Options) PageRange() string {
-	if len(this.argsOptions.pageRange) > 0 {
-		return this.argsOptions.pageRange
-	} else {
-		return this.fileOptions.pageRange
-	}
+	return this.book.BookSetting("page-range")
 }
 
 func (this *Options) Watch() bool {
-	if this.argsOptions.watch != WatchModeUnknown {
-		return this.argsOptions.watch == WatchModeOn
-	} else {
-		return this.fileOptions.watch == WatchModeOn
-	}
+	return this.book.IntBookSetting("watch") == WatchModeOn
 }
 
 func (this *Options) Cache() int {
-	if this.argsOptions.cacheMode != CacheModeUnknown {
-		return this.argsOptions.cacheMode
-	} else {
-		return this.fileOptions.cacheMode
-	}
+	return this.book.IntBookSetting("cache-mode")
 }
 
-func (this *Options) Noresize() bool {
-	if this.argsOptions.noresize != NoresizeModeUnknown {
-		return this.argsOptions.noresize == NoresizeModeOn
-	} else {
-		return this.fileOptions.noresize == NoresizeModeOn
-	}
-}
-
-func (this *Options) Nolayout() bool {
-	if this.argsOptions.nolayout != NolayoutModeUnknown {
-		return this.argsOptions.nolayout == NolayoutModeOn
-	} else {
-		return this.fileOptions.nolayout == NolayoutModeOn
-	}
-}
-
-func (this *Options) Norender() bool {
-	if this.argsOptions.norender != NorenderModeUnknown {
-		return this.argsOptions.norender == NorenderModeOn
-	} else {
-		return this.fileOptions.norender == NorenderModeOn
-	}
-}
-
-func (this *Options) CjpegCmd() string {
-	if len(this.argsOptions.cjpegCmd) > 0 {
-		return this.argsOptions.cjpegCmd
-	} else {
-		return this.fileOptions.cjpegCmd
-	}
-}
+var inFile = ""
 
 func main() {
-	Opts.fileOptions = OptionSet{
-		inFile:    "",
-		outFile:   "",
-		verbose:   "",
-		pageRange: "-",
-		cacheMode: CacheModeImageNone | CacheModeResizeNone,
-		watch:     WatchModeOff,
-		noresize:  NoresizeModeOff,
-		nolayout:  NolayoutModeOff,
-		norender:  NorenderModeOff,
-		cjpegCmd:  "",
+	args := os.Args[1:]
+
+	for _, arg := range args {
+		if !strings.HasPrefix(arg, "--") {
+			if inFile == "" {
+				inFile = arg
+			} else {
+				log.Printf("Only one input file is allowed, %v ignored", arg)
+			}
+		}
 	}
 
-	flag.StringVar(&(Opts.argsOptions.inFile), "i", "", "Input File")
-	flag.StringVar(&(Opts.argsOptions.outFile), "o", "", "Output File")
-	flag.StringVar(&(Opts.argsOptions.verbose), "v", "", "Verbose Level")
-	flag.StringVar(&(Opts.argsOptions.pageRange), "p", "", "Page Range")
-	flag.IntVar(&(Opts.argsOptions.watch), "w", WatchModeUnknown, "Watch Level")
-	flag.IntVar(&(Opts.argsOptions.cacheMode), "cache", CacheModeUnknown, "Cache Level")
-	flag.IntVar(&(Opts.argsOptions.noresize), "noresize", NoresizeModeUnknown, "No Resize")
-	flag.IntVar(&(Opts.argsOptions.nolayout), "nolayout", NolayoutModeUnknown, "No Layout")
-	flag.IntVar(&(Opts.argsOptions.norender), "norender", NorenderModeUnknown, "No Render")
-	flag.StringVar(&(Opts.argsOptions.cjpegCmd), "cjpeg", "", "cjpeg path")
-	flag.Parse()
-
-	if Opts.InFile() == "" {
-		flag.Usage()
-		log.Fatal("no input file specified")
+	if inFile == "" {
+		log.Fatal("No input file specified")
+		return
 	}
 
-	_, lastModTime = fileChanged(Opts.InFile(), time.Time{})
+	_, lastModTime = fileChanged(inFile, time.Time{})
 
 	for {
-		items, options := ReadPbFile(Opts.InFile())
+		items := ReadPbFile(inFile, args)
 
-		Opts.ParseFileOptions(options)
+		Opts.Set(items)
 
 		if Opts.Verbose("D") {
 			log.Printf("Read input file")
@@ -318,26 +207,20 @@ func main() {
 		}
 
 		// calculate sizes that fills available space
-		if !Opts.Noresize() {
-			resizePages(pbBook, Opts.PageRange())
+		resizePages(pbBook, Opts.PageRange())
 
-			if Opts.Verbose("D") {
-				log.Printf("Resized pages")
-			}
+		if Opts.Verbose("D") {
+			log.Printf("Resized pages")
 		}
 
 		// determine positions on page
-		if !Opts.Nolayout() {
-			layoutPages(pbBook, Opts.PageRange())
+		layoutPages(pbBook, Opts.PageRange())
 
-			if Opts.Verbose("D") {
-				log.Printf("Laid out pages")
-			}
+		if Opts.Verbose("D") {
+			log.Printf("Laid out pages")
 		}
 
-		if !Opts.Norender() {
-			renderPages(pbBook, Opts.PageRange(), Opts.OutFile())
-		}
+		renderPages(pbBook, Opts.PageRange())
 
 		if Opts.Verbose("X") {
 			fmt.Println(printItems(items, true))
@@ -352,7 +235,7 @@ func main() {
 		}
 
 		changed := false
-		for changed, lastModTime = fileChanged(Opts.InFile(), lastModTime); !changed; changed, lastModTime = fileChanged(Opts.InFile(), lastModTime) {
+		for changed, lastModTime = fileChanged(inFile, lastModTime); !changed; changed, lastModTime = fileChanged(inFile, lastModTime) {
 			time.Sleep(time.Duration(int64(1) * 1000 * 1000 * 1000))
 		}
 	}

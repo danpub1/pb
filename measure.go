@@ -11,13 +11,13 @@ type ImageCacheEntry struct {
 	ImageHeightPx int
 }
 
+var firstTimeImageCache = true
+
 func loadImageCache() map[string]ImageCacheEntry {
 	cache := map[string]ImageCacheEntry{}
 
-	if Opts.Cache()&CacheModeImageNone != 0 || Opts.Cache()&CacheModeImageDuring != 0 {
-		if Opts.Cache()&CacheModeImageDuring != 0 {
-			Opts.argsOptions.cacheMode = (Opts.argsOptions.cacheMode & (CacheModeAll ^ CacheModeImageDuring)) | CacheModeImageFull
-		}
+	if Opts.Cache()&CacheModeImageNone != 0 || Opts.Cache()&CacheModeImageDuring != 0 && firstTimeImageCache {
+		firstTimeImageCache = false
 		return cache
 	}
 

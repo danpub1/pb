@@ -274,13 +274,13 @@ func breakIntoPages(items []PbItem) *PbBook {
 	return ToPbBook(items)
 }
 
+var firstTimeResizeCache bool = true
+
 func loadResizeCache() map[string]string {
 	cache := map[string]string{}
 
-	if Opts.Cache()&CacheModeResizeNone != 0 || Opts.Cache()&CacheModeResizeDuring != 0 {
-		if Opts.Cache()&CacheModeResizeDuring != 0 {
-			Opts.argsOptions.cacheMode = (Opts.argsOptions.cacheMode & (CacheModeAll ^ CacheModeResizeDuring)) | CacheModeResizeFull
-		}
+	if Opts.Cache()&CacheModeResizeNone != 0 || Opts.Cache()&CacheModeResizeDuring != 0 && firstTimeResizeCache {
+		firstTimeResizeCache = false
 		return cache
 	}
 
@@ -448,10 +448,15 @@ func resizePages(pb *PbBook, outPageRange string) {
 	for pp := range pb.pages {
 		if isPageInRange(outPageRange, pp) || isCurrentPage(pb, pp) {
 			changed := false
-			if changed, _ = fileChanged(Opts.InFile(), lastModTime); changed {
+			if changed, _ = fileChanged(inFile, lastModTime); changed {
 				break
 			}
 			page := &pb.pages[pp]
+
+			if item := page.PbItem(); item != nil && item.BoolPageSetting("noresize") {
+				continue
+			}
+
 			sPage := serializePage(page)
 			if newSPage, jsonhash := checkResizeCacheEntry(&resizeCache, sPage); newSPage != "" {
 				deserializePage(newSPage, page)
@@ -550,6 +555,11 @@ func layoutPages(pbBook *PbBook, outPageRange string) {
 	for pp := range pbBook.pages {
 		if isPageInRange(outPageRange, pp) || isCurrentPage(pbBook, pp) {
 			page := &pbBook.pages[pp]
+
+			if item := page.PbItem(); item != nil && item.BoolPageSetting("nolayout") {
+				continue
+			}
+
 			// pageHeight := page.height()
 			for row := range page.rows {
 				rowHeight := page.rows[row].height()

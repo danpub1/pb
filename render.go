@@ -243,7 +243,7 @@ func (writer *PdfJpegObjectWriter) Finish() (int, error) {
 	return bytesWritten, err
 }
 
-func writePage(img image.Image, objNum int, curPage int, outFilename string, isPageRangeMulti bool, compressionLevel int, useMozJpeg bool, samplingFactor string) (int, error) {
+func writePage(img image.Image, objNum int, curPage int, outFilename string, isPageRangeMulti bool, compressionLevel int, useMozJpeg bool, samplingFactor string, cjpegCmd string) (int, error) {
 	ext := filepath.Ext(outFilename)
 	format := strings.ToLower(ext)
 	if isPageRangeMulti && format != ".pdf" {
@@ -274,7 +274,7 @@ func writePage(img image.Image, objNum int, curPage int, outFilename string, isP
 		if useMozJpeg {
 			bytesWritten := 0
 			var err error
-			if bytesWritten, err = writeJPEG(img, out, compressionLevel, samplingFactor); err != nil {
+			if bytesWritten, err = writeJPEG(img, out, compressionLevel, samplingFactor, cjpegCmd); err != nil {
 				log.Print(err)
 				return 0, err
 			}
@@ -299,7 +299,7 @@ func writePage(img image.Image, objNum int, curPage int, outFilename string, isP
 
 		if useMozJpeg {
 			var err error
-			if _, err = writeJPEG(img, writer, compressionLevel, samplingFactor); err != nil {
+			if _, err = writeJPEG(img, writer, compressionLevel, samplingFactor, cjpegCmd); err != nil {
 				log.Print(err)
 				return 0, err
 			}
@@ -525,8 +525,7 @@ func convertImage(picture image.Image) image.Image {
 	return picture
 }
 
-func writeJPEG(picture image.Image, out io.Writer, compressionLevel int, samplingFactor string) (int, error) {
-	cjpegCmd := Opts.CjpegCmd()
+func writeJPEG(picture image.Image, out io.Writer, compressionLevel int, samplingFactor string, cjpegCmd string) (int, error) {
 	if len(cjpegCmd) == 0 {
 		cjpegCmd = "/home/dms/programming/mozjpeg-4.1.1/mozjpeg-4.1.1/cjpeg-static"
 	}
@@ -1067,23 +1066,30 @@ func AddBackgourndCacheItem(cache []BackgroundCacheItem, item *BackgroundCacheIt
 	return cache
 }
 
-func renderPages(pbBook *PbBook, outPageRange string, outFilename string) {
-	n, err := writeHeader(outFilename)
-	if err != nil {
-		return
-	}
+// This is what is needed for writing header, footer, pages
+type OutFileInfo struct {
+	offsets []PageInfo
+	objNum  int
+	n       int
+}
+
+func renderPages(pbBook *PbBook, outPageRange string) {
+	outFileInfo := make(map[string]OutFileInfo, 0)
 
 	isPageRangeMulti := isPageRangeMulti(outPageRange, pbBook)
 
-	offsets := []PageInfo{}
-	objNum := 1
 	backgroundCache := make([]BackgroundCacheItem, 0)
 	for pp := range pbBook.pages {
 		changed := false
-		if changed, _ = fileChanged(Opts.InFile(), lastModTime); changed {
+		if changed, _ = fileChanged(inFile, lastModTime); changed {
 			break
 		}
 		page := &pbBook.pages[pp]
+
+		if item := page.PbItem(); item != nil && item.BoolPageSetting("norender") {
+			continue
+		}
+
 		if isPageInRange(outPageRange, pp) || isCurrentPage(pbBook, pp) {
 			var top float64
 			var bottom float64
@@ -1153,17 +1159,33 @@ func renderPages(pbBook *PbBook, outPageRange string, outFilename string) {
 				}
 			}
 
-			if outputGamma := item.FloatBookSetting("output-gamma"); outputGamma != 1.0 {
+			if outputGamma := item.FloatPageSetting("output-gamma"); outputGamma != 1.0 {
 				dst = imaging.AdjustGamma(dst, outputGamma)
 			}
 
-			if outputSharpen := item.FloatBookSetting("output-sharpen"); outputSharpen != 0 {
+			if outputSharpen := item.FloatPageSetting("output-sharpen"); outputSharpen != 0 {
 				dst = imaging.Sharpen(dst, outputSharpen)
 			}
 
+			thisOutFilename := item.PageSetting("output-file")
+
+			var info OutFileInfo
+			var exists bool
+			if info, exists = outFileInfo[thisOutFilename]; !exists {
+				n, err := writeHeader(thisOutFilename)
+				if err != nil {
+					return
+				}
+				info = OutFileInfo{}
+				info.objNum = 1
+				info.n = n
+				outFileInfo[thisOutFilename] = info
+			}
+
 			w, h := item.PageSizePts()
-			offsets = append(offsets, PageInfo{n, w, h})
-			thisn, thisErr := writePage(dst, objNum, pp, outFilename, isPageRangeMulti, item.IntBookSetting("output-compression"), item.BoolBookSetting("output-mozjpeg"), item.BookSetting("output-mozjpeg-sampling"))
+			info.offsets = append(info.offsets, PageInfo{info.n, w, h})
+
+			thisn, thisErr := writePage(dst, info.objNum, pp, thisOutFilename, isPageRangeMulti, item.IntPageSetting("output-compression"), item.BoolPageSetting("output-mozjpeg"), item.PageSetting("output-mozjpeg-sampling"), item.PageSetting("cjpeg-command"))
 			if thisErr != nil {
 				return
 			}
@@ -1172,12 +1194,17 @@ func renderPages(pbBook *PbBook, outPageRange string, outFilename string) {
 				log.Printf("Rendered Page %v / %v", pp+1, len(pbBook.pages))
 			}
 
-			n += thisn
-			objNum++
+			info.n += thisn
+			info.objNum++
+
+			outFileInfo[thisOutFilename] = info
 		}
 	}
-	_, endErr := writeFooter(outFilename, n, offsets)
-	if endErr != nil {
-		return
+
+	for outFilename, info := range outFileInfo {
+		_, endErr := writeFooter(outFilename, info.n, info.offsets)
+		if endErr != nil {
+			return
+		}
 	}
 }

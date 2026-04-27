@@ -111,6 +111,13 @@ func (theColumn *PbColumn) height() float64 {
 	return height
 }
 
+func (theColumn *PbColumn) PbItem() *PbItem {
+	for _, item := range theColumn.items {
+		return item.item
+	}
+	return nil
+}
+
 type PbRow struct {
 	yOffset float64
 	columns []PbColumn
@@ -130,6 +137,15 @@ func (theRow *PbRow) height() float64 {
 		height = math.Max(height, theRow.columns[ii].height())
 	}
 	return height
+}
+
+func (theRow *PbRow) PbItem() *PbItem {
+	for _, column := range theRow.columns {
+		if theItem := column.PbItem(); theItem != nil {
+			return theItem
+		}
+	}
+	return nil
 }
 
 type PbPage struct {
@@ -173,9 +189,27 @@ func (thePage *PbPage) height() float64 {
 	return height
 }
 
+func (thePage *PbPage) PbItem() *PbItem {
+	for _, row := range thePage.rows {
+		if theItem := row.PbItem(); theItem != nil {
+			return theItem
+		}
+	}
+	return nil
+}
+
 type PbBook struct {
 	pages      []PbPage
 	namedItems []PbItem
+}
+
+func (theBook *PbBook) PbItem() *PbItem {
+	for _, page := range theBook.pages {
+		if theItem := page.PbItem(); theItem != nil {
+			return theItem
+		}
+	}
+	return nil
 }
 
 func ToPbBook(items []PbItem) *PbBook {
@@ -838,12 +872,16 @@ func (item *PbItem) ImageSizeForPage(sizeName string) (float64, float64, float64
 
 		baseSize := 0.0
 
-		if !strings.HasSuffix(sBaseSize, "%") {
-			baseSize = Atof(sBaseSize)
-		} else {
+		if strings.HasSuffix(sBaseSize, "%") {
 			sBaseSize = strings.TrimSuffix(sBaseSize, "%")
 			baseSize = Atof(sBaseSize) / 100 * maxWidth
 			//baseSize = math.Sqrt((Atof(sBaseSize) / 100 * maxWidth) * (Atof(sBaseSize) / 100 * maxHeight))
+		} else if strings.HasSuffix(sBaseSize, "!") {
+			sBaseSize = strings.TrimSuffix(sBaseSize, "!")
+			baseSize = Atof(sBaseSize)
+			baseSize = math.Sqrt(baseSize * baseSize / item.Aspect())
+		} else {
+			baseSize = Atof(sBaseSize)
 		}
 
 		switch sSize {
@@ -869,12 +907,16 @@ func (item *PbItem) ImageSizeForPage(sizeName string) (float64, float64, float64
 			sSize = strings.TrimPrefix(sSize, "scale:")
 			maxDimension = baseSize * Atof(sSize)
 		}
-	} else if !strings.HasSuffix(sSize, "%") {
-		maxDimension = Atof(sSize)
-	} else {
+	} else if strings.HasSuffix(sSize, "%") {
 		sSize = strings.TrimSuffix(sSize, "%")
 		maxDimension = Atof(sSize) / 100 * maxWidth
 		//maxDimension = math.Sqrt((Atof(sSize) / 100 * maxWidth) * (Atof(sSize) / 100 * maxHeight))
+	} else if strings.HasSuffix(sSize, "!") {
+		sSize = strings.TrimSuffix(sSize, "!")
+		maxDimension = Atof(sSize)
+		maxDimension = math.Sqrt(maxDimension * maxDimension / item.Aspect())
+	} else {
+		maxDimension = Atof(sSize)
 	}
 
 	width := 0.0
@@ -956,6 +998,12 @@ var defaultSettings = map[string]string{
 	"output-mozjpeg":          "false",
 	"output-mozjpeg-sampling": "1x1",
 
+	// book level options
+	"verbose":    "",
+	"page-range": "-",
+	"watch":      "0",
+	"cache-mode": "0",
+
 	// page
 	"page-size":       "576x576",
 	"margin":          "24",
@@ -965,6 +1013,13 @@ var defaultSettings = map[string]string{
 	"current-page":    "false",
 	"header":          "",
 	"footer":          "",
+
+	// page level options
+	"output-file":   "out.pdf",
+	"cjpeg-command": "",
+	"noresize":      "false",
+	"nolayout":      "false",
+	"norender":      "false",
 
 	// row
 	"distribute-columns": "spreadcenter", // how columns are distributed horizontally in a row
