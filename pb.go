@@ -84,7 +84,8 @@ func fileDate(filename string) int64 {
 func fileChanged(filename string, lastModTime time.Time) (bool, time.Time) {
 	fi, err := os.Stat(filename)
 	if err != nil {
-		log.Fatal(err)
+		log.Print(err)
+		return false, lastModTime
 	}
 
 	thisModTime := fi.ModTime()
@@ -153,7 +154,7 @@ func main() {
 	}
 
 	if inFile == "" {
-		log.Fatal("No input file specified")
+		log.Print("No input file specified")
 		return
 	}
 

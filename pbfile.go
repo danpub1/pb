@@ -476,7 +476,8 @@ func expandWild(item *PbItem) []PbItem {
 		if strings.ContainsAny(imageName, "?*") {
 			sources, err := glob(imageName, item.BoolSetting("recurse"))
 			if err != nil {
-				log.Fatal(err)
+				log.Print(err)
+				return make([]PbItem, 0)
 			}
 			slices.Sort(sources)
 			sources = slices.Compact(sources)
@@ -651,7 +652,8 @@ func readInputFile(inFile string, styles map[string]string) ([]PbItem, map[strin
 	}
 
 	if err != nil {
-		log.Fatal(err)
+		log.Print(err)
+		return make([]PbItem, 0), map[string]string{}
 	}
 
 	inStrings := strings.Split(string(inBytes), "\n")
@@ -676,17 +678,42 @@ func ReadPbFile(inFileFlag string, args []string) []PbItem {
 	items, _ := readInputFile(inFileFlag, map[string]string{})
 
 	var book *PbItem = nil
+	var bookidx = 0
+	for ii := range items {
+		if items[ii].itemType == ItemTypeBook {
+			book = &items[ii]
+			bookidx = ii
+			break
+		}
+	}
+
+	// Need to have a book to put command line options
+	if book == nil {
+		thebook := PbItem{}
+		thebook.itemType = ItemTypeBook
+		thebook.settings = map[string]string{}
+		newitems := make([]PbItem, 0)
+		newitems = append(newitems, thebook)
+		newitems = append(newitems, items...)
+		items = newitems
+	} else if bookidx != 0 {
+		newitems := make([]PbItem, 0)
+		newitems = append(newitems, items[bookidx])
+		newitems = append(newitems, items[:bookidx]...)
+		if bookidx != len(items)-1 {
+			newitems = append(newitems, items[bookidx:]...)
+		}
+		items = newitems
+	}
+
 	for ii := range items {
 		items[ii].pb = items
-		if items[ii].itemType == ItemTypeBook && book == nil {
-			book = &items[ii]
-		}
 	}
 
 	for _, arg := range args {
 		if setting, found := strings.CutPrefix(arg, "--"); found {
 			parts := strings.SplitN(setting, ":", 2)
-			book.Set(parts[0], parts[1])
+			items[0].Set(parts[0], parts[1])
 		}
 	}
 

@@ -549,7 +549,9 @@ func NumRowLayout(items []PbRow) int {
 func layoutPages(pbBook *PbBook, outPageRange string) {
 	binding := BindingUnknown
 	if len(pbBook.pages) > 0 {
-		binding = pbBook.pages[0].rows[0].columns[0].items[0].item.Binding()
+		if item := pbBook.PbItem(); item != nil {
+			binding = item.Binding()
+		}
 	}
 
 	for pp := range pbBook.pages {
@@ -738,7 +740,7 @@ func layoutPages(pbBook *PbBook, outPageRange string) {
 			extraPageHeight := page.availableHeight - page.height()
 			if extraPageHeight > 0 {
 				pageDistribute := AlignTop
-				if NumItemLayout(page.rows[0].columns[0].items) > 0 {
+				if len(page.rows) > 0 && len(page.rows[0].columns) > 0 && NumItemLayout(page.rows[0].columns[0].items) > 0 {
 					pageDistribute = page.rows[0].columns[0].items[0].item.Align("distribute-rows")
 				}
 				switch BindingAlign(pageDistribute, binding, pp) {

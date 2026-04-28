@@ -1001,7 +1001,7 @@ var defaultSettings = map[string]string{
 	// book level options
 	"verbose":    "",
 	"page-range": "-",
-	"watch":      "true",
+	"watch":      "false",
 	"cache-mode": "0",
 
 	// page
@@ -1091,9 +1091,18 @@ var defaultSettings = map[string]string{
 
 func (item *PbItem) Set(setting string, value string) {
 	if _, exists := defaultSettings[setting]; !exists {
-		log.Fatalf("unrecognized settting: %v", setting)
+		log.Printf("unrecognized settting: %v", setting)
+		return
 	}
 
+	if item == nil {
+		log.Printf("unable to set setting %v, item is nil", setting)
+		return
+	}
+
+	// if item.settings == nil {
+	// 	item.settings = map[string]string{}
+	// }
 	item.settings[setting] = value
 }
 
@@ -1322,6 +1331,6 @@ func (item *PbItem) SettingInt(setting string, itemType int) string {
 		return settingValue
 	}
 
-	log.Fatalf("unrecognized settting: %v", setting)
+	log.Printf("unrecognized settting: %v", setting)
 	return ""
 }

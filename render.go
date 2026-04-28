@@ -1097,7 +1097,7 @@ func renderPages(pbBook *PbBook, outPageRange string) {
 			var dst *image.NRGBA = nil
 			density := 1.0
 
-			if len(page.rows[0].columns[0].items) == 0 {
+			if len(page.rows) == 0 || len(page.rows[0].columns) == 0 || len(page.rows[0].columns[0].items) == 0 {
 				continue
 			}
 			item := page.rows[0].columns[0].items[0].item
