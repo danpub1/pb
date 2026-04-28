@@ -102,26 +102,6 @@ const (
 	CacheModeResizeFull   = 32
 	CacheModeAll          = 63
 )
-const (
-	WatchModeUnknown = -1
-	WatchModeOff     = 0
-	WatchModeOn      = 1
-)
-const (
-	NoresizeModeUnknown = -1
-	NoresizeModeOff     = 0
-	NoresizeModeOn      = 1
-)
-const (
-	NolayoutModeUnknown = -1
-	NolayoutModeOff     = 0
-	NolayoutModeOn      = 1
-)
-const (
-	NorenderModeUnknown = -1
-	NorenderModeOff     = 0
-	NorenderModeOn      = 1
-)
 
 var lastModTime time.Time
 
@@ -150,7 +130,7 @@ func (this *Options) PageRange() string {
 }
 
 func (this *Options) Watch() bool {
-	return this.book.IntBookSetting("watch") == WatchModeOn
+	return this.book.BoolBookSetting("watch")
 }
 
 func (this *Options) Cache() int {

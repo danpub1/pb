@@ -1001,7 +1001,7 @@ var defaultSettings = map[string]string{
 	// book level options
 	"verbose":    "",
 	"page-range": "-",
-	"watch":      "0",
+	"watch":      "true",
 	"cache-mode": "0",
 
 	// page

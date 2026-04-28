@@ -1,7 +1,6 @@
 Australia
 .vscode
 dart
-example
 js
 legacy
 test
@@ -14,4 +13,3 @@ pb
 *.png
 *.jpg
 *.jpeg
-*.pb

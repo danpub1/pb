@@ -454,11 +454,13 @@ takes precedence.
     * `P`: Print processed input file
     * `X`: Print processed input file with comments
     * `L`: Logging
-* `--watch`: Specify `1` to watch the input file and reprocess when it changes.
+* `--watch:false`: Specify `true` to watch the input file and reprocess when it changes.
 Otherwise, process the input file once and then exit
-* `--cjpeg-command path-to-cjpeg`: When using mozjpeg to render, specify the path to the executable
+* `--cjpeg-command:path-to-cjpeg`: When using mozjpeg to render, specify the path to the executable
+* Any setting, applied at the book level (i.e. a book-level default that can be overridden at any lower level)
 
 ### Developer Options
+
 * `--cache-mode`: 
     * `1`: No image caching
     * `2`: Cache image information only while watching
@@ -466,9 +468,9 @@ Otherwise, process the input file once and then exit
     * `8`: No resize caching
     * `16`: Cache resiz information only while watching
     * `32`: Persist image cache and reuse always
-* `--noresize`: Specify `1` to disable resizing step
-* `--nolayout`: Specify `1` to disable layout step
-* `--norender`: Specify `1` to disable rendering step
+* `--noresize:false`: Specify `true` to disable resizing step
+* `--nolayout:false`: Specify `true` to disable layout step
+* `--norender:false`: Specify `true` to disable rendering step
 
 ## TIPS
 
@@ -511,15 +513,23 @@ Set margins and gutters to zero.  Size one picture to the back cover,
 a row of text whose height is the width of the spine, rotates 90 degrees,
 and then another picture sized to the front cover.
 
+### Embed an image of a page
+
+Set output-file for a page to a specific name in PNG format,
+then reference that image in a later page
+
 ## Things to Do
 
+* Refactor & clean up
+  * Break up large files
+  * Latest dependencies
+  * Tests
 * Output a text as an image (can do already, need to get height from verbose output)
 * Input and output handlers for more file types
 * Output sigmoidal brightness/lightness?  Existing output gamma is one type of this
 * spreadedge, spreadbinding - just not implemented
-* eyelevel, spreadeyelevel, mouthlevel, spreadmouthlevel - can do with blank texts as placeholders
-* highlights, midtones, shadows
+* eyelevel, spreadeyelevel, mouthlevel (?), spreadmouthlevel (?) - can do with blank texts as placeholders
+* adjust highlights, midtones, shadows
 * Image, font https://... downloaded and then cached (in a zip file?)
 * HSL Adjustment
-* Named pages that could be embedded as an image in a page
 * Calendar pages
