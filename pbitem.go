@@ -579,8 +579,6 @@ func (item *PbItem) enlargeImage(amount float64, dx float64, dy float64) (float6
 	maxWidth, maxHeight, _, _ := item.ImageSizeForPage("max-size")
 
 	aspect := item.Aspect()
-	// TODO: use aspect from rect if present
-	//aspect := float64(item.imageWidthPx) / float64(item.imageHeightPx)
 
 	if aspect >= 1 {
 		amount = math.Min(math.Min(amount, math.Max(maxWidth-item.imageWidth, 0)), dx)
@@ -626,12 +624,13 @@ func (item *PbItem) baseDimensions() (float64, float64, float64, float64, int) {
 	for {
 		tw, th, best := item.textForImageDimensions(w, h)
 
-		if w+tw <= maxW && h+th+cg <= maxH {
+		if math.Max(w, tw) <= maxW && h+th+cg <= maxH {
 			return tw, th, w, h, best
 		}
 
+		// TODO: This is not the right way
 		if aspect > pageAspect {
-			w = maxW - tw
+			w = maxW
 			h = w / aspect
 			if h+th+cg > maxH {
 				h = maxH - th - cg
@@ -640,7 +639,7 @@ func (item *PbItem) baseDimensions() (float64, float64, float64, float64, int) {
 		} else {
 			h = maxH - th - cg
 			w = h * aspect
-			if w+tw > maxW {
+			if math.Max(w, tw) > maxW {
 				w = maxW - tw
 				h = w / aspect
 			}
@@ -874,7 +873,7 @@ func (item *PbItem) ImageSizeForPage(sizeName string) (float64, float64, float64
 
 		if strings.HasSuffix(sBaseSize, "%") {
 			sBaseSize = strings.TrimSuffix(sBaseSize, "%")
-			baseSize = Atof(sBaseSize) / 100 * maxWidth
+			baseSize = Atof(sBaseSize) / 100 * math.Sqrt(maxWidth*maxHeight)
 			//baseSize = math.Sqrt((Atof(sBaseSize) / 100 * maxWidth) * (Atof(sBaseSize) / 100 * maxHeight))
 		} else if strings.HasSuffix(sBaseSize, "!") {
 			sBaseSize = strings.TrimSuffix(sBaseSize, "!")
@@ -909,7 +908,7 @@ func (item *PbItem) ImageSizeForPage(sizeName string) (float64, float64, float64
 		}
 	} else if strings.HasSuffix(sSize, "%") {
 		sSize = strings.TrimSuffix(sSize, "%")
-		maxDimension = Atof(sSize) / 100 * maxWidth
+		maxDimension = Atof(sSize) / 100 * math.Sqrt(maxWidth*maxHeight)
 		//maxDimension = math.Sqrt((Atof(sSize) / 100 * maxWidth) * (Atof(sSize) / 100 * maxHeight))
 	} else if strings.HasSuffix(sSize, "!") {
 		sSize = strings.TrimSuffix(sSize, "!")
@@ -923,45 +922,47 @@ func (item *PbItem) ImageSizeForPage(sizeName string) (float64, float64, float64
 	height := 0.0
 	aspect := item.Aspect()
 
-	// Way 1: maxDimension is larger dimension
-	// if aspect >= 1 { // width > height
-	// 	width = maxDimension
-	// 	width = math.Min(width, maxWidth)
-	// 	height = width / aspect
-	// 	if height > maxHeight {
-	// 		height = maxHeight
-	// 		width = height * aspect
-	// 	}
-	// } else { // height > width
-	// 	height = maxDimension
-	// 	height = math.Min(height, maxHeight)
-	// 	width = height * aspect
-	// 	if width > maxWidth {
-	// 		width = maxWidth
-	// 		height = width / aspect
-	// 	}
-	// }
-
-	// Way 2: maxDimension * maxDimension is target area
-	// width * height = maxDimension * maxDimension
-	// width / heigth = aspect
-	// width * width = maxDimension * maxDimension * aspect
-	// height * height = maxDimension * maxDimension / aspect
-	if aspect > 1 {
-		width = math.Sqrt(maxDimension * maxDimension * aspect)
-		width = math.Min(width, maxWidth)
-		height = width / aspect
-		if height > maxHeight {
-			height = maxHeight
-			width = height * aspect
-		}
-	} else {
-		height = math.Sqrt(maxDimension * maxDimension / aspect)
-		height = math.Min(height, maxHeight)
-		width = height * aspect
-		if width > maxWidth {
-			width = maxWidth
+	if item.Setting("size-mode") == "width" {
+		// // Way 1: maxDimension is larger dimension
+		if aspect >= 1 { // width > height
+			width = maxDimension
+			width = math.Min(width, maxWidth)
 			height = width / aspect
+			if height > maxHeight {
+				height = maxHeight
+				width = height * aspect
+			}
+		} else { // height > width
+			height = maxDimension
+			height = math.Min(height, maxHeight)
+			width = height * aspect
+			if width > maxWidth {
+				width = maxWidth
+				height = width / aspect
+			}
+		}
+	} else { // "area"
+		// Way 2: maxDimension * maxDimension is target area
+		// width * height = maxDimension * maxDimension
+		// width / heigth = aspect
+		// width * width = maxDimension * maxDimension * aspect
+		// height * height = maxDimension * maxDimension / aspect
+		if aspect > 1 {
+			width = math.Sqrt(maxDimension * maxDimension * aspect)
+			width = math.Min(width, maxWidth)
+			height = width / aspect
+			if height > maxHeight {
+				height = maxHeight
+				width = height * aspect
+			}
+		} else {
+			height = math.Sqrt(maxDimension * maxDimension / aspect)
+			height = math.Min(height, maxHeight)
+			width = height * aspect
+			if width > maxWidth {
+				width = maxWidth
+				height = width / aspect
+			}
 		}
 	}
 
@@ -1054,6 +1055,7 @@ var defaultSettings = map[string]string{
 	// image
 	"size":       "25%",
 	"max-size":   "100%",
+	"size-mode":  "area",
 	"rect":       "100", // fit,3:2,50  trim,3:2,50  squish,3:2  #,x:y,50,50  #=zoom level 0-100, Missing aspect=image aspect, Missing position=50
 	"straighten": "0.0",
 	"brightness": "0.0",
@@ -1065,6 +1067,7 @@ var defaultSettings = map[string]string{
 	"blur":       "0.0",
 	"recurse":    "true",
 	"image":      "",
+	"caption":    "",
 
 	// text
 	"caption-position":   "below",

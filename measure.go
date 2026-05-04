@@ -16,7 +16,7 @@ var firstTimeImageCache = true
 func loadImageCache() map[string]ImageCacheEntry {
 	cache := map[string]ImageCacheEntry{}
 
-	if Opts.Cache()&CacheModeImageNone != 0 || Opts.Cache()&CacheModeImageDuring != 0 && firstTimeImageCache {
+	if Opts.Cache()&CacheModeImageFull == 0 || Opts.Cache()&CacheModeImageDuring != 0 && firstTimeImageCache {
 		firstTimeImageCache = false
 		return cache
 	}

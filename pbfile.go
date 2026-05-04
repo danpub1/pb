@@ -639,29 +639,66 @@ func ApplyItemSpecificStyles(items []PbItem) {
 	}
 }
 
+func ApplyDefaultCaptions(items []PbItem) {
+	for ii := range items {
+		if items[ii].itemType == ItemTypeImage || items[ii].itemType == ItemTypeText {
+			if items[ii].itemType == ItemTypeImage {
+				caption := items[ii].Setting("caption")
+				if len(caption) != 0 && len(items[ii].Setting("text")) == 0 {
+					items[ii].Set("text", items[ii].Setting("caption"))
+				}
+			}
+		}
+	}
+}
+
 func readInputFile(inFile string, styles map[string]string) ([]PbItem, map[string]string) {
 	var inBytes []byte
 	var err error
 
 	basePath := BasePath(inFile)
 
-	if inFile == "-" {
-		inBytes, err = io.ReadAll(os.Stdin)
+	var inStrings []string
+	var fi os.FileInfo
+	fi, err = os.Stat(inFile)
+
+	if err == nil && fi.IsDir() {
+		if !strings.HasSuffix(inFile, string(filepath.Separator)) {
+			inFile = inFile + string(filepath.Separator) + "*"
+		}
+	}
+
+	if strings.HasSuffix(strings.ToLower(inFile), ".zip") {
+		inFile = inFile + "::*"
+	}
+
+	foundPrefix := false
+	if inFile, foundPrefix = strings.CutPrefix(inFile, "@"); foundPrefix {
+		inFile = "@@@ " + inFile
+	}
+
+	if strings.Contains(inFile, "*") || strings.HasPrefix(inFile, "@@@ ") {
+		inStrings = make([]string, 0)
+		inStrings = append(inStrings, inFile)
 	} else {
-		inBytes, err = os.ReadFile(inFile)
+		if inFile == "-" {
+			inBytes, err = io.ReadAll(os.Stdin)
+		} else {
+			inBytes, err = os.ReadFile(inFile)
+		}
+
+		if err != nil {
+			log.Print(err)
+			return make([]PbItem, 0), map[string]string{}
+		}
+
+		inStrings = strings.Split(string(inBytes), "\n")
 	}
 
-	if err != nil {
-		log.Print(err)
-		return make([]PbItem, 0), map[string]string{}
-	}
-
-	inStrings := strings.Split(string(inBytes), "\n")
 	inStrings = makeIntoLines(inStrings)
 
 	var items []PbItem
 	items, styles = processAsLinesFromBasePath(inStrings, basePath, styles)
-	ApplyItemSpecificStyles(items)
 
 	return items, styles
 }
@@ -674,8 +711,12 @@ func BasePath(fileName string) string {
 	return basePath
 }
 
-func ReadPbFile(inFileFlag string, args []string) []PbItem {
-	items, _ := readInputFile(inFileFlag, map[string]string{})
+func ReadPbFile(inFiles []string, args []string) []PbItem {
+	items := make([]PbItem, 0)
+	for _, inFile := range inFiles {
+		oneItems, _ := readInputFile(inFile, map[string]string{})
+		items = append(items, oneItems...)
+	}
 
 	var book *PbItem = nil
 	var bookidx = 0
@@ -718,6 +759,9 @@ func ReadPbFile(inFileFlag string, args []string) []PbItem {
 	}
 
 	OptimizeSettings(items)
+
+	ApplyDefaultCaptions(items)
+	ApplyItemSpecificStyles(items)
 
 	return items
 }

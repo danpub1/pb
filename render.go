@@ -1081,7 +1081,7 @@ func renderPages(pbBook *PbBook, outPageRange string) {
 	backgroundCache := make([]BackgroundCacheItem, 0)
 	for pp := range pbBook.pages {
 		changed := false
-		if changed, _ = fileChanged(inFile, lastModTime); changed {
+		if changed, _ = fileChanged(inFiles, lastModTime); changed {
 			break
 		}
 		page := &pbBook.pages[pp]

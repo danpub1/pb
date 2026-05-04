@@ -518,6 +518,12 @@ and then another picture sized to the front cover.
 Set output-file for a page to a specific name in PNG format,
 then reference that image in a later page
 
+### Example Command Line:
+
+```
+pb Selected.zip --page-break:true --font:Aptos.zip::Aptos.ttf --caption:{{Filename}} --page-size:612x792 --output-file:big.pdf --verbose:D
+```
+
 ## Things to Do
 
 * Refactor & clean up

@@ -279,7 +279,7 @@ var firstTimeResizeCache bool = true
 func loadResizeCache() map[string]string {
 	cache := map[string]string{}
 
-	if Opts.Cache()&CacheModeResizeNone != 0 || Opts.Cache()&CacheModeResizeDuring != 0 && firstTimeResizeCache {
+	if Opts.Cache()&CacheModeResizeFull == 0 || Opts.Cache()&CacheModeResizeDuring != 0 && firstTimeResizeCache {
 		firstTimeResizeCache = false
 		return cache
 	}
@@ -448,7 +448,7 @@ func resizePages(pb *PbBook, outPageRange string) {
 	for pp := range pb.pages {
 		if isPageInRange(outPageRange, pp) || isCurrentPage(pb, pp) {
 			changed := false
-			if changed, _ = fileChanged(inFile, lastModTime); changed {
+			if changed, _ = fileChanged(inFiles, lastModTime); changed {
 				break
 			}
 			page := &pb.pages[pp]

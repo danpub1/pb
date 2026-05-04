@@ -81,27 +81,36 @@ func fileDate(filename string) int64 {
 	return rv
 }
 
-func fileChanged(filename string, lastModTime time.Time) (bool, time.Time) {
-	fi, err := os.Stat(filename)
-	if err != nil {
-		log.Print(err)
-		return false, lastModTime
+func fileChanged(filenames []string, lastModTime time.Time) (bool, time.Time) {
+
+	newModTime := time.Time{}
+	for _, filename := range filenames {
+		if !strings.Contains(filename, "*") && !strings.Contains(filename, "::") {
+			filename, _ = strings.CutPrefix(filename, "@")
+			fi, err := os.Stat(filename)
+			if err != nil {
+				log.Print(err)
+				return false, lastModTime
+			}
+
+			thisModTime := fi.ModTime()
+			if thisModTime.After(newModTime) {
+				newModTime = thisModTime
+			}
+		}
 	}
 
-	thisModTime := fi.ModTime()
+	return lastModTime.Before(newModTime), newModTime
 
-	return lastModTime != thisModTime, thisModTime
 }
 
 const (
-	CacheModeUnknown      = 0
-	CacheModeImageNone    = 1
-	CacheModeImageDuring  = 2
-	CacheModeImageFull    = 4
-	CacheModeResizeNone   = 8
-	CacheModeResizeDuring = 16
-	CacheModeResizeFull   = 32
-	CacheModeAll          = 63
+	CacheModeImage        = 3
+	CacheModeImageDuring  = 1
+	CacheModeImageFull    = 2
+	CacheModeResize       = 12
+	CacheModeResizeDuring = 4
+	CacheModeResizeFull   = 8
 )
 
 var lastModTime time.Time
@@ -138,30 +147,27 @@ func (this *Options) Cache() int {
 	return this.book.IntBookSetting("cache-mode")
 }
 
-var inFile = ""
+var inFiles []string
 
 func main() {
 	args := os.Args[1:]
+	inFiles = make([]string, 0)
 
 	for _, arg := range args {
 		if !strings.HasPrefix(arg, "--") {
-			if inFile == "" {
-				inFile = arg
-			} else {
-				log.Printf("Only one input file is allowed, %v ignored", arg)
-			}
+			inFiles = append(inFiles, arg)
 		}
 	}
 
-	if inFile == "" {
-		log.Print("No input file specified")
+	if len(inFiles) == 0 {
+		log.Print("No input file(s) specified")
 		return
 	}
 
-	_, lastModTime = fileChanged(inFile, time.Time{})
+	_, lastModTime = fileChanged(inFiles, time.Time{})
 
 	for {
-		items := ReadPbFile(inFile, args)
+		items := ReadPbFile(inFiles, args)
 
 		Opts.Set(items)
 
@@ -216,7 +222,7 @@ func main() {
 		}
 
 		changed := false
-		for changed, lastModTime = fileChanged(inFile, lastModTime); !changed; changed, lastModTime = fileChanged(inFile, lastModTime) {
+		for changed, lastModTime = fileChanged(inFiles, lastModTime); !changed; changed, lastModTime = fileChanged(inFiles, lastModTime) {
 			time.Sleep(time.Duration(int64(1) * 1000 * 1000 * 1000))
 		}
 	}
