@@ -96,8 +96,10 @@ type PbColumn struct {
 func (theColumn *PbColumn) width() float64 {
 	width := 0.0
 	for ii := range theColumn.items {
-		itemWidth, _ := theColumn.items[ii].item.Size()
-		width = math.Max(width, itemWidth)
+		if theColumn.items[ii].item.inLayout {
+			itemWidth, _ := theColumn.items[ii].item.Size()
+			width = math.Max(width, itemWidth)
+		}
 	}
 	return width
 }
@@ -105,8 +107,10 @@ func (theColumn *PbColumn) width() float64 {
 func (theColumn *PbColumn) height() float64 {
 	height := 0.0
 	for ii := range theColumn.items {
-		_, itemHeight := theColumn.items[ii].item.Size()
-		height = math.Max(height, theColumn.items[ii].item.yOffset-theColumn.items[0].item.yOffset+itemHeight)
+		if theColumn.items[ii].item.inLayout {
+			_, itemHeight := theColumn.items[ii].item.Size()
+			height = math.Max(height, theColumn.items[ii].item.yOffset-theColumn.items[0].item.yOffset+itemHeight)
+		}
 	}
 	return height
 }
@@ -231,6 +235,8 @@ func ToPbBook(items []PbItem) *PbBook {
 			curRow = -1
 			curColumn = -1
 			curItem = -1
+		} else if item.itemType == ItemTypePage {
+			book.pages[curPage].availableWidth, book.pages[curPage].availableHeight = item.pageDimensions()
 		}
 
 		if item.row != curRow {
@@ -629,6 +635,7 @@ func (item *PbItem) baseDimensions() (float64, float64, float64, float64, int) {
 		}
 
 		// TODO: This is not the right way
+		log.Print("Unsupported resize")
 		if aspect > pageAspect {
 			w = maxW
 			h = w / aspect
@@ -639,8 +646,8 @@ func (item *PbItem) baseDimensions() (float64, float64, float64, float64, int) {
 		} else {
 			h = maxH - th - cg
 			w = h * aspect
-			if math.Max(w, tw) > maxW {
-				w = maxW - tw
+			if w > maxW {
+				w = maxW
 				h = w / aspect
 			}
 		}
@@ -1000,7 +1007,7 @@ var defaultSettings = map[string]string{
 	"output-mozjpeg-sampling": "1x1",
 
 	// book level options
-	"verbose":    "",
+	"verbose":    "D",
 	"page-range": "-",
 	"watch":      "false",
 	"cache-mode": "0",
@@ -1055,8 +1062,8 @@ var defaultSettings = map[string]string{
 	// image
 	"size":       "25%",
 	"max-size":   "100%",
-	"size-mode":  "area",
-	"rect":       "100", // fit,3:2,50  trim,3:2,50  squish,3:2  #,x:y,50,50  #=zoom level 0-100, Missing aspect=image aspect, Missing position=50
+	"size-mode":  "width", // width or area
+	"rect":       "100",   // fit,3:2,50  trim,3:2,50  squish,3:2  #,x:y,50,50  #=zoom level 0-100, Missing aspect=image aspect, Missing position=50
 	"straighten": "0.0",
 	"brightness": "0.0",
 	"contrast":   "0.0",
@@ -1065,6 +1072,7 @@ var defaultSettings = map[string]string{
 	"sigmoidal":  "0.0,0.50",
 	"sharpen":    "0.0",
 	"blur":       "0.0",
+	"flip":       "", // H, V
 	"recurse":    "true",
 	"image":      "",
 	"caption":    "",

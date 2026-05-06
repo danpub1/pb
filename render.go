@@ -937,6 +937,14 @@ func renderImage(item *PbItem, left float64, top float64, density float64, pbBoo
 		picture = imaging.AdjustSigmoid(picture, midpoint, factor)
 	}
 
+	flip := strings.ToLower(item.Setting("flip"))
+	switch flip {
+	case "h":
+		picture = imaging.FlipH(picture)
+	case "v":
+		picture = imaging.FlipV(picture)
+	}
+
 	if sSize := item.Setting("float"); sSize != "" {
 		if sSizeParts := strings.SplitN(sSize, ",", 4); len(sSizeParts) == 4 {
 			item.xOffset = Atof(sSizeParts[0]) - left

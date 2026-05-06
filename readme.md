@@ -526,6 +526,7 @@ pb Selected.zip --page-break:true --font:Aptos.zip::Aptos.ttf --caption:{{Filena
 
 ## Things to Do
 
+* Issue: first page cannot have some or all settings. What about first row, column, item???
 * Refactor & clean up
   * Break up large files
   * Latest dependencies

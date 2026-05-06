@@ -279,7 +279,7 @@ var firstTimeResizeCache bool = true
 func loadResizeCache() map[string]string {
 	cache := map[string]string{}
 
-	if Opts.Cache()&CacheModeResizeFull == 0 || Opts.Cache()&CacheModeResizeDuring != 0 && firstTimeResizeCache {
+	if Opts.Cache()&CacheModeResize == 0 || Opts.Cache()&CacheModeResizeDuring != 0 && firstTimeResizeCache {
 		firstTimeResizeCache = false
 		return cache
 	}
@@ -467,9 +467,11 @@ func resizePages(pb *PbBook, outPageRange string) {
 					for row := range page.rows {
 						for column := range page.rows[row].columns {
 							for item := range page.rows[row].columns[column].items {
-								if dx, dy, canResize := spaceToDistribute(page, &page.rows[row], &page.rows[row].columns[column]); canResize {
-									resizedOne := resizeItem(item, column, row, page, dx, dy)
-									resized = resized || resizedOne
+								if page.rows[row].columns[column].items[item].item.inLayout {
+									if dx, dy, canResize := spaceToDistribute(page, &page.rows[row], &page.rows[row].columns[column]); canResize {
+										resizedOne := resizeItem(item, column, row, page, dx, dy)
+										resized = resized || resizedOne
+									}
 								}
 							}
 						}
