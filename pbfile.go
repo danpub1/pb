@@ -375,8 +375,9 @@ func processAsLinesFromBasePath(lines []string, basePath string, styles map[stri
 	return items, styles
 }
 
+var exts = []string{".jpg", ".jpeg", ".png"}
+
 func glob(path string, recurse bool) ([]string, error) {
-	exts := []string{".jpg", ".jpeg", ".png"}
 	for ii := len(exts); ii > 0; ii-- {
 		exts = append(exts, strings.ToUpper(exts[ii-1]))
 	}
@@ -668,7 +669,9 @@ func readInputFile(inFile string, styles map[string]string) ([]PbItem, map[strin
 		}
 	}
 
-	if strings.HasSuffix(strings.ToLower(inFile), ".zip") {
+	lowerFile := strings.ToLower(inFile)
+
+	if strings.HasSuffix(lowerFile, ".zip") {
 		inFile = inFile + "::*"
 	}
 
@@ -677,7 +680,14 @@ func readInputFile(inFile string, styles map[string]string) ([]PbItem, map[strin
 		inFile = "@@@ " + inFile
 	}
 
-	if strings.Contains(inFile, "*") || strings.HasPrefix(inFile, "@@@ ") {
+	foundExt := false
+	for _, ext := range exts {
+		if strings.HasSuffix(lowerFile, ext) {
+			foundExt = true
+		}
+	}
+
+	if strings.Contains(inFile, "*") || strings.HasPrefix(inFile, "@@@ ") || foundExt {
 		inStrings = make([]string, 0)
 		inStrings = append(inStrings, inFile)
 	} else {
