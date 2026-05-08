@@ -858,6 +858,7 @@ var rxRelativeSize, _ = regexp.Compile(`^(much-much-much-smaller$|much-much-smal
 func (item *PbItem) ImageSizeForPage(sizeName string) (float64, float64, float64, float64) {
 	maxWidth, maxHeight := ContainerSize(item.PageSetting("page-size"), item.PageSetting("margin"))
 	sSize := item.Setting(sizeName)
+	sSizeMode := item.Setting("size-mode")
 
 	// percentage is percentage of the width of the page
 	// neither width nor height should be larger than the size
@@ -880,12 +881,18 @@ func (item *PbItem) ImageSizeForPage(sizeName string) (float64, float64, float64
 
 		if strings.HasSuffix(sBaseSize, "%") {
 			sBaseSize = strings.TrimSuffix(sBaseSize, "%")
-			baseSize = Atof(sBaseSize) / 100 * math.Sqrt(maxWidth*maxHeight)
+			if sSizeMode == "width" {
+				baseSize = Atof(sBaseSize) / 100 * maxWidth
+			} else {
+				baseSize = Atof(sBaseSize) / 100 * math.Sqrt(maxWidth*maxHeight)
+			}
 			//baseSize = math.Sqrt((Atof(sBaseSize) / 100 * maxWidth) * (Atof(sBaseSize) / 100 * maxHeight))
 		} else if strings.HasSuffix(sBaseSize, "!") {
 			sBaseSize = strings.TrimSuffix(sBaseSize, "!")
 			baseSize = Atof(sBaseSize)
-			baseSize = math.Sqrt(baseSize * baseSize / item.Aspect())
+			if sSizeMode == "area" {
+				baseSize = math.Sqrt(baseSize * baseSize / item.Aspect())
+			}
 		} else {
 			baseSize = Atof(sBaseSize)
 		}
@@ -915,12 +922,18 @@ func (item *PbItem) ImageSizeForPage(sizeName string) (float64, float64, float64
 		}
 	} else if strings.HasSuffix(sSize, "%") {
 		sSize = strings.TrimSuffix(sSize, "%")
-		maxDimension = Atof(sSize) / 100 * math.Sqrt(maxWidth*maxHeight)
+		if sSizeMode == "width" {
+			maxDimension = Atof(sSize) / 100 * maxWidth
+		} else {
+			maxDimension = Atof(sSize) / 100 * math.Sqrt(maxWidth*maxHeight)
+		}
 		//maxDimension = math.Sqrt((Atof(sSize) / 100 * maxWidth) * (Atof(sSize) / 100 * maxHeight))
 	} else if strings.HasSuffix(sSize, "!") {
 		sSize = strings.TrimSuffix(sSize, "!")
 		maxDimension = Atof(sSize)
-		maxDimension = math.Sqrt(maxDimension * maxDimension / item.Aspect())
+		if sSizeMode == "area" {
+			maxDimension = math.Sqrt(maxDimension * maxDimension / item.Aspect())
+		}
 	} else {
 		maxDimension = Atof(sSize)
 	}
@@ -929,24 +942,14 @@ func (item *PbItem) ImageSizeForPage(sizeName string) (float64, float64, float64
 	height := 0.0
 	aspect := item.Aspect()
 
-	if item.Setting("size-mode") == "width" {
+	if sSizeMode == "width" {
 		// // Way 1: maxDimension is larger dimension
-		if aspect >= 1 { // width > height
-			width = maxDimension
-			width = math.Min(width, maxWidth)
-			height = width / aspect
-			if height > maxHeight {
-				height = maxHeight
-				width = height * aspect
-			}
-		} else { // height > width
-			height = maxDimension
-			height = math.Min(height, maxHeight)
+		width = maxDimension
+		width = math.Min(width, maxWidth)
+		height = width / aspect
+		if height > maxHeight {
+			height = maxHeight
 			width = height * aspect
-			if width > maxWidth {
-				width = maxWidth
-				height = width / aspect
-			}
 		}
 	} else { // "area"
 		// Way 2: maxDimension * maxDimension is target area

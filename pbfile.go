@@ -375,9 +375,10 @@ func processAsLinesFromBasePath(lines []string, basePath string, styles map[stri
 	return items, styles
 }
 
-var exts = []string{".jpg", ".jpeg", ".png"}
+var gExts = []string{".jpg", ".jpeg", ".png"}
 
 func glob(path string, recurse bool) ([]string, error) {
+	exts := gExts
 	for ii := len(exts); ii > 0; ii-- {
 		exts = append(exts, strings.ToUpper(exts[ii-1]))
 	}
@@ -681,7 +682,7 @@ func readInputFile(inFile string, styles map[string]string) ([]PbItem, map[strin
 	}
 
 	foundExt := false
-	for _, ext := range exts {
+	for _, ext := range gExts {
 		if strings.HasSuffix(lowerFile, ext) {
 			foundExt = true
 		}

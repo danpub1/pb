@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
-	"os"
 )
 
 func rowHeight(items []PbItem, page int, row int, maxColumn int) float64 {
@@ -113,10 +112,14 @@ func breakIntoPages(items []PbItem) *PbBook {
 			items[ii].page = items[ii-1].page
 			items[ii].row = items[ii-1].row
 			items[ii].column = items[ii-1].column
+			items[ii].xOffset = items[ii-1].xOffset
+			items[ii].yOffset = items[ii-1].yOffset
 		} else {
 			items[ii].page = 0
 			items[ii].row = 0
 			items[ii].column = 0
+			items[ii].xOffset = 0
+			items[ii].yOffset = 0
 		}
 
 		if items[ii].itemType == ItemTypeBook && s.pagesInBook == 0 || (items[ii].itemType == ItemTypePage || items[ii].BoolSetting("page-break")) && (s.rowsOnPage > 0 || s.pageHasContent) {
@@ -127,6 +130,8 @@ func breakIntoPages(items []PbItem) *PbBook {
 			}
 			items[ii].row = 0
 			items[ii].column = 0
+			items[ii].xOffset = 0
+			items[ii].yOffset = 0
 			s.rowsOnPage = 0
 			s.columnsInRow = 0
 			s.itemsInColumn = 0
@@ -136,8 +141,6 @@ func breakIntoPages(items []PbItem) *PbBook {
 			s.curColumnXOffset = 0
 			s.curColumnWidth = 0
 			s.curColumnHeight = 0
-			items[ii].xOffset = 0
-			items[ii].yOffset = 0
 		}
 
 		if (items[ii].itemType == ItemTypeRow || items[ii].BoolSetting("row-break")) && s.columnsInRow > 0 {
@@ -279,37 +282,37 @@ var firstTimeResizeCache bool = true
 func loadResizeCache() map[string]string {
 	cache := map[string]string{}
 
-	if Opts.Cache()&CacheModeResize == 0 || Opts.Cache()&CacheModeResizeDuring != 0 && firstTimeResizeCache {
-		firstTimeResizeCache = false
-		return cache
-	}
+	// if Opts.Cache()&CacheModeResize == 0 || Opts.Cache()&CacheModeResizeDuring != 0 && firstTimeResizeCache {
+	// 	firstTimeResizeCache = false
+	// 	return cache
+	// }
 
-	bytes, err := os.ReadFile(".pbresizecache")
-	if err == nil {
-		json.Unmarshal(bytes, &cache)
-	}
+	// bytes, err := os.ReadFile(".pbresizecache")
+	// if err == nil {
+	// 	json.Unmarshal(bytes, &cache)
+	// }
 
 	return cache
 }
 
 func saveResizeCache(cache *map[string]string) {
-	bytes, err := json.Marshal(cache)
-	if err == nil {
-		os.WriteFile(".pbresizecache", bytes, 0666)
-	}
+	// bytes, err := json.Marshal(cache)
+	// if err == nil {
+	// 	os.WriteFile(".pbresizecache", bytes, 0666)
+	// }
 }
 
 func checkResizeCacheEntry(cache *map[string]string, jsonValue string) (string, string) {
 	hashbytes := sha256.Sum256([]byte(jsonValue))
 	jsonhash := hex.EncodeToString(hashbytes[:])
-	if entry, exists := (*cache)[jsonhash]; exists {
-		return entry, jsonhash
-	}
+	// if entry, exists := (*cache)[jsonhash]; exists {
+	// 	return entry, jsonhash
+	// }
 	return "", jsonhash
 }
 
 func updateResizeCacheEntry(cache *map[string]string, jsonValue string, jsonhash string) {
-	(*cache)[jsonhash] = jsonValue
+	// (*cache)[jsonhash] = jsonValue
 }
 
 func spaceToDistribute(page *PbPage, row *PbRow, column *PbColumn) (float64, float64, bool) {
