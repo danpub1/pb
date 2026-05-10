@@ -2,6 +2,7 @@ package main
 
 import (
 	"archive/zip"
+	"embed"
 	"fmt"
 	"image"
 	"image/color"
@@ -69,7 +70,9 @@ func floatFromFixed(i fixed.Int26_6) float64 {
 }
 
 func ReadFontFile(path string) ([]byte, error) {
-	if pathParts := strings.SplitN(path, "::", 2); len(pathParts) == 2 {
+	if newPath, hasPrefix := strings.CutPrefix(path, "::"); hasPrefix {
+		return baseFonts.ReadFile("fonts/" + newPath)
+	} else if pathParts := strings.SplitN(path, "::", 2); len(pathParts) == 2 {
 		if zipReader, err := zip.OpenReader(pathParts[0]); err != nil {
 			return make([]byte, 0), err
 		} else {
@@ -107,11 +110,19 @@ func ReadFontFile(path string) ([]byte, error) {
 
 var fontCache map[string]font.Face = map[string]font.Face{}
 
+//go:embed fonts/*.ttf fonts/*.otf
+var baseFonts embed.FS
+
 func openFonts(textInfo *TextInfo) ([]font.Face, float64, float64) {
 	size := lengthToPoints(textInfo.height, textInfo.units)
 	dpi := dpi(textInfo.units, textInfo.density)
 
-	fonts := strings.Split(textInfo.font, ",")
+	fontNames := textInfo.font
+	if len(fontNames) == 0 {
+		fontNames = "::FiraSans-Regular.otf,::FiraSans-Bold.otf,::FiraSans-Italic.otf,::FiraSans-BoldItalic.otf,::Merriweather-Regular.ttf,::Merriweather-Bold.ttf,::Merriweather-Italic.ttf,::Merriweather-BoldItalic.ttf,::FiraMono-Medium.otf"
+	}
+
+	fonts := strings.Split(fontNames, ",")
 	faces := make([]font.Face, 0)
 	maxAscent := 0.0
 	maxLineHeight := 0.0
@@ -178,6 +189,21 @@ func drawString(d []font.Drawer, s string, letterSpacing fixed.Int26_6, wordSpac
 			isFont = true
 		case '\x04':
 			curFont = 4
+			isFont = true
+		case '\x05':
+			curFont = 5
+			isFont = true
+		case '\x06':
+			curFont = 6
+			isFont = true
+		case '\x07':
+			curFont = 7
+			isFont = true
+		case '\x08':
+			curFont = 8
+			isFont = true
+		case '\x0B':
+			curFont = 9
 			isFont = true
 		}
 		if curFont > len(d) {
@@ -310,7 +336,7 @@ func TextToImage(TextBlockLayout *TextBlockLayout, textInfo *TextInfo) *image.NR
 			case TextAlignJustified:
 				letterCount := 0
 				spaceCount := 0
-				escapes := []rune{'\x00', '\x01', '\x02', '\x03', '\x04', '\n'}
+				escapes := []rune{'\x00', '\x01', '\x02', '\x03', '\x04', '\x05', '\x06', '\x07', '\x08', '\x0B', '\n'}
 				for _, rr := range line {
 					if rr == 0 {
 						continue

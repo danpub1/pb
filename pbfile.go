@@ -29,6 +29,11 @@ func escapeText(s string) string {
 	s = strings.ReplaceAll(s, "\x02", "\\2")
 	s = strings.ReplaceAll(s, "\x03", "\\3")
 	s = strings.ReplaceAll(s, "\x04", "\\4")
+	s = strings.ReplaceAll(s, "\x05", "\\5")
+	s = strings.ReplaceAll(s, "\x06", "\\6")
+	s = strings.ReplaceAll(s, "\x07", "\\7")
+	s = strings.ReplaceAll(s, "\x08", "\\8")
+	s = strings.ReplaceAll(s, "\x0B", "\\9")
 	s = strings.ReplaceAll(s, "\n", "\\n")
 	return s
 }
@@ -209,6 +214,11 @@ func unescapeText(text string) string {
 	text = unescapeEscapee(text, `\2`, "\x02")
 	text = unescapeEscapee(text, `\3`, "\x03")
 	text = unescapeEscapee(text, `\4`, "\x04")
+	text = unescapeEscapee(text, `\5`, "\x05")
+	text = unescapeEscapee(text, `\6`, "\x06")
+	text = unescapeEscapee(text, `\7`, "\x07")
+	text = unescapeEscapee(text, `\8`, "\x08")
+	text = unescapeEscapee(text, `\9`, "\x0B")
 	text = unescapeEscapee(text, `\[^\\]`, "$2")
 	return strings.ReplaceAll(text, "\\\\", "\\")
 }
@@ -577,7 +587,9 @@ func localizePath(path string, basePath string) string {
 	if !rxRootPath.MatchString(path) {
 		pieces := strings.Split(path, ",")
 		for ii := range pieces {
-			pieces[ii] = basePath + pieces[ii]
+			if len(pieces[ii]) > 0 {
+				pieces[ii] = basePath + pieces[ii]
+			}
 		}
 		path = strings.Join(pieces, ",")
 	}
@@ -647,7 +659,7 @@ func ApplyDefaultCaptions(items []PbItem) {
 			if items[ii].itemType == ItemTypeImage {
 				caption := items[ii].Setting("caption")
 				if len(caption) != 0 && len(items[ii].Setting("text")) == 0 {
-					items[ii].Set("text", items[ii].Setting("caption"))
+					items[ii].Set("text", unescapeText(caption))
 				}
 			}
 		}
@@ -658,7 +670,7 @@ func readInputFile(inFile string, styles map[string]string) ([]PbItem, map[strin
 	var inBytes []byte
 	var err error
 
-	basePath := BasePath(inFile)
+	basePath := ""
 
 	var inStrings []string
 	var fi os.FileInfo
@@ -704,6 +716,7 @@ func readInputFile(inFile string, styles map[string]string) ([]PbItem, map[strin
 		}
 
 		inStrings = strings.Split(string(inBytes), "\n")
+		basePath = BasePath(inFile)
 	}
 
 	inStrings = makeIntoLines(inStrings)
