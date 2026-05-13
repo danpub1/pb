@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"slices"
 	"strings"
 	"time"
 )
@@ -19,7 +20,9 @@ func isPageInRange(pageRange string, pageNum int) bool {
 	pageRanges := strings.Split(pageRange, ",")
 
 	for _, aRange := range pageRanges {
-		if strings.HasPrefix(aRange, "-") {
+		if aRange == "*" {
+			return true
+		} else if strings.HasPrefix(aRange, "-") {
 			if end, _ := strings.CutPrefix(aRange, "-"); pageNum <= Atoi(end) {
 				return true
 			}
@@ -166,6 +169,8 @@ func main() {
 
 	_, lastModTime = fileChanged(inFiles, time.Time{})
 
+	var lastIteration []string = nil
+
 	for {
 		items := ReadPbFile(inFiles, args)
 
@@ -193,21 +198,34 @@ func main() {
 			log.Printf("Paginated: %v pages", len(pbBook.pages))
 		}
 
+		flat := pbBook.Flatten()
+		pageRange := Opts.PageRange()
+		includePages := "0"
+		if lastIteration != nil {
+			for ii, pp := range flat {
+				if !slices.Contains(lastIteration, pp) {
+					includePages = fmt.Sprintf("%v,%v", includePages, ii+1)
+				}
+			}
+		}
+		pageRange = strings.ReplaceAll(pageRange, "*", includePages)
+		lastIteration = flat
+
 		// calculate sizes that fills available space
-		resizePages(pbBook, Opts.PageRange())
+		resizePages(pbBook, pageRange)
 
 		if Opts.Verbose("D") {
 			log.Printf("Resized pages")
 		}
 
 		// determine positions on page
-		layoutPages(pbBook, Opts.PageRange())
+		layoutPages(pbBook, pageRange)
 
 		if Opts.Verbose("D") {
 			log.Printf("Laid out pages")
 		}
 
-		renderPages(pbBook, Opts.PageRange())
+		renderPages(pbBook, pageRange)
 
 		if Opts.Verbose("X") {
 			fmt.Println(printItems(items, true))

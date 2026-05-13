@@ -3,6 +3,9 @@
 ## [Unreleased]
 
 ### Added
+
+* Support `page-range:*` to select changed pages when using `watch`
+ 
 ### Changed
 ### Deprecated
 ### Removed

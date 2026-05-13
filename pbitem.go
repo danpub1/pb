@@ -3,6 +3,9 @@ package main
 import (
 	"archive/zip"
 	"bufio"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"image"
 	"image/color"
 	"image/draw"
@@ -1253,6 +1256,76 @@ func OptimizeSettings(book []PbItem) {
 			item.hasSettings = true
 		}
 	}
+}
+
+func (item *PbItem) FlattenSetting(flat *map[string]string, itemType int, baseSetting int) {
+	if item.itemType == itemType {
+		for key, value := range item.settings {
+			if key != "page-range" {
+				(*flat)[key] = value
+			}
+		}
+	}
+
+	if baseSetting >= 0 {
+		for key, value := range item.pb[baseSetting].settings {
+			if key != "page-range" {
+				(*flat)[key] = value
+			}
+		}
+	}
+}
+
+func (item *PbItem) FlattenSettings() string {
+	flat := make(map[string]string)
+
+	item.FlattenSetting(&flat, ItemTypeBook, item.bookSetting)
+	item.FlattenSetting(&flat, ItemTypePage, item.pageSetting)
+	item.FlattenSetting(&flat, ItemTypeRow, item.rowSetting)
+	item.FlattenSetting(&flat, ItemTypeColumn, item.columnSetting)
+	item.FlattenSetting(&flat, ItemTypeImage, -1)
+	item.FlattenSetting(&flat, ItemTypeText, -1)
+
+	bytes, _ := json.Marshal(&flat)
+	return string(bytes[:])
+}
+
+func (book *PbBook) Flatten() []string {
+
+	rv := make([]string, 0)
+
+	for _, page := range book.pages {
+		wholePage := strings.Builder{}
+		wholePage.WriteString("{\"r\":[")
+		for rr, row := range page.rows {
+			if rr != 0 {
+				wholePage.WriteString(",")
+			}
+			wholePage.WriteString("{\"c\":[")
+			for cc, column := range row.columns {
+				if cc != 0 {
+					wholePage.WriteString(",")
+				}
+				wholePage.WriteString("{\"i\":[")
+				for ii, item := range column.items {
+					if ii != 0 {
+						wholePage.WriteString(",")
+					}
+					wholePage.WriteString("\"")
+					wholePage.WriteString(item.item.FlattenSettings())
+					wholePage.WriteString("\"")
+				}
+				wholePage.WriteString("]}")
+			}
+			wholePage.WriteString("]}")
+		}
+		wholePage.WriteString("]}")
+		hashbytes := sha256.Sum256([]byte(wholePage.String()))
+		pageHash := hex.EncodeToString(hashbytes[:])
+		rv = append(rv, pageHash)
+	}
+
+	return rv
 }
 
 func (item *PbItem) SettingInt(setting string, itemType int) string {
