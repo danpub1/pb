@@ -176,21 +176,21 @@ func SizeForContainer(sSize string, sContainerSize string, margin string) (float
 
 	maxWidth, maxHeight := ContainerSize(sContainerSize, margin)
 
-	if strings.HasSuffix(sWidth, "%") {
-		sWidth = strings.TrimSuffix(sWidth, "%")
+	if before, ok := strings.CutSuffix(sWidth, "%"); ok {
+		sWidth = before
 		width = math.Min(Atof(sWidth), 100) / 100 * maxWidth
-	} else if strings.HasSuffix(sWidth, "!") {
-		sWidth = strings.TrimSuffix(sWidth, "!")
+	} else if before, ok := strings.CutSuffix(sWidth, "!"); ok {
+		sWidth = before
 		width = math.Min(Atof(sWidth), maxWidth)
 	} else {
 		width = math.Min(Atof(sWidth), maxWidth)
 	}
 
-	if strings.HasSuffix(sHeight, "%") {
-		sHeight = strings.TrimSuffix(sHeight, "%")
+	if before, ok := strings.CutSuffix(sHeight, "%"); ok {
+		sHeight = before
 		height = math.Min(Atof(sHeight), 100) / 100 * maxHeight
-	} else if strings.HasSuffix(sHeight, "!") {
-		sHeight = strings.TrimSuffix(sHeight, "!")
+	} else if before, ok := strings.CutSuffix(sHeight, "!"); ok {
+		sHeight = before
 		height = math.Min(Atof(sHeight), maxHeight)
 	} else {
 		height = math.Min(Atof(sHeight), maxHeight)

@@ -17,9 +17,9 @@ func isPageInRange(pageRange string, pageNum int) bool {
 	// internally the page numbering is zero based, the external page number is one based
 	pageNum += 1
 
-	pageRanges := strings.Split(pageRange, ",")
+	pageRanges := strings.SplitSeq(pageRange, ",")
 
-	for _, aRange := range pageRanges {
+	for aRange := range pageRanges {
 		if aRange == "*" {
 			return true
 		} else if strings.HasPrefix(aRange, "-") {

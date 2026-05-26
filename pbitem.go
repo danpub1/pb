@@ -893,16 +893,16 @@ func (item *PbItem) ImageSizeForPage(sizeName string) (float64, float64, float64
 
 		baseSize := 0.0
 
-		if strings.HasSuffix(sBaseSize, "%") {
-			sBaseSize = strings.TrimSuffix(sBaseSize, "%")
+		if before, ok := strings.CutSuffix(sBaseSize, "%"); ok {
+			sBaseSize = before
 			if sSizeMode == "width" {
 				baseSize = Atof(sBaseSize) / 100 * maxWidth
 			} else {
 				baseSize = Atof(sBaseSize) / 100 * math.Sqrt(maxWidth*maxHeight)
 			}
 			//baseSize = math.Sqrt((Atof(sBaseSize) / 100 * maxWidth) * (Atof(sBaseSize) / 100 * maxHeight))
-		} else if strings.HasSuffix(sBaseSize, "!") {
-			sBaseSize = strings.TrimSuffix(sBaseSize, "!")
+		} else if before, ok := strings.CutSuffix(sBaseSize, "!"); ok {
+			sBaseSize = before
 			baseSize = Atof(sBaseSize)
 			if sSizeMode == "area" {
 				baseSize = math.Sqrt(baseSize * baseSize / item.Aspect())
@@ -934,16 +934,16 @@ func (item *PbItem) ImageSizeForPage(sizeName string) (float64, float64, float64
 			sSize = strings.TrimPrefix(sSize, "scale:")
 			maxDimension = baseSize * Atof(sSize)
 		}
-	} else if strings.HasSuffix(sSize, "%") {
-		sSize = strings.TrimSuffix(sSize, "%")
+	} else if before, ok := strings.CutSuffix(sSize, "%"); ok {
+		sSize = before
 		if sSizeMode == "width" {
 			maxDimension = Atof(sSize) / 100 * maxWidth
 		} else {
 			maxDimension = Atof(sSize) / 100 * math.Sqrt(maxWidth*maxHeight)
 		}
 		//maxDimension = math.Sqrt((Atof(sSize) / 100 * maxWidth) * (Atof(sSize) / 100 * maxHeight))
-	} else if strings.HasSuffix(sSize, "!") {
-		sSize = strings.TrimSuffix(sSize, "!")
+	} else if before, ok := strings.CutSuffix(sSize, "!"); ok {
+		sSize = before
 		maxDimension = Atof(sSize)
 		if sSizeMode == "area" {
 			maxDimension = math.Sqrt(maxDimension * maxDimension / item.Aspect())

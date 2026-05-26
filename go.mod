@@ -1,6 +1,6 @@
 module pb
 
-go 1.23.0
+go 1.26.0
 
 require golang.org/x/image v0.30.0 // indirect was 12
 

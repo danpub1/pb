@@ -302,7 +302,7 @@ func saveResizeCache(cache *map[string]string) {
 	// }
 }
 
-func checkResizeCacheEntry(cache *map[string]string, jsonValue string) (string, string) {
+func checkResizeCacheEntry(_ /*cache*/ *map[string]string, jsonValue string) (string, string) {
 	hashbytes := sha256.Sum256([]byte(jsonValue))
 	jsonhash := hex.EncodeToString(hashbytes[:])
 	// if entry, exists := (*cache)[jsonhash]; exists {
