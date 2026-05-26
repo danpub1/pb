@@ -84,6 +84,16 @@ func fileDate(filename string) int64 {
 	return rv
 }
 
+func hasFilesToWatch(filenames []string) bool {
+	for _, filename := range filenames {
+		if !strings.Contains(filename, "*") && !strings.Contains(filename, "::") {
+			return true
+		}
+	}
+
+	return false
+}
+
 func fileChanged(filenames []string, lastModTime time.Time) (bool, time.Time) {
 
 	newModTime := time.Time{}
@@ -231,7 +241,7 @@ func main() {
 			fmt.Println(printItems(items, true))
 		}
 
-		if !Opts.Watch() {
+		if !Opts.Watch() || !hasFilesToWatch(inFiles) {
 			break
 		}
 

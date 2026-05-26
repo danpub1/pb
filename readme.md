@@ -534,9 +534,7 @@ pb Selected.zip --page-break:true --font:Aptos.zip::Aptos.ttf --caption:{{Filena
   * Tests
   * Any other go-novice mistakes
 * Support input from files better
-    * Default watch mode by the types of input files (.pb versus images)
     * Redirect stdout with a book-level setting - makes it possible to create both pdf and .pb files in one command without options
-    * Look for default .pb file 
 * Shortcuts for distribute-* on corresponding elements
 * Output a text as an image (can do already, need to get height from verbose output)
 * Input and output handlers for more file types

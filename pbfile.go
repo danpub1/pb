@@ -6,6 +6,7 @@ import (
 	"io"
 	"io/fs"
 	"log"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -686,11 +687,13 @@ func readInputFile(inFile string, styles map[string]string) ([]PbItem, map[strin
 
 	if strings.HasSuffix(lowerFile, ".zip") {
 		inFile = inFile + "::*"
+		lowerFile = strings.ToLower(inFile)
 	}
 
 	foundPrefix := false
 	if inFile, foundPrefix = strings.CutPrefix(inFile, "@"); foundPrefix {
 		inFile = "@@@ " + inFile
+		lowerFile = strings.ToLower(inFile)
 	}
 
 	foundExt := false
@@ -742,18 +745,17 @@ func ReadPbFile(inFiles []string, args []string) []PbItem {
 		items = append(items, oneItems...)
 	}
 
-	var book *PbItem = nil
-	var bookidx = 0
+	bookIdxs := make([]int, 0)
 	for ii := range items {
 		if items[ii].itemType == ItemTypeBook {
-			book = &items[ii]
-			bookidx = ii
+			bookIdxs = append(bookIdxs, ii)
 			break
 		}
 	}
 
 	// Need to have a book to put command line options
-	if book == nil {
+	// If no book or book is not first, create an empty book
+	if len(bookIdxs) == 0 || bookIdxs[0] != 0 {
 		thebook := PbItem{}
 		thebook.itemType = ItemTypeBook
 		thebook.settings = map[string]string{}
@@ -761,14 +763,25 @@ func ReadPbFile(inFiles []string, args []string) []PbItem {
 		newitems = append(newitems, thebook)
 		newitems = append(newitems, items...)
 		items = newitems
-	} else if bookidx != 0 {
-		newitems := make([]PbItem, 0)
-		newitems = append(newitems, items[bookidx])
-		newitems = append(newitems, items[:bookidx]...)
-		if bookidx != len(items)-1 {
-			newitems = append(newitems, items[bookidx:]...)
+	}
+
+	// If multiple books, merge them into the first book, which is now the zeroth element
+	if len(bookIdxs) > 1 || bookIdxs[0] != 0 {
+		for ii := range items {
+			if ii > 0 {
+				maps.Copy(items[0].settings, items[ii].settings)
+			}
 		}
-		items = newitems
+
+		for ii := len(items) - 1; ii > 0; ii-- {
+			if items[ii].itemType == ItemTypeBook {
+				newitems := make([]PbItem, 0)
+				newitems = append(newitems, items[0:ii]...)
+				if ii < len(items)-1 {
+					newitems = append(newitems, items[ii+1:]...)
+				}
+			}
+		}
 	}
 
 	for ii := range items {
