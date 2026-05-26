@@ -3,13 +3,13 @@
 ## [Unreleased]
 
 ### Added
-
 * Support `page-range:*` to select changed pages when using `watch`
  
 ### Changed
 ### Deprecated
 ### Removed
 ### Fixed
+* Handle errors from `ImageReader.Reader()`
 
 ## v1.0.0
 

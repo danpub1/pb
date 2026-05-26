@@ -749,7 +749,13 @@ func (item *PbItem) GetImage() image.Image {
 		draw.Draw(dst, dst.Bounds(), image.NewUniform(color.NRGBA{0, 0, 0, 0}), image.Point{}, draw.Src)
 		return dst
 	}
-	decodedImage, _, err := image.Decode(imageFile.Reader())
+	reader := imageFile.Reader()
+	if reader == nil {
+		dst := image.NewNRGBA(image.Rect(0, 0, 128, 128))
+		draw.Draw(dst, dst.Bounds(), image.NewUniform(color.NRGBA{0, 0, 0, 0}), image.Point{}, draw.Src)
+		return dst
+	}
+	decodedImage, _, err := image.Decode(reader)
 	imageFile.Close()
 	if err != nil {
 		log.Print(err)
@@ -777,7 +783,12 @@ func (item *PbItem) GetImageConfig() image.Config {
 	if imageFile == nil {
 		return image.Config{}
 	}
-	imageConfig, _, err := image.DecodeConfig(imageFile.Reader())
+
+	reader := imageFile.Reader()
+	if reader == nil {
+		return image.Config{}
+	}
+	imageConfig, _, err := image.DecodeConfig(reader)
 	imageFile.Close()
 	if err != nil {
 		log.Print(err)
