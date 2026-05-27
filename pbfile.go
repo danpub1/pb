@@ -350,6 +350,18 @@ func parse(line string, styles map[string]string) PbItem {
 			case "smaller", "much-smaller", "much-much-smaller", "much-much-much-smaller",
 				"larger", "much-larger", "much-much-larger", "much-much-much-larger":
 				theItem.Set("size", pieces[0])
+			case "spreadtop", "spreadmiddle", "spreadbottom", "spreadleft", "spreadcenter", "spreadright", "spreadbinding", "spreadedge",
+				"top", "middle", "bottom", "left", "center", "right", "binding", "edge", "justify":
+				switch theItem.itemType {
+				case ItemTypePage:
+					theItem.Set("distribute-rows", pieces[0])
+				case ItemTypeRow:
+					theItem.Set("distribute-columns", pieces[0])
+				case ItemTypeColumn:
+					theItem.Set("distribute-items", pieces[0])
+				default:
+					log.Print("Bare alignment on invalid item")
+				}
 			}
 		}
 	}

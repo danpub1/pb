@@ -1054,6 +1054,7 @@ var defaultSettings = map[string]string{
 	"distribute-items":      "spreadmiddle", // how images or text are distributed vertically in a column
 	"item-gutter":           "6",
 	"keep-columns-together": "false",
+	"spread-percent":        "50", // how spreadmiddle or spreadcenter spreads extra at top/bottom or left/right
 
 	// image or text (or similar related settings)
 	"item-align":   "center", // left center right - how images or text of different width are aligned in a column

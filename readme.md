@@ -527,20 +527,17 @@ pb Selected.zip --page-break:true --font:Aptos.zip::Aptos.ttf --caption:{{Filena
 ## Things to Do
 
 * Issue: first page cannot have some or all settings. What about first row, column, item???
-* Make generated page-, row-, and column breaks insert a literal page, row, or column so the settings reset to default
+* Make generated page-, row-, and column breaks insert a literal page, row, or column so the settings reset to default???
 * Refactor & clean up
   * Break up large files
   * Latest dependencies
   * Tests
   * Any other go-novice mistakes
-* Support input from files better
+* Support input from files better so everything can be done by dropping files on the app
     * Redirect stdout with a book-level setting - makes it possible to create both pdf and .pb files in one command without options
-* Shortcuts for distribute-* on corresponding elements
 * Output a text as an image (can do already, need to get height from verbose output)
 * Input and output handlers for more file types
 * Output sigmoidal brightness/lightness?  Existing output gamma is one type of this
-* spreadedge, spreadbinding - just not implemented
-* eyelevel, spreadeyelevel, mouthlevel (?), spreadmouthlevel (?) - can do with blank texts as placeholders
 * adjust highlights, midtones, shadows
 * Image, font https://... downloaded and then cached (in a zip file?)
 * HSL Adjustment

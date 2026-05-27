@@ -643,11 +643,19 @@ func layoutPages(pbBook *PbBook, outPageRange string) {
 								}
 							}
 						case AlignSpreadMiddle:
+							spreadPercent := 50.0
+							if columnItem := page.rows[row].columns[column].PbItem(); columnItem != nil {
+								spreadPercent = columnItem.FloatColumnSetting("spread-percent")
+							}
 							interSpace := extraColumnHeight / float64(NumItemLayout(page.rows[row].columns[column].items)+1)
 							numItem := 0
 							for item := range page.rows[row].columns[column].items {
 								if page.rows[row].columns[column].items[item].item.inLayout {
-									page.rows[row].columns[column].items[item].item.yOffset += interSpace * float64(numItem+1)
+									if item == 0 {
+										page.rows[row].columns[column].items[item].item.yOffset += interSpace * float64(numItem+1) * spreadPercent / 100.0
+									} else {
+										page.rows[row].columns[column].items[item].item.yOffset += interSpace * float64(numItem+1)
+									}
 									numItem++
 								}
 							}
@@ -726,12 +734,20 @@ func layoutPages(pbBook *PbBook, outPageRange string) {
 							}
 						}
 					case AlignSpreadCenter:
+						spreadPercent := 50.0
+						if rowItem := page.rows[row].PbItem(); rowItem != nil {
+							spreadPercent = rowItem.FloatPageSetting("spread-percent")
+						}
 						interSpace := extraRowWidth / float64(NumColumnLayout(page.rows[row].columns)+1)
 						numColumn := 0
 						for column := range page.rows[row].columns {
 							for item := range page.rows[row].columns[column].items {
 								if page.rows[row].columns[column].items[item].item.inLayout {
-									page.rows[row].columns[column].items[item].item.xOffset += interSpace * float64(numColumn+1)
+									if column == 0 {
+										page.rows[row].columns[column].items[item].item.xOffset += interSpace * float64(numColumn+1) * spreadPercent / 100
+									} else {
+										page.rows[row].columns[column].items[item].item.xOffset += interSpace * float64(numColumn+1)
+									}
 								}
 							}
 							if NumItemLayout(page.rows[row].columns[column].items) > 0 {
@@ -825,13 +841,21 @@ func layoutPages(pbBook *PbBook, outPageRange string) {
 						}
 					}
 				case AlignSpreadMiddle:
+					spreadPercent := 50.0
+					if pageItem := page.PbItem(); pageItem != nil {
+						spreadPercent = pageItem.FloatPageSetting("spread-percent")
+					}
 					interSpace := extraPageHeight / float64(NumRowLayout(page.rows)+1)
 					numRow := 0
 					for row := range page.rows {
 						for column := range page.rows[row].columns {
 							for item := range page.rows[row].columns[column].items {
 								if page.rows[row].columns[column].items[item].item.inLayout {
-									page.rows[row].columns[column].items[item].item.yOffset += interSpace * float64(numRow+1)
+									if row == 0 {
+										page.rows[row].columns[column].items[item].item.yOffset += interSpace * float64(numRow+1) * spreadPercent / 100.0
+									} else {
+										page.rows[row].columns[column].items[item].item.yOffset += interSpace * float64(numRow+1)
+									}
 								}
 							}
 						}
