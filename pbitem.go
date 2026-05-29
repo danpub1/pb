@@ -96,6 +96,11 @@ type PbColumn struct {
 	items   []PbColumnItem
 }
 
+func (theItem *PbColumnItem) width() float64 {
+	itemWidth, _ := theItem.item.Size()
+	return itemWidth
+}
+
 func (theColumn *PbColumn) width() float64 {
 	width := 0.0
 	for ii := range theColumn.items {

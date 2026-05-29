@@ -526,8 +526,7 @@ pb Selected.zip --page-break:true --font:Aptos.zip::Aptos.ttf --caption:{{Filena
 
 ## Things to Do
 
-* Issue: first page cannot have some or all settings. What about first row, column, item???
-* Make generated page-, row-, and column breaks insert a literal page, row, or column so the settings reset to default???
+* Issue: first page cannot have some or all settings. (Problems with title pages.)  Also first row, column, item???
 * Refactor & clean up
   * Break up large files
   * Latest dependencies
@@ -537,8 +536,9 @@ pb Selected.zip --page-break:true --font:Aptos.zip::Aptos.ttf --caption:{{Filena
     * Redirect stdout with a book-level setting - makes it possible to create both pdf and .pb files in one command without options
 * Output a text as an image (can do already, need to get height from verbose output)
 * Input and output handlers for more file types
-* Output sigmoidal brightness/lightness?  Existing output gamma is one type of this
-* adjust highlights, midtones, shadows
-* Image, font https://... downloaded and then cached (in a zip file?)
+* Sigmoidal brightness/lightness Adjustment? (i.e. sigmoidal but on a different channel)
+* Highlights, midtones, shadows Adjustment
 * HSL Adjustment
+* Image, font https://... downloaded and then cached (in a zip file?)
 * Calendar pages
+* UI of its own - ebitengine or web browser-based?

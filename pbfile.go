@@ -335,6 +335,17 @@ func parse(line string, styles map[string]string) PbItem {
 			case "scale":
 				pieces[1] = pieces[0] + ":" + pieces[1]
 				pieces[0] = "size"
+			case "gutter":
+				switch theItem.itemType {
+				case ItemTypePage:
+					pieces[0] = "row-gutter"
+				case ItemTypeRow:
+					pieces[0] = "column-gutter"
+				case ItemTypeColumn:
+					pieces[0] = "item-gutter"
+				default:
+					log.Print("Gutter shortcut on invalid item")
+				}
 			}
 			theItem.Set(pieces[0], unescape(pieces[1]))
 		} else if len(pieces) == 1 {
@@ -360,7 +371,7 @@ func parse(line string, styles map[string]string) PbItem {
 				case ItemTypeColumn:
 					theItem.Set("distribute-items", pieces[0])
 				default:
-					log.Print("Bare alignment on invalid item")
+					log.Print("Alignment shortcut on invalid item")
 				}
 			}
 		}

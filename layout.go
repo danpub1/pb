@@ -315,11 +315,12 @@ func updateResizeCacheEntry(cache *map[string]string, jsonValue string, jsonhash
 	// (*cache)[jsonhash] = jsonValue
 }
 
-func spaceToDistribute(page *PbPage, row *PbRow, column *PbColumn) (float64, float64, bool) {
+func spaceToDistribute(page *PbPage, row *PbRow, column *PbColumn, item *PbColumnItem) (float64, float64, bool) {
 	spareRowWidth := page.availableWidth - row.width()
+	spareColumnWidth := column.width() - item.width()
 	sparePageHeight := page.availableHeight - page.height()
 	spareColumnHeight := row.height() - column.height()
-	return spareRowWidth, math.Max(sparePageHeight, spareColumnHeight), spareRowWidth > 0 && (sparePageHeight > 0 || spareColumnHeight > 0)
+	return math.Max(spareRowWidth, spareColumnWidth), math.Max(sparePageHeight, spareColumnHeight), (spareRowWidth > 0 || spareColumnWidth > 0) && (sparePageHeight > 0 || spareColumnHeight > 0)
 }
 
 func resizeItem(itemColumnItemNum int, itemColumnNum int, itemRowNum int, pbPage *PbPage, dx float64, dy float64) bool {
@@ -471,7 +472,7 @@ func resizePages(pb *PbBook, outPageRange string) {
 						for column := range page.rows[row].columns {
 							for item := range page.rows[row].columns[column].items {
 								if page.rows[row].columns[column].items[item].item.inLayout {
-									if dx, dy, canResize := spaceToDistribute(page, &page.rows[row], &page.rows[row].columns[column]); canResize {
+									if dx, dy, canResize := spaceToDistribute(page, &page.rows[row], &page.rows[row].columns[column], &page.rows[row].columns[column].items[item]); canResize {
 										resizedOne := resizeItem(item, column, row, page, dx, dy)
 										resized = resized || resizedOne
 									}
@@ -652,7 +653,7 @@ func layoutPages(pbBook *PbBook, outPageRange string) {
 							for item := range page.rows[row].columns[column].items {
 								if page.rows[row].columns[column].items[item].item.inLayout {
 									if item == 0 {
-										page.rows[row].columns[column].items[item].item.yOffset += interSpace * float64(numItem+1) * spreadPercent / 100.0
+										page.rows[row].columns[column].items[item].item.yOffset += interSpace * float64(numItem+1) * spreadPercent / 50.0
 									} else {
 										page.rows[row].columns[column].items[item].item.yOffset += interSpace * float64(numItem+1)
 									}
@@ -744,7 +745,7 @@ func layoutPages(pbBook *PbBook, outPageRange string) {
 							for item := range page.rows[row].columns[column].items {
 								if page.rows[row].columns[column].items[item].item.inLayout {
 									if column == 0 {
-										page.rows[row].columns[column].items[item].item.xOffset += interSpace * float64(numColumn+1) * spreadPercent / 100
+										page.rows[row].columns[column].items[item].item.xOffset += interSpace * float64(numColumn+1) * spreadPercent / 50.0
 									} else {
 										page.rows[row].columns[column].items[item].item.xOffset += interSpace * float64(numColumn+1)
 									}
@@ -852,7 +853,7 @@ func layoutPages(pbBook *PbBook, outPageRange string) {
 							for item := range page.rows[row].columns[column].items {
 								if page.rows[row].columns[column].items[item].item.inLayout {
 									if row == 0 {
-										page.rows[row].columns[column].items[item].item.yOffset += interSpace * float64(numRow+1) * spreadPercent / 100.0
+										page.rows[row].columns[column].items[item].item.yOffset += interSpace * float64(numRow+1) * spreadPercent / 50.0
 									} else {
 										page.rows[row].columns[column].items[item].item.yOffset += interSpace * float64(numRow+1)
 									}
