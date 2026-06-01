@@ -541,4 +541,4 @@ pb Selected.zip --page-break:true --font:Aptos.zip::Aptos.ttf --caption:{{Filena
 * HSL Adjustment
 * Image, font https://... downloaded and then cached (in a zip file?)
 * Calendar pages
-* UI of its own - ebitengine or web browser-based?
+* UI of its own - ebitengine or web browser-based?  Launch pdf or image viewer?

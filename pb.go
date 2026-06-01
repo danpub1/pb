@@ -9,8 +9,8 @@ import (
 	"time"
 )
 
-func isPageInRange(pageRange string, pageNum int) bool {
-	if len(pageRange) == 0 || pageRange == "-" {
+func isPageInRange(pageRange string, pageNum int, firstIteration bool) bool {
+	if len(pageRange) == 0 || pageRange == "-" || (pageRange == "$" && firstIteration) {
 		return true
 	}
 
@@ -20,7 +20,7 @@ func isPageInRange(pageRange string, pageNum int) bool {
 	pageRanges := strings.SplitSeq(pageRange, ",")
 
 	for aRange := range pageRanges {
-		if aRange == "*" {
+		if aRange == "*" || (aRange == "$" && !firstIteration) {
 			return true
 		} else if strings.HasPrefix(aRange, "-") {
 			if end, _ := strings.CutPrefix(aRange, "-"); pageNum <= Atoi(end) {
@@ -50,10 +50,10 @@ func isPageInRange(pageRange string, pageNum int) bool {
 	return false
 }
 
-func isPageRangeMulti(pageRange string, pbBook *PbBook) bool {
+func isPageRangeMulti(pageRange string, firstIteration bool, pbBook *PbBook) bool {
 	pageCount := 0
 	for pp := range pbBook.pages {
-		if isPageInRange(pageRange, pp) {
+		if isPageInRange(pageRange, pp, firstIteration) {
 			pageCount++
 			if pageCount > 1 {
 				return true
@@ -87,7 +87,9 @@ func fileDate(filename string) int64 {
 func hasFilesToWatch(filenames []string) bool {
 	for _, filename := range filenames {
 		if !strings.Contains(filename, "*") && !strings.Contains(filename, "::") {
-			return true
+			if _, err := os.Stat(filename); err == nil {
+				return true
+			}
 		}
 	}
 
@@ -180,6 +182,7 @@ func main() {
 	_, lastModTime = fileChanged(inFiles, time.Time{})
 
 	var lastIteration []string = nil
+	var firstIteration = true
 
 	for {
 		items := ReadPbFile(inFiles, args)
@@ -218,30 +221,33 @@ func main() {
 				}
 			}
 		}
+		if !firstIteration {
+			pageRange = strings.ReplaceAll(pageRange, "$", includePages)
+		}
 		pageRange = strings.ReplaceAll(pageRange, "*", includePages)
 		lastIteration = flat
 
 		// calculate sizes that fills available space
-		resizePages(pbBook, pageRange)
+		resizePages(pbBook, pageRange, firstIteration)
 
 		if Opts.Verbose("D") {
 			log.Printf("Resized pages")
 		}
 
 		// determine positions on page
-		layoutPages(pbBook, pageRange)
+		layoutPages(pbBook, pageRange, firstIteration)
 
 		if Opts.Verbose("D") {
 			log.Printf("Laid out pages")
 		}
 
-		renderPages(pbBook, pageRange)
+		renderPages(pbBook, pageRange, firstIteration, flat)
 
 		if Opts.Verbose("X") {
 			fmt.Println(printItems(items, true))
 		}
 
-		if !Opts.Watch() || !hasFilesToWatch(inFiles) {
+		if !hasFilesToWatch(inFiles) || !Opts.Watch() {
 			break
 		}
 
@@ -252,6 +258,10 @@ func main() {
 		changed := false
 		for changed, lastModTime = fileChanged(inFiles, lastModTime); !changed; changed, lastModTime = fileChanged(inFiles, lastModTime) {
 			time.Sleep(time.Duration(int64(1) * 1000 * 1000 * 1000))
+		}
+
+		if pageRange == "$" {
+			firstIteration = false
 		}
 	}
 }

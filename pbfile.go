@@ -608,7 +608,7 @@ func applyStyles(line string, styles map[string]string) string {
 var rxRootPath, _ = regexp.Compile(`^([a-z]:|[/\\])`)
 
 func localizePath(path string, basePath string) string {
-	if !rxRootPath.MatchString(path) {
+	if !rxRootPath.MatchString(path) && !strings.HasPrefix(path, "::") {
 		pieces := strings.Split(path, ",")
 		for ii := range pieces {
 			if len(pieces[ii]) > 0 {
@@ -789,7 +789,7 @@ func ReadPbFile(inFiles []string, args []string) []PbItem {
 	}
 
 	// If multiple books, merge them into the first book, which is now the zeroth element
-	if len(bookIdxs) > 1 || bookIdxs[0] != 0 {
+	if len(bookIdxs) > 1 || (len(bookIdxs) == 1 && bookIdxs[0] != 0) {
 		for ii := range items {
 			if ii > 0 {
 				maps.Copy(items[0].settings, items[ii].settings)

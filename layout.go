@@ -446,11 +446,11 @@ func deserializePage(jsonValue string, page *PbPage) {
 	}
 }
 
-func resizePages(pb *PbBook, outPageRange string) {
+func resizePages(pb *PbBook, outPageRange string, firstIteration bool) {
 	resizeCache := loadResizeCache()
 
 	for pp := range pb.pages {
-		if isPageInRange(outPageRange, pp) || isCurrentPage(pb, pp) {
+		if isPageInRange(outPageRange, pp, firstIteration) || isCurrentPage(pb, pp) {
 			changed := false
 			if changed, _ = fileChanged(inFiles, lastModTime); changed {
 				break
@@ -552,7 +552,7 @@ func NumRowLayout(items []PbRow) int {
 	return numLayout
 }
 
-func layoutPages(pbBook *PbBook, outPageRange string) {
+func layoutPages(pbBook *PbBook, outPageRange string, firstIteration bool) {
 	binding := BindingUnknown
 	if len(pbBook.pages) > 0 {
 		if item := pbBook.PbItem(); item != nil {
@@ -561,7 +561,7 @@ func layoutPages(pbBook *PbBook, outPageRange string) {
 	}
 
 	for pp := range pbBook.pages {
-		if isPageInRange(outPageRange, pp) || isCurrentPage(pbBook, pp) {
+		if isPageInRange(outPageRange, pp, firstIteration) || isCurrentPage(pbBook, pp) {
 			page := &pbBook.pages[pp]
 
 			if item := page.PbItem(); item != nil && item.BoolPageSetting("nolayout") {
