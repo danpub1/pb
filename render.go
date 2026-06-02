@@ -1129,10 +1129,6 @@ func renderPages(pbBook *PbBook, outPageRange string, firstIteration bool, pageH
 	usedObjs := make([]int, 0)
 	if !firstIteration && lastOutFileInfo != nil {
 		for pp := range pbBook.pages {
-			changed := false
-			if changed, _ = fileChanged(inFiles, lastModTime); changed {
-				break
-			}
 			page := &pbBook.pages[pp]
 
 			if item := page.PbItem(); item != nil && item.BoolPageSetting("norender") {
@@ -1167,7 +1163,8 @@ func renderPages(pbBook *PbBook, outPageRange string, firstIteration bool, pageH
 	for pp := range pbBook.pages {
 		changed := false
 		if changed, _ = fileChanged(inFiles, lastModTime); changed {
-			break
+			lastOutFileInfo = nil
+			return
 		}
 		page := &pbBook.pages[pp]
 
@@ -1265,6 +1262,7 @@ func renderPages(pbBook *PbBook, outPageRange string, firstIteration bool, pageH
 						found = true
 						n, err := writeNewline(thisOutFilename)
 						if err != nil {
+							lastOutFileInfo = nil
 							return
 						}
 						info.n += n
@@ -1273,6 +1271,7 @@ func renderPages(pbBook *PbBook, outPageRange string, firstIteration bool, pageH
 				if !found {
 					n, err := writeHeader(thisOutFilename)
 					if err != nil {
+						lastOutFileInfo = nil
 						return
 					}
 					info.n = n
@@ -1295,6 +1294,7 @@ func renderPages(pbBook *PbBook, outPageRange string, firstIteration bool, pageH
 
 			thisn, thisErr := writePage(dst, objNum, pp, thisOutFilename, isPageRangeMulti, item.IntPageSetting("output-compression"), item.BoolPageSetting("output-mozjpeg"), item.PageSetting("output-mozjpeg-sampling"), item.PageSetting("cjpeg-command"))
 			if thisErr != nil {
+				lastOutFileInfo = nil
 				return
 			}
 
@@ -1315,6 +1315,7 @@ func renderPages(pbBook *PbBook, outPageRange string, firstIteration bool, pageH
 							info.n = lastOutFileInfo[thisOutFilename].n
 							n, err := writeNewline(thisOutFilename)
 							if err != nil {
+								lastOutFileInfo = nil
 								return
 							}
 							info.n += n
@@ -1333,6 +1334,7 @@ func renderPages(pbBook *PbBook, outPageRange string, firstIteration bool, pageH
 	for outFilename, info := range outFileInfo {
 		bytesWritten, endErr := writeFooter(outFilename, info.n, info.offsets)
 		if endErr != nil {
+			lastOutFileInfo = nil
 			return
 		}
 		info.n = bytesWritten
