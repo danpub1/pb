@@ -526,7 +526,7 @@ pb Selected.zip --page-break:true --font:Aptos.zip::Aptos.ttf --caption:{{Filena
 
 ## Things to Do
 
-* Issue: first page cannot have some or all settings. (Problems with title pages.)  Also first row, column, item???
+* Issue: Had problems when title pages were first, like first page cannot have some or all settings. Also first row, column, item???
 * Refactor & clean up
   * Break up large files
   * Latest dependencies
@@ -542,3 +542,5 @@ pb Selected.zip --page-break:true --font:Aptos.zip::Aptos.ttf --caption:{{Filena
 * Image, font https://... downloaded and then cached (in a zip file?)
 * Calendar pages
 * UI of its own - ebitengine or web browser-based?  Launch pdf or image viewer?
+* Colorspace
+* HDR
