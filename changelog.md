@@ -11,6 +11,7 @@
 ### Changed
 * Default `watch` to true, but do not watch if there is nothing to watch
 * Handle multiple books by merging into one
+* Help coded into default settings
 
 ### Deprecated
 ### Removed

@@ -4,8 +4,10 @@ import (
 	"archive/zip"
 	"bufio"
 	"crypto/sha256"
+	_ "embed"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"image"
 	"image/color"
 	"image/draw"
@@ -15,6 +17,8 @@ import (
 	"math"
 	"os"
 	"regexp"
+	"slices"
+	"sort"
 	"strings"
 )
 
@@ -1017,110 +1021,166 @@ func (source *PbItem) DeepCopy() PbItem {
 	return dest
 }
 
-var defaultSettings = map[string]string{
+type DefaultSetting struct {
+	defaultValue string
+	section      string
+	description  string
+}
+
+func sectionEnum(section string) int {
+	sections := []string{"Book", "Page", "Row", "Column", "Column/Row/Page", "Image/Text", "Image", "Text", "Book Option", "Page Option"}
+
+	if slices.Contains(sections, section) {
+		return slices.Index(sections, section)
+	}
+
+	return len(sections)
+}
+
+//go:embed helpbase.md
+var helpbase string
+
+func printHelp() string {
+	keys := make([]string, 0, len(defaultSettings))
+
+	for key := range defaultSettings {
+		keys = append(keys, key)
+	}
+
+	sort.SliceStable(keys, func(ii, jj int) bool {
+		sectionII := sectionEnum(defaultSettings[keys[ii]].section)
+		sectionJJ := sectionEnum(defaultSettings[keys[jj]].section)
+		return sectionII < sectionJJ ||
+			sectionII == sectionJJ && defaultSettings[keys[ii]].description < defaultSettings[keys[jj]].description
+	})
+
+	var o strings.Builder
+	var section = ""
+	for _, key := range keys {
+		if section != defaultSettings[key].section {
+			section = defaultSettings[key].section
+			if sectionName, exists := strings.CutSuffix(section, " Option"); exists {
+				sectionName = fmt.Sprintf("%v-Level Options", sectionName)
+				fmt.Fprintf(&o, "\n%v\n%v\n", sectionName, strings.Repeat("-", len(sectionName)))
+			} else {
+				sectionName := fmt.Sprintf("%v-Level Settings", section)
+				fmt.Fprintf(&o, "\n%v\n%v\n", sectionName, strings.Repeat("-", len(sectionName)))
+			}
+		}
+		desc := defaultSettings[key].description
+		if !strings.HasSuffix(desc, ".") {
+			desc = desc + "."
+		}
+		fmt.Fprintf(&o, "* `%v`: %v [%v]\n", key, desc, defaultSettings[key].defaultValue)
+	}
+
+	return strings.ReplaceAll(helpbase, "{{Settings}}", o.String())
+}
+
+var defaultSettings = map[string]DefaultSetting{
 	// book
-	"units":                   "pt",
-	"density":                 "2.0",
-	"binding":                 "side",
-	"output-gamma":            "1.0",
-	"output-sharpen":          "0.0",
-	"output-compression":      "92",
-	"output-mozjpeg":          "false",
-	"output-mozjpeg-sampling": "1x1",
+	"units":                   {"pt", "Book", "The units of measure used in laying out the book.  One of `in`, `cm`, `mm`, `pt`"},
+	"density":                 {"2.0", "Book", "Pixels per unit when converting the content to a page bitmap.  2 pixels per pt (144 ppi) could be considered for a preview quality, and 5 pixels per pt (360 ppi) could be appropriate for printing."},
+	"binding":                 {"side", "Book", "The book's binding location, one of `side`, `top`, `none`.  Controls if margins are alternated by even/odd pages."},
+	"output-gamma":            {"1.0", "Book", "Apply a gamma correction to the page bitmap. This is useful to lighten or darken printed output so it better matches the onscreen experience."},
+	"output-sharpen":          {"0.0", "Book", "Apply sharpening to the page bitmap after resizing is complete."},
+	"output-compression":      {"92", "Book", "The jpeg compression level when creating the page bitmap"},
+	"output-mozjpeg":          {"false", "Book", "Use the mozjpeg compressor to create the page bitmap. Slower, but produces smaller files at the same quality."},
+	"output-mozjpeg-sampling": {"1x1", "Book", "The subsampling used by mozjpeg. Typically one of: `1x1` (4:4:4), `1x2` (4:4:0), `2x1` (4:2:2), `2x2` (4:2:0), `4x1` (4:1:1), `4x2` (4:1:0)."},
 
 	// book level options
-	"verbose":    "D",
-	"page-range": "$",
-	"watch":      "true",
-	"cache-mode": "0",
+	"verbose":    {"D", "Book Option", "Zero or more of D, P, X, L.  D=Details, P=Print, X=Print with comments, L=Verbose Logging"},
+	"page-range": {"$", "Book Option", "Include the specified pages in the output. `*` means only changed pages, `$` means changed pages but update PDF.  Examples: `1-10,50-`, `1-2,*`."},
+	"watch":      {"true", "Book Option", "Regenerate the output when the input file changes, versus generate the output once and then exit."},
+	"cache-mode": {"0", "Book Option", "Controls Image Cache. 0=Do not cache, 1=Cache during a run but flush cache at beginning of run, 2=Fully cache image measurements across runs."},
 
 	// page
-	"page-size":       "576x576",
-	"margin":          "24",
-	"background":      "#F",
-	"distribute-rows": "spreadmiddle", // how rows are distributed vertically on the page
-	"row-gutter":      "6",            // gutter between rows
-	"current-page":    "false",
-	"header":          "",
-	"footer":          "",
+	"page-size":       {"576.0x576.0", "Page", "Page size in units, width x height."},
+	"margin":          {"24.0", "Page", "Page margin in units, All, Top & Bottom x Left & Right, Top x Right x Bottom x Left. Examples: `24`, `24.5x18.1`, `36x24x36x12`. When binding is `side`, the right margin starts out as binding and the left margin is the edge.  When binding is `top`, the top margin is initially the binding and the bottom margin is the edge."},
+	"background":      {"#F", "Page", "Color or named image to use as the page background."},
+	"distribute-rows": {"spreadmiddle", "Page", "Vertical spacing of rows on the page.  Specifies how extra space is distributed."},
+	"row-gutter":      {"6.0", "Page", "Gutter, in units, between rows"},
+	"header":          {"", "Page", "Name of even page text, Name of odd page text, Offset from the margin in units, Number of Leading Pages without Page Numbers, Number of Trailing Pages without Page Numbers. Example: `EvenHeader,OddHeader,2.5,2,2`. The header names are named text items which are offset above or below the top margin by the offset. Page numbers and total pages are calculated assuming some unnumbered pages before and after."},
+	"footer":          {"", "Page", "Same as `header`, but with text offset below the bottom margin."},
 
 	// page level options
-	"output-file":   "out.pdf",
-	"cjpeg-command": "",
-	"noresize":      "false",
-	"nolayout":      "false",
-	"norender":      "false",
+	"output-file":   {"out.pdf", "Page Option", ""},
+	"cjpeg-command": {"", "Page Option", "Path to cjpeg executable, e.g. `/usr/bin/cjpeg`."},
+	"noresize":      {"false", "Page Option", "For debugging. After distributing images to pages, do not resize them to fill the page."},
+	"nolayout":      {"false", "Page Option", "For debugging. After distributing images to pages, do not distribute them in the freee space."},
+	"norender":      {"false", "Page Option", "For debugging. Do not render this page to a bitmap."},
+	"current-page":  {"false", "Page", "Include this page in the output regardless of whether it included in the page range."},
 
 	// row
-	"distribute-columns": "spreadcenter", // how columns are distributed horizontally in a row
-	"column-gutter":      "6",            // gutter between columns
+	"distribute-columns": {"spreadcenter", "Row", "Horizontal spacing of columns in the row.  Specifies how extra space is distributed."},
+	"column-gutter":      {"6.0", "Row", "Gutter, in units, between columns"},
 
 	// column
-	"distribute-items":      "spreadmiddle", // how images or text are distributed vertically in a column
-	"item-gutter":           "6",
-	"keep-columns-together": "false",
-	"spread-percent":        "50", // how spreadmiddle or spreadcenter spreads extra at top/bottom or left/right
+	"distribute-items":      {"spreadmiddle", "Column", "Vertical spacing of items in a column.  Specifies how extra space is distributed."},
+	"item-gutter":           {"6.0", "Column", "Gutter, in units, between items in a column."},
+	"keep-columns-together": {"false", "Column", "If a column becomes too wide and there is not room for it in the next row, move it as a unit to the next page, versus breaking the page and starting a new page with the item."},
+	"spread-percent":        {"50.0", "Column/Row/Page", "How `spreadmiddle` or `spreadcenter` spreads extra at top/bottom or left/right. Useful for positioning one item 1/3 of the way down the page instead of at the center."},
 
 	// image or text (or similar related settings)
-	"item-align":   "center", // left center right - how images or text of different width are aligned in a column
-	"rotate":       "0",      // 0, 90, 180, 270
-	"page-break":   "false",
-	"row-break":    "false",
-	"column-break": "true",
-	"float":        "", // X,Y,width,height
-	"name":         "",
+	"item-align":   {"center", "Image/Text", "How to align this item in a column versus other items in the colum.  One of: `left`, `center`, `right`. `binding`, `edge`."},
+	"rotate":       {"0", "Image/Text", "Rotate this item around its center.  One of `0`, `90`, `180`, `270`."},
+	"page-break":   {"false", "Image/Text", "Break the page before this item."},
+	"row-break":    {"false", "Image/Text", "Break the row before this item."},
+	"column-break": {"true", "Image/Text", "Break the column before this item."},
+	"float":        {"", "Image/Text", "For text, horizontal and vertical offset in units from the left and top margins. For images, also the image width and height. (Text width and height are a function of the text and the font size.)"},
+	"name":         {"", "Image/Text", "Define a named text or image, to be used as a background, header, or footer."},
 
-	"tilt":          "0",
-	"corner-radius": "0", // size[%],superellipse
+	"tilt":          {"0.0", "Image/Text", "Rotate the item this many degrees. Use this for smaller rotations, and `rotate` for bigger rotations."},
+	"corner-radius": {"0.0", "Image/Text", "Give the item a superellipse-based corner. Size in units, optional power.  If power is less than one, the corner bends inward.  If power is equal to one, the corner is straight.  If power is 2, the corner is circular.  If power is greater than two, the corner is flatter than circular. Example: `100%,2`, `2.5,1.725`."}, // size[%],superellipse
 
-	"text-frame":       "0", // size,color
-	"text-outline":     "",  // color,size
-	"text-shadow":      "",  // color, blur, x, y
-	"text-background":  "#0000",
-	"image-frame":      "0", // size,color/name,above/below
-	"image-outline":    "",  // color,size
-	"image-shadow":     "",  // color, blur, x, y
-	"image-background": "#0000",
+	"text-frame":       {"0.0", "Text", "Text frame size in units (all, top+bottomxleft+right, topxrightxbottomxleft), color."},
+	"text-outline":     {"", "Text", "Text outline color, size in units."},
+	"text-shadow":      {"", "Text", "Text shadow color, blur, and horizontal and vertical offset in units."},
+	"text-background":  {"#0000", "Text", "Text background color."},
+	"image-frame":      {"0", "Image", "Image frame size in units (all, top+bottomxleft+right, topxrightxbottomxleft), color or image name, position (above or below)."},
+	"image-outline":    {"", "Image", "Image outline color, size in units."},                                    // color,size
+	"image-shadow":     {"", "Image", "Image shadow color, blur, and horizontal and vertical offset in units."}, // color, blur, x, y
+	"image-background": {"#0000", "Image", "Image background color."},
 
 	// image
-	"size":       "25%",
-	"max-size":   "100%",
-	"size-mode":  "width", // width or area
-	"rect":       "100",   // fit,3:2,50  trim,3:2,50  squish,3:2  #,x:y,50,50  #=zoom level 0-100, Missing aspect=image aspect, Missing position=50
-	"straighten": "0.0",
-	"brightness": "0.0",
-	"contrast":   "0.0",
-	"gamma":      "1.0",
-	"saturation": "0.0",
-	"sigmoidal":  "0.0,0.50",
-	"sharpen":    "0.0",
-	"blur":       "0.0",
-	"flip":       "", // H, V
-	"recurse":    "true",
-	"image":      "",
-	"caption":    "",
+	"size":       {"25%", "Image", "Initial image size (before resizing)."},
+	"max-size":   {"100%", "Image", "Maximum image size (after resizing)."},
+	"size-mode":  {"width", "Image", "How to interpret size: as `width` or as widith relative to `area` of square."},
+	"rect":       {"100", "Image", "Image rectangle: fit,aspect-ratio,percent; trim,aspect-ratio,percent; squish,aspect-ratio; zoom-level,horizontal offset,vertical offset,aspect-ratio,percent. Aspect-ratio is image aspect ratio if not specified. Percent is 50 if not specified."},
+	"straighten": {"0.0", "Image", "Straighten the image by specified angle, maximizing the image's rectangle"},
+	"brightness": {"0.0", "Image", "Adjust image brightness, -100.0 to 100.0"},
+	"contrast":   {"0.0", "Image", "Adjust image contrast, -100.0 to 100.0"},
+	"gamma":      {"1.0", "Image", "Adjust image gamma"},
+	"saturation": {"0.0", "Image", "Adjust image saturation, -100.0 to 100"},
+	"sigmoidal":  {"0.0,0.50", "Image", "Adjust image contrast with sigmoidal function, specifying factor and midpoint"},
+	"sharpen":    {"0.0", "Image", "Adjust image's sharpness"},
+	"blur":       {"0.0", "Image", "Blur the image"},
+	"flip":       {"", "Image", "Flip the image either horizontally (H) or vertically (V)"},
+	"recurse":    {"true", "Image", "Recurse directories when matching wildcard images"},
+	"image":      {"", "Image", "Image filename. Typically not specified using this setting."},
+	"caption":    {"", "Image", "Caption Text. Typically not specified using this setting."},
 
 	// text
-	"caption-position":   "below",
-	"caption-squareness": "100",
-	"caption-gutter":     "0",
-	"caption-align":      "center",
+	"caption-position":   {"below", "Text", "Caption position above or below"},
+	"caption-squareness": {"100", "Text", "Defines whether the caption's width is based on the image width (100) or the larger dimension (0)"},
+	"caption-gutter":     {"0.0", "Text", "Gutter, in units, between image and caption."},
+	"caption-align":      {"center", "Text", "Alignment of the caption: left, center, right, justified"},
 
-	"text-align": "left",
-	"text-width": "100%",
-	"text-wrap":  "unbalanced",
+	"text-align": {"left", "Text", "Text alignmnet: left, center, right, justified"},
+	"text-width": {"100%", "Text", "Text width"},
+	"text-wrap":  {"unbalanced", "Text", "Text wrapping mode: balanced/unbalanced"},
 
-	"font":           "",
-	"font-size":      "11",
-	"linespacing":    "1",
-	"letterspacing":  "0",
-	"wordspacing":    "0",
-	"padding":        "3.5",
-	"text-color":     "#0",
-	"justify-weight": "2.5",
-	"breakchars":     "",
-	"text":           "",
-	"text-height":    "0",
+	"font":           {"", "Text", "Font name."},
+	"font-size":      {"11.0", "Text", "Font size, units."},
+	"linespacing":    {"1.0", "Text", "Line spacing, multiple of lines."},
+	"letterspacing":  {"0.0", "Text", "Letter spacing, units."},
+	"wordspacing":    {"0.0", "Text", "Word spacing, units."},
+	"padding":        {"3.5", "Text", "Padding around text block, (all, top+bottom,left-right, top+right+bottom+left)."},
+	"text-color":     {"#0", "Text", "Text color."},
+	"justify-weight": {"2.5", "Text", "Weight to give spaces versus letters when justifying text."},
+	"breakchars":     {"", "Text", "Additional characters to allow line-breaks."},
+	"text-height":    {"0", "Text", "Height of text block, units."},
+	"text":           {"", "Text", "Text. Typically not specified using this setting."},
 }
 
 func (item *PbItem) Set(setting string, value string) {
@@ -1431,8 +1491,9 @@ func (item *PbItem) SettingInt(setting string, itemType int) string {
 		}
 	}
 
-	if settingValue, exists = defaultSettings[setting]; exists {
-		return settingValue
+	var defaultSetting DefaultSetting
+	if defaultSetting, exists = defaultSettings[setting]; exists {
+		return defaultSetting.defaultValue
 	}
 
 	log.Printf("unrecognized settting: %v", setting)

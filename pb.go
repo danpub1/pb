@@ -166,16 +166,24 @@ var inFiles []string
 
 func main() {
 	args := os.Args[1:]
+
 	inFiles = make([]string, 0)
+	foundHelp := false
 
 	for _, arg := range args {
 		if !strings.HasPrefix(arg, "--") {
 			inFiles = append(inFiles, arg)
 		}
+		if arg == "--help" && !foundHelp {
+			fmt.Println(printHelp())
+			foundHelp = true
+		}
 	}
 
 	if len(inFiles) == 0 {
-		log.Print("No input file(s) specified")
+		if !foundHelp {
+			log.Print("No input file(s) specified")
+		}
 		return
 	}
 

@@ -373,6 +373,7 @@ func parse(line string, styles map[string]string) PbItem {
 				default:
 					log.Print("Alignment shortcut on invalid item")
 				}
+			case "help":
 			}
 		}
 	}

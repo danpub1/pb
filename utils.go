@@ -91,6 +91,7 @@ type FrameInfo struct {
 
 // margins: txrxbxl / tbxrl / tbrl -> t, r, b, l
 func FourTwoOne(sFourTwoOne string) (float64, float64, float64, float64) {
+	sFourTwoOne = strings.ReplaceAll(sFourTwoOne, ",", "x") // allow either x or comma
 	parts := strings.SplitN(sFourTwoOne, "x", 4)
 	if len(parts) == 1 {
 		val := Atof(parts[0])
@@ -130,6 +131,7 @@ func Size(sSize string) (string, string) {
 		return "0", "0"
 	}
 
+	sSize = strings.ReplaceAll(sSize, ",", "x") // allow either x or comma
 	parts := strings.SplitN(sSize, "x", 2)
 	if len(parts) == 2 {
 		sWidth := parts[0]
