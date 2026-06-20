@@ -394,6 +394,9 @@ Example: Layout one 3:2 image and one 16:10 image 2 across and 2 down 612x792pt 
 One of each = harmonic mean
 267 * 2 / (1/sqrt(3/2) + 1/sqrt(16/10)) = 332
 
+Is the harmonic mean of the sqrts = sqrt of the harmonic mean?  No.
+267 * sqrt(2 / (1/(3/2) + 1/(16/10))) = 508
+
 Similarly 2 down: 357 * sqrt(2/3) = 292, times 3/2 = 437
 357 * sqrt(10/16) = 282 * 16/10 = 452
 

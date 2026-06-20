@@ -8,6 +8,7 @@
 * Add shortcuts for the values of `distribute-rows`, `distribute-columns`, and `distribute-items`  on page, row, column item types
 * Add shortcuts for row-gutter, column-gutter, item-gutter on page, row, column item types
 * `page-range:$`: when used with `watch:true`, creates the whole PDF on the first iteration, and then updates the PDF file on subsequent iterations 
+* `size:auto`
 ### Changed
 * Default `watch` to true, but do not watch if there is nothing to watch
 * Handle multiple books by merging into one

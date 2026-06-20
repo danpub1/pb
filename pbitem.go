@@ -855,7 +855,7 @@ func (item *PbItem) ImageRectSetting() (int, int, int, float64, int) {
 	}
 
 	if len(parts) > nextPart && len(parts[nextPart]) > 0 {
-		aspectParts := strings.SplitN(parts[nextPart], ":", 2)
+		aspectParts := strings.SplitN(strings.ReplaceAll(parts[nextPart], "x", ":"), ":", 2)
 		if len(aspectParts) == 2 {
 			aspect = Atof(aspectParts[0]) / Atof(aspectParts[1])
 		} else {
@@ -874,6 +874,37 @@ func (item *PbItem) ImageRectSetting() (int, int, int, float64, int) {
 	}
 
 	return zoom, xOffset, yOffset, aspect, offset
+}
+
+func AutoSize(sSizes string, sSizeMode string, maxWidth float64, maxHeight float64, gutter float64, thisAspect float64) float64 {
+
+	aspects := make([]float64, 0)
+	for _, sSize := range strings.Split(sSizes, ",") {
+		sSize = strings.ReplaceAll(sSize, "x", ":")
+		parts := strings.SplitN(sSize, ":", 2)
+		if len(parts) == 2 {
+			aspects = append(aspects, Atof(parts[0])/Atof(parts[1]))
+		}
+	}
+
+	availableSpace := maxWidth - gutter*float64(len(aspects)-1)
+	typicalSpace := availableSpace / float64(len(aspects))
+
+	averageAspect := 1.0
+	aspectTotal := 0.0
+	if sSizeMode == "width" {
+		for _, aspect := range aspects {
+			aspectTotal += aspect
+		}
+		averageAspect = aspectTotal / float64(len(aspects))
+		return typicalSpace * (thisAspect / averageAspect) * 0.99
+	} else { // area
+		for _, aspect := range aspects {
+			aspectTotal += math.Sqrt(aspect)
+		}
+		VerboseLog(fmt.Sprintf("Typical Space: %v, ActualSpace: %v", typicalSpace, availableSpace/aspectTotal))
+		return availableSpace / aspectTotal * 0.99
+	}
 }
 
 var rxRelativeSize, _ = regexp.Compile(`^(much-much-much-smaller$|much-much-smaller$|much-smaller$|smaller$|normal$|larger$|much-larger$|much-much-larger$|much-much-much-larger$|scale:)`)
@@ -916,6 +947,8 @@ func (item *PbItem) ImageSizeForPage(sizeName string) (float64, float64, float64
 			if sSizeMode == "area" {
 				baseSize = math.Sqrt(baseSize * baseSize / item.Aspect())
 			}
+		} else if after, ok := strings.CutPrefix(sBaseSize, "auto:"); ok {
+			baseSize = AutoSize(after, sSizeMode, maxWidth, maxHeight, item.FloatRowSetting("column-gutter"), item.Aspect())
 		} else {
 			baseSize = Atof(sBaseSize)
 		}
@@ -957,6 +990,8 @@ func (item *PbItem) ImageSizeForPage(sizeName string) (float64, float64, float64
 		if sSizeMode == "area" {
 			maxDimension = math.Sqrt(maxDimension * maxDimension / item.Aspect())
 		}
+	} else if after, ok := strings.CutPrefix(sSize, "auto:"); ok {
+		maxDimension = AutoSize(after, sSizeMode, maxWidth, maxHeight, item.FloatRowSetting("column-gutter"), item.Aspect())
 	} else {
 		maxDimension = Atof(sSize)
 	}
@@ -966,7 +1001,7 @@ func (item *PbItem) ImageSizeForPage(sizeName string) (float64, float64, float64
 	aspect := item.Aspect()
 
 	if sSizeMode == "width" {
-		// // Way 1: maxDimension is larger dimension
+		// maxDimension is larger dimension
 		width = maxDimension
 		width = math.Min(width, maxWidth)
 		height = width / aspect
@@ -975,9 +1010,11 @@ func (item *PbItem) ImageSizeForPage(sizeName string) (float64, float64, float64
 			width = height * aspect
 		}
 	} else { // "area"
-		// Way 2: maxDimension * maxDimension is target area
+		// maxDimension * maxDimension is target area
 		// width * height = maxDimension * maxDimension
-		// width / heigth = aspect
+		// width / height = aspect
+		// height = width / aspect
+		// width = aspect * height
 		// width * width = maxDimension * maxDimension * aspect
 		// height * height = maxDimension * maxDimension / aspect
 		if aspect > 1 {
@@ -1131,7 +1168,7 @@ var defaultSettings = map[string]DefaultSetting{
 	"name":         {"", "Image/Text", "Define a named text or image, to be used as a background, header, or footer."},
 
 	"tilt":          {"0.0", "Image/Text", "Rotate the item this many degrees. Use this for smaller rotations, and `rotate` for bigger rotations."},
-	"corner-radius": {"0.0", "Image/Text", "Give the item a superellipse-based corner. Size in units, optional power.  If power is less than one, the corner bends inward.  If power is equal to one, the corner is straight.  If power is 2, the corner is circular.  If power is greater than two, the corner is flatter than circular. Example: `100%,2`, `2.5,1.725`."}, // size[%],superellipse
+	"corner-radius": {"0.0", "Image/Text", "Give the item a superellipse-based corner. Size in units, optional power.  If power is less than zero, the corner bends inward.  If power is equal to zero, the corner is straight.  If power is one, the corner is circular.  If power is greater than one, the corner is flatter than circular. Example: `100%,2`, `2.5,1.725`."},
 
 	"text-frame":       {"0.0", "Text", "Text frame size in units (all, top+bottomxleft+right, topxrightxbottomxleft), color."},
 	"text-outline":     {"", "Text", "Text outline color, size in units."},

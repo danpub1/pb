@@ -197,6 +197,11 @@ func main() {
 
 		Opts.Set(items)
 
+		if !foundHelp && firstIteration && Opts.Verbose("H") {
+			fmt.Println(printHelp())
+			foundHelp = true
+		}
+
 		if Opts.Verbose("D") {
 			log.Printf("Read input file")
 		}

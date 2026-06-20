@@ -233,24 +233,24 @@ func breakIntoPages(items []PbItem) *PbBook {
 			} else if s.curColumnXOffset+itemWidth > s.pageWidth { // Column is too wide for page
 				// Column is too wide but there is room for it in the next row
 				if s.curRowYOffset+prevColumnsRowHeight+pageRowGutter+s.curColumnHeight+itemHeight < s.pageHeight {
-					VerboseLog(fmt.Sprintf("/// VERBOSE: Column too wide, moving column to next row at %v\n", ii))
+					VerboseLog(fmt.Sprintf("Column too wide, moving column to next row at %v\n", ii))
 					items[startOfColumn].Set("row-break", "true")
 					ii = startOfColumn - 1
 					s = stateStack[ii].DeepCopy()
 				} else { // Column is too wide and there is not room for it in the next
 					if items[ii].BoolColumnSetting("keep-columns-together") {
-						VerboseLog(fmt.Sprintf("/// VERBOSE: Column too wide, Moving column to next page at %v\n", ii))
+						VerboseLog(fmt.Sprintf("Column too wide, Moving column to next page at %v\n", ii))
 						items[startOfColumn].Set("page-break", "true")
 						ii = startOfColumn - 1
 						s = stateStack[ii].DeepCopy()
 					} else { // just breaking at the item
 						if s.curRowYOffset+s.curRowHeight+pageRowGutter+itemHeight < s.pageHeight {
-							VerboseLog(fmt.Sprintf("/// VERBOSE: Column too wide, breaking row at %v\n", ii))
+							VerboseLog(fmt.Sprintf("Column too wide, breaking row at %v\n", ii))
 							items[ii].Set("row-break", "true")
 							ii = ii - 1
 							s = stateStack[ii].DeepCopy()
 						} else {
-							VerboseLog(fmt.Sprintf("/// VERBOSE: Column too wide, breaking page at %v\n", ii))
+							VerboseLog(fmt.Sprintf("Column too wide, breaking page at %v\n", ii))
 							items[ii].Set("page-break", "true")
 							ii = ii - 1
 							s = stateStack[ii].DeepCopy()
@@ -260,12 +260,12 @@ func breakIntoPages(items []PbItem) *PbBook {
 			} else {
 				// Is there room for another column?
 				if s.itemsInColumn > 0 && s.curColumnXOffset+s.curColumnWidth+rowColumnGutter+itemWidth < s.pageWidth {
-					VerboseLog(fmt.Sprintf("/// VERBOSE: Column too tall, breaking column at %v\n", ii))
+					VerboseLog(fmt.Sprintf("Column too tall, breaking column at %v\n", ii))
 					items[ii].Set("column-break", "true")
 					ii = ii - 1
 					s = stateStack[ii].DeepCopy()
 				} else {
-					VerboseLog(fmt.Sprintf("/// VERBOSE: Column too tall, breaking page at %v\n", ii))
+					VerboseLog(fmt.Sprintf("Column too tall, breaking page at %v\n", ii))
 					items[ii].Set("page-break", "true")
 					ii = ii - 1
 					s = stateStack[ii].DeepCopy()

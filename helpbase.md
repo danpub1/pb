@@ -37,30 +37,30 @@ Content has a default size and is laid out in pages, rows, and columns.
 
 Page-, row-, and column-breaks can be inserted explicitly using these directives on a line by themselves: 
 
-    book: ***
-    page: +++
-    row: ---
-    column: ...
+    +++: Page Break & Page Settings
+    ---: Row Break & Row Settings
+    ...: Column Break & Column Settings
 
 ## Additional Directives
 
-    $$$: Defines a style
-    @@@: Includes a file
+    ***: Book Settings
+    $$$: Style Definition
+    @@@: Include another file
 
 ## Settings
 
 Settings are name:value pairs. For a content line, they come after the image (if any) and before the text (if any). 
 
-    Old Faithful.jpeg $ setting:value
-    Steamboat Geyser.jpg $ setting:value # Steamboat Geyser
-    $ setting:value # Two of the famous geysers in Yellowstone.
+    Old Faithful.jpeg $ size:larger
+    Steamboat Geyser.jpg $ size:larger font-size:12 # Steamboat Geyser
+    $ font-size:12 # Two of the famous geysers in Yellowstone.
 
 For a structure line, they come after the structure token.
 
-    *** setting:value
-    +++ setting:value
-    --- setting:value
-    ... setting:value
+    *** units:pt
+    +++ margin:24
+    --- column-gutter:6
+    ... distribute-items:spreadmiddle
 
 ## Wildcards
 
@@ -79,6 +79,7 @@ To make the text file easier to read, blank lines are ignored.
 ## Continuation of Lines 
 
 Any line that begins with one or more spaces is treated as a continuation of the previous line.
+The previous line's trailing spaces and the continuation line's leading spaces are collapsed. 
 
 ## Comments
 
@@ -111,7 +112,7 @@ Example, first without escaping, then with escaping:
 
 ## Escaping Text
 
-Text contains special characters:
+Text after a `#` may contain special characters:
 * `\n` is a new line
 * `\t` is a tab, used for alignment
 * `\1`, `\2`, `\3`, `\4`, `\5`, `\6`, `\7`, `\8`, `\9` select the font in a block of text
@@ -140,8 +141,8 @@ Styles are defined using $$$ followed by a space, the name of the style, and the
 Styles are applied by replacing a reference to the style with the defined value of the style.
 There are three ways to reference a style:
 1. `{{style-name}}` in the settings section or text section of a content line
-1. $style-name - equivalent to `$ {{style-name}}`
-1. #<number\> or ### (a specific number of hashes)
+1. `$style-name` - equivalent to `$ {{style-name}}`
+1. `#number` or `###` (a specific number of hashes)
 
 Styles can reference other styles, as long as they have been defined previously
 
@@ -155,9 +156,9 @@ Examples:
     image.jpg $bold size:larger ### Caption {{copyright}}
 
 The three sources of settings in the above content lines have the following priority from highest to lowest:
-1. The explicit settings in the $ section
-1. The settings applied by #number
-1. The settings applied by $name
+1. The explicit settings in the `$` section
+1. The settings applied by `#number`
+1. The settings applied by `$name`
 
 Example:
 ```
@@ -187,21 +188,21 @@ The following lines are equivalent:
 
 Alignment may also be applied in the #, by appending:
 
-* C for Center
-* R for Right
-* L for Left
-* J for Justified
-* B for Binding
-* E for Edge
+* `C` for Center
+* `R` for Right
+* `L` for Left
+* `J` for Justified
+* `B` for Binding
+* `E` for Edge
 
 The following lines are roughly equivalent (assuming that what's in style 1 and style 3 are for different settings)
 
 ```
-$3 align:center # Two of the famous geysers in Yellowstone.
+$3 text-align:center # Two of the famous geysers in Yellowstone.
 
-$ {{3}} align:center # Two of the famous geysers in Yellowstone.
+$ {{3}} text-align:center # Two of the famous geysers in Yellowstone.
 
-$ align:center #3 Two of the famous geysers in Yellowstone.
+$ text-align:center #3 Two of the famous geysers in Yellowstone.
 
 #3C Two of the famous geysers in Yellowstone.
 
@@ -247,13 +248,22 @@ A text with a setting `name` is not part of the layout, but is used for various 
 Prefixing a text with one tab is the equivalent of `align:center`, and prefixing with two tabs is the equivalent of `align:right`.
 However, as shown in the example above, tabs are most useful when there is text before the tab.
 
-## Special Images
+## Named Items
 
-An image with a setting `name` is not part of the layout, but is used for a page background or image frame.
+An image or text with a setting `name` is not part of the layout, but is used for a page background or image frame, or for header or footer text.
 
 ## Settings
 
-Setting values that are indicated as `yes` or `no` may equivalently be `on` or `off`, `true` or `false`.
+Settings specified at the book level apply to all the content in the book.  
+Settings specified at the page level apply to all the content of the page.  
+Settings specified at the row level apply to all the content in the row.  
+Settings specified at the column level apply to all the content in the column.  
+Settings specified for an individual image or text apply only to that content.  
+Some settings only apply at a higher level, and many not be specified lower down.
+
+***NOTE:*** Settings specified at the page, row, or column level apply to subsequent automatically created pages, rows, or columns until explicitly ended with another page, row, or column directive.
+
+Setting values that are indicated as `yes` or `no` may equivalently be `on` or `off`, or `true` or `false`.
 
 Setting values that are colors may be specified as:
 
@@ -264,100 +274,123 @@ Setting values that are colors may be specified as:
 * \#89ABCD - Equivalent to #89ABCDFF, an RGB triple with 100% opacity
 * \#89ABCDEF - An RGB triple with opacity EF
 
-Settings specified at the book level apply to all the content in the book.  
-Settings specified at the page level apply to all the content of the page.  
-Settings specified at the row level apply to all the content in the row.  
-Settings specified at the column level apply to all the content in the column.  
-Settings specified for an individual image or text apply only to that content.  
-Some settings only apply at a higher level, and many not be specified lower down.
+### Arranging rows, columns, and items
 
-* `distribute-rows:spreadmiddle`: vertical spacing of rows on the page.  Specifies how extra space is distributed after rows are laid out with gutter in between rows.  One of:
+There are three `distribute` settings which specify how to use the blank space left over after resizing images to fit the page.
+
+`distribute-rows` specifies how extra space is distributed between rows and at the top and bottom of the page after rows are laid out with gutter in between rows.
+
+`distribute-columns` specifies how extra space is distributed between columns and the the left and right side of the page after the columns are laid out with gutter between them.
+
+`distribute-items` specifies how extra space is distributed between items in a column.
+
+The three settings take the following values:
+
   * `middle`: Divided equally between the top and bottom
-  * `justify`: Evenly distributed between rows
+  * `center`: Divided equally between the left and right
+  * `justify`: Evenly distributed between with none at the edges
   * `top`: Extra is placed at the bottom
   * `bottom`: Extra is placed at the top
-  * `binding`: Extra is placed at the binding (if binding is top)
-  * `edge`: Extra is placed opposite the binding (if binding is top)
-  * `spreadtop`: Distributed between rows and at the bottom
-  * `spreadbottom`: Distributed between rows and at the top
-  * `spreadmiddle`: Distributed between rows and at the top and bottom
-  * `spreadedge`: Distributed between rows and at the binding (if binding is top)
-  * `spreadbinding`: Distributed between rows and opposite the binding (if binding is top)
+  * `left`: Extra is placed at the right
+  * `right`: Extra is placed at the left
+  * `binding`: Extra is placed at the binding
+  * `edge`: Extra is placed opposite the binding
+  * `spreadtop`: Distributed between and at the bottom
+  * `spreadbottom`: Distributed between and at the top
+  * `spreadleft`: Distributed between and at the right
+  * `spreadright`: Distributed between and at the left
+  * `spreadmiddle`: Distributed between and at the top and bottom
+  * `spreadcenter`: Distributed between and at the left and right
+  * `spreadedge`: Distributed between and at the binding
+  * `spreadbinding`: Distributed between and opposite the binding
 
-* `size`, `max-size` - size indicates size before resizing, max-size is after resizing
-  * Named Relative Sizes - as shortcuts, these may be specified as is without "size:"
-    * `normal` - size (default) = scale:1 (this is the same as not specifying size)
-    * `larger` - size * 1.25 = scale:1.25
-    * `much-larger` - size * 1.25 * 1.25 = size * 1.5625 = scale:1.5625
-    * `much-much-larger` - size * 1.25 * 1.25 = size * 1.953125 = scale:1.953125
-    * `much-much-much-larger` - size * 1.25 * 1.25 = size * 2.44140625 = scale:2.44140625
-    * `smaller` - size / 1.25 = size * 0.8 = scale:0.8
-    * `much-smaller` - size / 1.25 / 1.25 = size / 1.5625 = size * 0.64 = scale:0.64
-    * `much-much-smaller` - size / 1.25 / 1.25 / 1.25 = size / 1.953125 = size * 0.512 = scale:0.512
-    * `much-much-much-smaller` - size / 1.25 / 1.25 / 1.25 / 1.25 = size / 2.44140625 = size * 0.4096 = scale:0.4096
-  * `scale:#` - size * #
-  * `#` - specific size
-  * `#%` - % of total size
+### Image Size
+
+* `size` indicates image size before resizing
+* `max-size` indicates image size after resizing
+* There are different ways of specifying size:
+  * An explicit number of units, `size:250`
+  * A percentage of the page size, `size:25%`
+  * A size relative to the default size
+    * `size:scale:#` - the default size times a scale factor
+    * `size:normal` - equivalent to `size:scale:1`
+    * `size:larger` - equivalent to `size:scale:1.25`
+    * `much-larger` - equivalent to `size:scale:1.5625` (1.25 * 1.25)
+    * `much-much-larger` - equivalent to `size:scale:1.953125` (1.25 * 1.25 * 1.25)
+    * `much-much-much-larger` - equivalent to `size:scale:2.44140625` (1.25 * 1.25 * 1.25 * 1.25)
+    * `smaller` - equivalent to `size:scale:0.8` (divide by 1.25)
+    * `much-smaller` - equivalent to `size:scale:0.64` (divide by 1.25 * 1.25)
+    * `much-much-smaller` - equivalent to `size:scale:0.512` (divide by 1.25 * 1.25 * 1.25)
+    * `much-much-much-smaller` - equivalent to `size:scale:0.4096` (divide by 1.25 * 1.25 * 1.25 * 1.25)
+  * A size calculated to fit items across a page, `size:auto:3:2,2:3,3:2`
+
+There are two modes of specifying size:
+
+* `size-mode:width` - the size is treated as the width of the image
+* `size-mode:area` - the size is treated as the width of a square image, and the image being sized given the same area.
 
 {{Settings}}
 
-Image Size
-----------
+### Settings Shortcuts
 
-Image sizes are specified relative to a square image, so an image size of 100 specifies an image with an area of 100*100.
-If the image being sized has the 3:2 aspect ratio, the area for that width is a = w * w * 2 / 3.
-So to get the equivalent 100*100 area, the width needs to be multipled by sqrt(3/2).
+The following settings have shortcuts:
 
-Image size is typically set at the page or book level and overridden when desired at the image level by using a relative size (e.g. larger or smaller).
-
-Example: Layout 3:2 images that fit 2 across and 3 down on a 612x792pt page 6 pt gutter between all of them and 36 pt margins
-```
-Available width = 612 - 36 - 36 - 6 = 534
-Want two images in that space = 267
-Width needed for a 3:2 image = 267 * sqrt(3 / 2) = 327
-
-Also want 3 image high in that space
-Available height = 792 - 36 - 36 - 6 - 6 = 708
-Want three images in that space = 236
-Height needed for a 3:2 image = 236 * sqrt(2 / 3) = 193
-Width for height = 192 * 3 / 2 = 289 
-
-So to fit 3 high it needs to be 289 wide
-```
-
-Example: Layout one 3:2 image and one 16:10 image 2 across and 2 down 612x792pt page 6 pt gutter between all of them and 36 pt margins
-
-```
-3:2 image: 267 * sqrt(3/2) = 327
-16:10 image: 267 * sqrt(16/10) = 338
-One of each = harmonic mean
-267 * 2 / (1/sqrt(3/2) + 1/sqrt(16/10)) = 332
-
-Similarly 2 down: 357 * sqrt(2/3) = 292, times 3/2 = 437
-357 * sqrt(10/16) = 282 * 16/10 = 452
-
-So the harmonic mean of 332 supports one of each across and two rows of either size.
-```
+* `rect` Settings
+  * `rect:trim` => `trim`
+  * `rect:fit` => `fit`
+  * `rect:squish` => `squish`
+  * `rect:(other)` => `crop`
+* `size` Settings
+  * `size:scale` => `scale`
+  * `size:larger` => `larger`
+  * `size:much-larger` => `much-larger`
+  * `size:much-much-larger` => `much-much-larger`
+  * `size:much-much-much-larger` => `much-much-much-larger`
+  * `size:smaller` => `smaller`
+  * `size:much-smaller` => `much-smaller`
+  * `size:much-much-smaller` => `much-much-smaller`
+  * `size:much-much-much-smaller` => `much-much-much-smaller`
+* `gutter` Settings
+  * On a page, `row-gutter` => `gutter`
+  * On a row, `column-gutter` => `gutter`
+  * On a column, `item-gutter` => `gutter`
+* Default-true Settings
+  * `page-break:true` => `page-break`
+  * `row-break:true` => `row-break`
+  * `column-break:true` => `column-break`
+  * `current-page:true` => `current-page`
+* `distribute-` Settings
+  * On a page, sets `distribute-rows`
+  * On a row, sets `distribute-columns`
+  * On a column, sets `distribute-items`
+  * Values
+    * `spreadtop` / `spreadmiddle` / `spreadbottom`
+    * `spreadleft` / `spreadcenter` / `spreadright`
+    * `spreadbinding` / `spreadedge`
+    * `top` / `middle` / `bottom`
+    * `left` / `center` / `right`
+    * `binding` / `edge`
+    * `justify`
+* `verbose:H` => `help`
 
 ## Command Line Options
 
 With the exception of the input file name all command line options may be specified in the input file.  What is provided on the command line
 takes precedence.
 
-* `input-file`: Specify the input `.pb` file
-* Any setting, applied at the book level (i.e. a book-level default that can be overridden at any lower level)
+* `input-file`: Specify the input `.pb` file.  Multiple files may be specified and are processed in the order listed.  Zip files may be specified and are treated as a container of images.
+* Any setting may be applied at the book level by prepending it with two hypens.  For example: `--page-size:576x576`
 
 ## TIPS
 
 ### Only one book item
-There is only one book `***` allowed.  If using an include file, either put the book in the include, or use it to define settings that are applied to the book.
+There is really only one book `***`.  If there are multiple books specified, they are merged into one in the order they are found.
 
 ### Points are the default
 If using another base measurement, be sure to explicitly define everything in that measurement. Otherwise the default units will be used, which are in points
 
 ### Listing Wildcarded Files
-To quickly create a list of the files that match a wildcard, use the command line option `-v P`, or the equivalent `>>> v P` in the file.
-Redirect the output to another file and cut and paste the listing.
+To quickly create a list of the files that match a wildcard, use the command line option `--verbose:P`, or the equivalent `verbose:P` in the file. Redirect the output to another file and cut and paste the listing.
 
 ### Clear a setting for a page
 To clear the header for a page, for example: `+++ header:`
@@ -408,8 +441,7 @@ pb Selected.zip --page-break:true --font:Aptos.zip::Aptos.ttf --caption:{{Filena
   * Tests
   * Any other go-novice mistakes
 * Support input from files better so everything can be done by dropping files on the app
-    * Redirect stdout with a book-level setting - makes it possible to create both pdf and .pb files in one command without options
-* size:auto to make the necessary calculations
+    * Redirect stdout with a book-level setting - to create both pdf and .pb files in one command without options
 * Output a text as an image (can do already, need to get height from verbose output)
 * Input and output handlers for more file types
 * Sigmoidal brightness/lightness Adjustment? (i.e. sigmoidal but on a different channel)
@@ -420,3 +452,5 @@ pb Selected.zip --page-break:true --font:Aptos.zip::Aptos.ttf --caption:{{Filena
 * UI of its own - ebitengine or web browser-based?  Launch pdf or image viewer?
 * Colorspace
 * HDR
+* Autorotate
+* Sort by EXIF date
