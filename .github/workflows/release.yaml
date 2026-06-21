@@ -1,4 +1,4 @@
-name: Build
+name: Release
 
 on: workflow_dispatch
 
@@ -15,13 +15,18 @@ jobs:
         with:
           go-version: '1.26.0'  # Specify the Go version
 
-      - name: Build
-        run: go build ./...  # Run the build recursively
+      - name: Build Linux
+        run: GOOS=linux GOARCH=amd64 go build ./...  # Run the build recursively
 
-      # Upload build output
-      - name: Upload build artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-output
-          path: pb
-          retention-days: 1
+      - name: Build Windows
+        run: GOOS=Windows GOARCH=amd64 go build ./...  # Run the build recursively
+
+      - name: Create Release
+        run: gh release create ${{github.ref_name}}
+
+      - name: Upload Linux Binary
+        run: gh release upload ${{github.ref_name}} pb
+
+      - name: Upload Windows Binary
+        run: gh release upload ${{github.ref_name}} pb.exe
+        
