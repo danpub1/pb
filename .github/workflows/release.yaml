@@ -19,7 +19,7 @@ jobs:
         run: GOOS=linux GOARCH=amd64 go build ./...  # Run the build recursively
 
       - name: Build Windows
-        run: GOOS=Windows GOARCH=amd64 go build ./...  # Run the build recursively
+        run: GOOS=windows GOARCH=amd64 go build ./...  # Run the build recursively
 
       - name: Create Release
         run: gh release create ${{github.ref_name}}
