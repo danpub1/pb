@@ -16,7 +16,7 @@ jobs:
           go-version: '1.26.0'  # Specify the Go version
 
       - name: Build
-        run: go build ./...  # Run the build com
+        run: go build ./...  # Run the build recursively
 
       # Upload build output
       - name: Upload build artifact
