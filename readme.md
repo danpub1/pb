@@ -5,11 +5,11 @@ From a marked-up list of photos, it generates a reasonably formatted photobook. 
 
 Uses:
 * Make a nicely arranged photo book with captions and text describing the photos
-* Output contact sheets of all the photos in a folder
-* Output a nicely arranged collection of all the photos in a folder - not as small as a contact sheet, but not as finished as a photo book
+* Make contact sheets of all the photos in a folder
+* Make a nicely arranged collection of all the photos in a folder - not as small as a contact sheet, but not as finished as a photo book
 * Layout pictures on a page in specific sizes for printing
 * Create a collage for a calendar page or a greeting card
-* Slides for a presentation
+* Create slides for a presentation
 
 ## Introduction
 
@@ -37,19 +37,19 @@ Content has a default size and is laid out in pages, rows, and columns.
 
 Page-, row-, and column-breaks can be inserted explicitly using these directives on a line by themselves: 
 
+    ***: Book Settings
     +++: Page Break & Page Settings
     ---: Row Break & Row Settings
     ...: Column Break & Column Settings
 
-## Additional Directives
+Additional directives:
 
-    ***: Book Settings
     $$$: Style Definition
     @@@: Include another file
 
 ## Settings
 
-Settings are name:value pairs. For a content line, they come after the image (if any) and before the text (if any). 
+Settings are name:value pairs. For a content line, they come after the image (if any) and before the text (if any), preceded by a `$`.
 
     Old Faithful.jpeg $ size:larger
     Steamboat Geyser.jpg $ size:larger font-size:12 # Steamboat Geyser
@@ -96,7 +96,7 @@ Any line beginning with three forward slashes should be ignored, so it can be us
 
 ## Escaping special characters
 
-The backtick or grave accent is used to escape a few special cases:
+The backtick or grave accent, `` ` ``, is used to escape a few special cases:
 * If an image filename starts with a directive (`***`, `+++`, `---`, `...`, `$$$`, `@@@`, `///`), add a `` ` `` before the first character
 * A space in an image filename before `$` or `#` must be replaced with `` `_ ``
 * A space in a setting value  must be replaced with `` `_ `` (Possible in font name.)
@@ -131,7 +131,7 @@ A pb file is assumed to be UTF-8.
 
 ## Styles
 
-Styles are defined using $$$ followed by a space, the name of the style, and the settings being defined:
+Styles are defined using `$$$` followed by a space, the name of the style, and the settings being defined:
 
     $$$ 1 font:Arial.ttf size:9
     $$$ 3 font:Arial.ttf size:11
@@ -186,7 +186,7 @@ The following lines are equivalent:
     #3 Two of the famous geysers in Yellowstone.
     ### Two of the famous geysers in Yellowstone.
 
-Alignment may also be applied in the #, by appending:
+Alignment may also be applied in the `#`, by appending:
 
 * `C` for Center
 * `R` for Right
@@ -208,21 +208,21 @@ $ text-align:center #3 Two of the famous geysers in Yellowstone.
 
 ###C Two of the famous geysers in Yellowstone.
 ```
-Since # is by definition style 1, a typical setup would be to use style 1 for body text, 
-style 2 for sub headings, and style 3 for main-headings. Note that this makes the usage of multiple #'s the opposite of Markdown.
+Since `#` is by definition style 1, a typical setup would be to use style 1 for body text, 
+style 2 for sub headings, and style 3 for main-headings. Note that this makes the usage of multiple `#`'s the opposite of Markdown.
 
-Although particularly useful with text, styles can be defined and applied to other directives also, because {{name}} is replaced with everything that was defined for it.
+Although particularly useful with text, styles can be defined and applied to other directives also, because `{{name}}` is replaced with everything that was defined for it.
 
     $$$ book-defaults size:610x820 margin:36
     *** {{book-defaults}}
 
 Styles are just replacement text, and can be used in image filenames as well:
 
-    $$$ dan /home/photos/australia/dan
-    $$$ amie /home/photos/australia/amie
+    $$$ phone /home/photos/australia/phone
+    $$$ camera /home/photos/australia/camera
 
-    {{dan}}/IMG12345.jpg # Sydney Harbour
-    {{amie}}/IMAGE12345.jpg # Koala Bear
+    {{phone}}/IMG12345.jpg # Sydney Harbour
+    {{camera}}/IMAGE12345.jpg # Koala Bear
 
 ### Built-in Styles
 
@@ -267,16 +267,16 @@ Setting values that are indicated as `yes` or `no` may equivalently be `on` or `
 
 Setting values that are colors may be specified as:
 
-* \#A - Equivalent to #AA, i.e. a gray of value AA
-* \#BC - Equivalent to #BCBCBCFF, i.e. a gray of value BC
-* \#ABC - Equivalent to #AABBCCFF
-* \#ABCD - Equivalent to #AABBCCDD, 
-* \#89ABCD - Equivalent to #89ABCDFF, an RGB triple with 100% opacity
-* \#89ABCDEF - An RGB triple with opacity EF
+* `#A` - Equivalent to `#AA`, i.e. a gray of value 0xAA
+* `#BC` - Equivalent to `#BCBCBCFF`, i.e. a gray of value 0xBC
+* `#ABC` - Equivalent to `#AABBCCFF`
+* `#ABCD` - Equivalent to `#AABBCCDD`, 
+* `#89ABCD` - Equivalent to `#89ABCDFF`, an RGB triple with 100% opacity
+* `#89ABCDEF` - An RGB triple with opacity 0xEF
 
 ### Arranging rows, columns, and items
 
-There are three `distribute` settings which specify how to use the blank space left over after resizing images to fit the page.
+There are three `distribute-` settings which specify how to use the blank space left over after resizing images to fit the page.
 
 `distribute-rows` specifies how extra space is distributed between rows and at the top and bottom of the page after rows are laid out with gutter in between rows.
 
@@ -472,9 +472,9 @@ The following settings have shortcuts:
   * `column-break:true` => `column-break`
   * `current-page:true` => `current-page`
 * `distribute-` Settings
-  * On a page, sets `distribute-rows`
-  * On a row, sets `distribute-columns`
-  * On a column, sets `distribute-items`
+  * On a page, `distribute-rows:value` => value
+  * On a row, `distribute-columns:value` => value
+  * On a column, `distribute-items:value` => value
   * Values
     * `spreadtop` / `spreadmiddle` / `spreadbottom`
     * `spreadleft` / `spreadcenter` / `spreadright`
@@ -486,9 +486,6 @@ The following settings have shortcuts:
 * `verbose:H` => `help`
 
 ## Command Line Options
-
-With the exception of the input file name all command line options may be specified in the input file.  What is provided on the command line
-takes precedence.
 
 * `input-file`: Specify the input `.pb` file.  Multiple files may be specified and are processed in the order listed.  Zip files may be specified and are treated as a container of images.
 * Any setting may be applied at the book level by prepending it with two hypens.  For example: `--page-size:576x576`
@@ -524,13 +521,13 @@ Frames, outlines, shadows, and tilts are not included in the layout process
 
 ### Align Heading Immediately above body
 
-Use `column-break:false` to put both the header and the body in a column,
+Use `column-break:false` to put both a header text and a body text in a column,
 and set `item-gutter:0`
 
 ### Construct a Cover
 
 Set margins and gutters to zero.  Size one picture to the back cover,
-a row of text whose height is the width of the spine, rotates 90 degrees,
+a row of text whose height is the width of the spine, rotated 90 degrees,
 and then another picture sized to the front cover.
 
 ### Embed an image of a page
