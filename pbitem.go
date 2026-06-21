@@ -879,7 +879,7 @@ func (item *PbItem) ImageRectSetting() (int, int, int, float64, int) {
 func AutoSize(sSizes string, sSizeMode string, maxWidth float64, maxHeight float64, gutter float64, thisAspect float64) float64 {
 
 	aspects := make([]float64, 0)
-	for _, sSize := range strings.Split(sSizes, ",") {
+	for sSize := range strings.SplitSeq(sSizes, ",") {
 		sSize = strings.ReplaceAll(sSize, "x", ":")
 		parts := strings.SplitN(sSize, ":", 2)
 		if len(parts) == 2 {
