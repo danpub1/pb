@@ -17,3 +17,11 @@ jobs:
 
       - name: Build
         run: go build ./...  # Run the build com
+
+      # Upload build output
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-output
+          path: pb
+          retention-days: 1
