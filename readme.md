@@ -448,12 +448,12 @@ Page-Level Options
 The following settings have shortcuts:
 
 * `rect` Settings
-  * `rect:trim` => `trim`
-  * `rect:fit` => `fit`
-  * `rect:squish` => `squish`
-  * `rect:(other)` => `crop`
+  * `rect:trim:settings` => `trim:settings`
+  * `rect:fit:settings` => `fit:settings`
+  * `rect:squish:settings` => `squish:settings`
+  * `rect:settings` => `crop:settings`
 * `size` Settings
-  * `size:scale` => `scale`
+  * `size:scale:value` => `scale:value`
   * `size:larger` => `larger`
   * `size:much-larger` => `much-larger`
   * `size:much-much-larger` => `much-much-larger`
@@ -463,9 +463,9 @@ The following settings have shortcuts:
   * `size:much-much-smaller` => `much-much-smaller`
   * `size:much-much-much-smaller` => `much-much-much-smaller`
 * `gutter` Settings
-  * On a page, `row-gutter` => `gutter`
-  * On a row, `column-gutter` => `gutter`
-  * On a column, `item-gutter` => `gutter`
+  * On a page, `row-gutter:value` => `gutter:value`
+  * On a row, `column-gutter:value` => `gutter:value`
+  * On a column, `item-gutter:value` => `gutter:value`
 * Default-true Settings
   * `page-break:true` => `page-break`
   * `row-break:true` => `row-break`
