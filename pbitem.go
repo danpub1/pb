@@ -1209,6 +1209,7 @@ var defaultSettings = map[string]DefaultSetting{
 
 	"font":           {"", "Text", "Font name."},
 	"font-size":      {"11.0", "Text", "Font size, units."},
+	"font-size-min":  {"0", "Text", "If greater than zero, reduce font-size to this as needed to fit"},
 	"linespacing":    {"1.0", "Text", "Line spacing, multiple of lines."},
 	"letterspacing":  {"0.0", "Text", "Letter spacing, units."},
 	"wordspacing":    {"0.0", "Text", "Word spacing, units."},

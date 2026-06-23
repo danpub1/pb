@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 )
 
@@ -100,14 +101,34 @@ func getImageDimensions(items []PbItem) int {
 
 func MeasureText2(text string, maxWidth float64, maxHeight float64, item *PbItem) []TextBlockLayout {
 	textInfo := item.TextInfo()
+	_, pageHeight := ContainerSize(item.PageSetting("page-size"), item.PageSetting("margin"))
+
 	textBlockLayouts := MeasureText(text, maxWidth, maxHeight, textInfo)
 
 	textHeight := item.FloatSetting("text-height")
+
+	fontSizeMin := item.FloatSetting("font-size-min")
+
+	availableHeight := pageHeight
+	if textHeight > 0 && textHeight < availableHeight {
+		availableHeight = textHeight
+	}
+
 	if maxHeight == 0 && len(textBlockLayouts) == 1 && textHeight > textBlockLayouts[0].height {
 		extra := textHeight - textBlockLayouts[0].height
 		textInfo.padding.top += extra / 2.0
 		textInfo.padding.bottom += extra / 2.0
 		textBlockLayouts = MeasureText(text, maxWidth, maxHeight, textInfo)
+	} else if fontSizeMin > 0 && maxHeight == 0 && len(textBlockLayouts) == 1 && textBlockLayouts[0].height > availableHeight {
+		decrement := 1 / item.Density()
+		for textBlockLayouts[0].height > availableHeight && textInfo.height > fontSizeMin {
+			textInfo.height -= decrement
+			if textInfo.height < fontSizeMin {
+				textInfo.height = fontSizeMin
+			}
+			textBlockLayouts = MeasureText(text, maxWidth, maxHeight, textInfo)
+		}
+		item.Set("font-size", fmt.Sprintf("%v", textInfo.height))
 	}
 
 	return textBlockLayouts

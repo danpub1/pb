@@ -1,6 +1,14 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+* Add `font-size-min` to shrink font as necessary to fit
+### Changed
+### Deprecated
+### Removed
+### Fixed
+
+## v1.1.0
 
 ### Added
 * Support `page-range:*` to select changed pages when using `watch`
@@ -13,9 +21,6 @@
 * Default `watch` to true, but do not watch if there is nothing to watch
 * Handle multiple books by merging into one
 * Help coded into default settings
-
-### Deprecated
-### Removed
 ### Fixed
 * Handle errors from `ImageReader.Reader()`
 * Check for existence of file before watching a file

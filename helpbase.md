@@ -432,6 +432,8 @@ pb Selected.zip --page-break:true --font:Aptos.zip::Aptos.ttf --caption:{{Filena
 ## Things to Do
 
 * Issue: Had problems when title pages were first, like first page cannot have some or all settings. Also first row, column, item???
+* Issue: text-background does not work with text-outline
+* Issue: Column overflow creates endless loop
 * Refactor & clean up
   * Break up large files
   * Latest dependencies

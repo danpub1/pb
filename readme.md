@@ -412,6 +412,7 @@ Text-Level Settings
 * `font-size`: Font size, units. [11.0]
 * `caption-gutter`: Gutter, in units, between image and caption. [0.0]
 * `text-height`: Height of text block, units. [0]
+* `font-size-min`: If greater than zero, reduce font-size to this as needed to fit. [0]
 * `letterspacing`: Letter spacing, units. [0.0]
 * `linespacing`: Line spacing, multiple of lines. [1.0]
 * `padding`: Padding around text block, (all, top+bottom,left-right, top+right+bottom+left). [3.5]
@@ -544,6 +545,7 @@ pb Selected.zip --page-break:true --font:Aptos.zip::Aptos.ttf --caption:{{Filena
 ## Things to Do
 
 * Issue: Had problems when title pages were first, like first page cannot have some or all settings. Also first row, column, item???
+* Issue: text-background does not work with text-outline
 * Refactor & clean up
   * Break up large files
   * Latest dependencies

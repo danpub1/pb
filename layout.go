@@ -265,6 +265,7 @@ func breakIntoPages(items []PbItem) *PbBook {
 					ii = ii - 1
 					s = stateStack[ii].DeepCopy()
 				} else {
+					// TODO: If this is the only thing on the page and it's still too big? (Endless loop)
 					VerboseLog(fmt.Sprintf("Column too tall, breaking page at %v\n", ii))
 					items[ii].Set("page-break", "true")
 					ii = ii - 1
