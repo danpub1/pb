@@ -377,7 +377,7 @@ Image/Text-Level Settings
 * `corner-radius`: Give the item a superellipse-based corner. Size in units, optional power.  If power is less than zero, the corner bends inward.  If power is equal to zero, the corner is straight.  If power is one, the corner is circular.  If power is greater than one, the corner is flatter than circular. Example: `100%,2`, `2.5,1.725`. [0.0]
 * `item-align`: How to align this item in a column versus other items in the colum.  One of: `left`, `center`, `right`. `binding`, `edge`. [center]
 * `tilt`: Rotate the item this many degrees. Use this for smaller rotations, and `rotate` for bigger rotations. [0.0]
-* `rotate`: Rotate this item around its center.  One of `0`, `90`, `180`, `270`. [0]
+* `rotate`: Rotate this item around its center.  One of `0`, `90`, `180`, `270`. '' means auto from EXIF if available. []
 
 Image-Level Settings
 --------------------
@@ -546,6 +546,7 @@ pb Selected.zip --page-break:true --font:Aptos.zip::Aptos.ttf --caption:{{Filena
 
 * Issue: Had problems when title pages were first, like first page cannot have some or all settings. Also first row, column, item???
 * Issue: text-background does not work with text-outline
+* Issue: Column overflow creates endless loop
 * Refactor & clean up
   * Break up large files
   * Latest dependencies

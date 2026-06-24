@@ -20,6 +20,8 @@ import (
 	"slices"
 	"sort"
 	"strings"
+
+	"github.com/rwcarlsen/goexif/exif"
 )
 
 const (
@@ -526,6 +528,13 @@ func (item *PbItem) Density() float64 {
 	return item.FloatBookSetting("density")
 }
 
+func (item *PbItem) Rotate() int {
+	if len(item.Setting("rotate")) > 0 {
+		return item.IntSetting("rotate")
+	}
+	return 0
+}
+
 func (item *PbItem) TextInfo() *TextInfo {
 	frameInfo := item.TextFrame()
 	return &TextInfo{
@@ -773,7 +782,7 @@ func (item *PbItem) GetImage() image.Image {
 	return decodedImage
 }
 
-func (item *PbItem) GetImageConfig() image.Config {
+func (item *PbItem) GetImageConfig() (image.Config, int) {
 	// imageFile, err := os.Open(item.Setting("image"))
 	// if err != nil {
 	// 	log.Fatal(err)
@@ -788,21 +797,51 @@ func (item *PbItem) GetImageConfig() image.Config {
 	// 	log.Fatal(err)
 	// }
 
+	orientation := 0
+
 	imageFile := item.OpenImage()
 	if imageFile == nil {
-		return image.Config{}
+		return image.Config{}, orientation
 	}
-
 	reader := imageFile.Reader()
 	if reader == nil {
-		return image.Config{}
+		return image.Config{}, orientation
 	}
 	imageConfig, _, err := image.DecodeConfig(reader)
-	imageFile.Close()
 	if err != nil {
 		log.Print(err)
+		return image.Config{}, orientation
 	}
-	return imageConfig
+	if err := imageFile.Close(); err != nil {
+		log.Print(err)
+	}
+
+	imageFile = item.OpenImage()
+	if imageFile == nil {
+		return image.Config{}, orientation
+	}
+	exifReader := imageFile.Reader()
+	if exifReader == nil {
+		return imageConfig, orientation
+	}
+
+	if x, err := exif.Decode(exifReader); err != nil {
+		//log.Printf("Exif Decode: %v", err)
+		return imageConfig, orientation
+	} else if orientationTag, err := x.Get(exif.Orientation); err != nil {
+		//log.Printf("Exif Get: %v", err)
+		return imageConfig, orientation
+	} else if orientation, err = orientationTag.Int(0); err != nil {
+		//log.Printf("Exif Int(): %v", err)
+		return imageConfig, orientation
+	}
+
+	//log.Printf("Orientation: %v", orientation)
+	if err := imageFile.Close(); err != nil {
+		log.Print(err)
+	}
+
+	return imageConfig, orientation
 }
 
 func (item *PbItem) ImageRectSetting() (int, int, int, float64, int) {
@@ -1160,7 +1199,7 @@ var defaultSettings = map[string]DefaultSetting{
 
 	// image or text (or similar related settings)
 	"item-align":   {"center", "Image/Text", "How to align this item in a column versus other items in the colum.  One of: `left`, `center`, `right`. `binding`, `edge`."},
-	"rotate":       {"0", "Image/Text", "Rotate this item around its center.  One of `0`, `90`, `180`, `270`."},
+	"rotate":       {"", "Image/Text", "Rotate this item around its center.  One of `0`, `90`, `180`, `270`. '' means auto from EXIF if available"},
 	"page-break":   {"false", "Image/Text", "Break the page before this item."},
 	"row-break":    {"false", "Image/Text", "Break the row before this item."},
 	"column-break": {"true", "Image/Text", "Break the column before this item."},

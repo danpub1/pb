@@ -10,6 +10,7 @@ type ImageCacheEntry struct {
 	Filedate      int64
 	ImageWidthPx  int
 	ImageHeightPx int
+	Orientation   int
 }
 
 var firstTimeImageCache = true
@@ -37,18 +38,64 @@ func saveImageCache(cache *map[string]ImageCacheEntry) {
 	}
 }
 
-func checkCacheEntry(cache *map[string]ImageCacheEntry, filename string) (int, int, bool) {
+func checkCacheEntry(cache *map[string]ImageCacheEntry, filename string) (int, int, int, bool) {
 	if entry, exists := (*cache)[filename]; exists {
 		filedate := fileDate(filename)
 		if entry.Filedate == filedate {
-			return entry.ImageWidthPx, entry.ImageHeightPx, true
+			return entry.ImageWidthPx, entry.ImageHeightPx, entry.Orientation, true
 		}
 	}
-	return 0, 0, false
+	return 0, 0, 0, false
 }
 
-func updateCacheEntry(cache *map[string]ImageCacheEntry, filename string, imageWidthPx int, imageHeightPx int) {
-	(*cache)[filename] = ImageCacheEntry{fileDate(filename), imageWidthPx, imageHeightPx}
+func updateCacheEntry(cache *map[string]ImageCacheEntry, filename string, imageWidthPx int, imageHeightPx int, orientation int) {
+	(*cache)[filename] = ImageCacheEntry{fileDate(filename), imageWidthPx, imageHeightPx, orientation}
+}
+
+func exifRotate(rotation int, orientation int, flip string, item *PbItem) int {
+	if rotation == -1 {
+		switch orientation {
+		default:
+		case 0:
+		case 1:
+			item.Set("rotate", "0")
+			rotation = 0
+		case 2:
+			if flip == "" {
+				item.Set("flip", "H")
+			}
+			item.Set("rotate", "0")
+			rotation = 0
+		case 3:
+			item.Set("rotate", "180")
+			rotation = 180
+		case 4:
+			if flip == "" {
+				item.Set("flip", "H")
+			}
+			item.Set("rotate", "180")
+			rotation = 180
+		case 5:
+			if flip == "" {
+				item.Set("flip", "H")
+			}
+			item.Set("rotate", "90")
+			rotation = 90
+		case 6:
+			item.Set("rotate", "90")
+			rotation = 90
+		case 7:
+			if flip == "" {
+				item.Set("flip", "H")
+			}
+			item.Set("rotate", "270")
+			rotation = 270
+		case 8:
+			item.Set("rotate", "270")
+			rotation = 270
+		}
+	}
+	return rotation
 }
 
 func getImageDimensions(items []PbItem) int {
@@ -66,9 +113,19 @@ func getImageDimensions(items []PbItem) int {
 			items[ii].imageHeightPx = 1
 
 			filename := theItem.Setting("image")
-			rotation := Atoi(items[ii].Setting("rotate"))
 
-			if imageWidthPx, imageHeightPx, exists := checkCacheEntry(&cache, filename); exists {
+			rotation := items[ii].Rotate()
+			_, rotationExists := items[ii].settings["rotate"]
+			if !rotationExists {
+				rotation = -1
+			}
+			flip, flipExists := items[ii].settings["flip"]
+			if !flipExists {
+				flip = ""
+			}
+
+			if imageWidthPx, imageHeightPx, orientation, exists := checkCacheEntry(&cache, filename); exists {
+				rotation = exifRotate(rotation, orientation, flip, &items[ii])
 				if rotation == 90 || rotation == -90 || rotation == 270 || rotation == -270 {
 					items[ii].imageWidthPx = imageHeightPx
 					items[ii].imageHeightPx = imageWidthPx
@@ -79,9 +136,10 @@ func getImageDimensions(items []PbItem) int {
 				continue
 			}
 
-			config := items[ii].GetImageConfig()
+			config, orientation := items[ii].GetImageConfig()
 
 			if config.Width > 0 && config.Height > 0 {
+				rotation = exifRotate(rotation, orientation, flip, &items[ii])
 				if rotation == 90 || rotation == -90 || rotation == 270 || rotation == -270 {
 					items[ii].imageWidthPx = config.Height
 					items[ii].imageHeightPx = config.Width
@@ -91,7 +149,7 @@ func getImageDimensions(items []PbItem) int {
 				}
 			}
 
-			updateCacheEntry(&cache, filename, config.Width, config.Height)
+			updateCacheEntry(&cache, filename, config.Width, config.Height, orientation)
 		}
 	}
 

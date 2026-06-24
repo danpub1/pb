@@ -657,7 +657,7 @@ func renderText(item *PbItem, textBlockLayouts []TextBlockLayout, left float64, 
 	}
 
 	var textImage image.Image
-	rotation := Atoi(item.Setting("rotate"))
+	rotation := item.Rotate()
 	switch rotation {
 	case -90, 270:
 		temp := textBlockLayouts[0].height
@@ -943,7 +943,7 @@ func renderImage(item *PbItem, left float64, top float64, density float64, pbBoo
 		picture = straighten(picture, straightenAngle)
 	}
 
-	rotation := Atoi(item.Setting("rotate"))
+	rotation := item.Rotate()
 	switch rotation {
 	case -90, 270:
 		picture = imaging.Rotate90(picture)

@@ -3,7 +3,9 @@
 ## [Unreleased]
 ### Added
 * Add `font-size-min` to shrink font as necessary to fit
+* Add EXIF-based rotation when rotate is not specified
 ### Changed
+* Change `rotate` to default to empty rather than zero
 ### Deprecated
 ### Removed
 ### Fixed
