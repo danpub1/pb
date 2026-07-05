@@ -351,7 +351,7 @@ Page-Level Settings
 * `current-page`: Include this page in the output regardless of whether it included in the page range. [false]
 * `header`: Name of even page text, Name of odd page text, Offset from the margin in units, Number of Leading Pages without Page Numbers, Number of Trailing Pages without Page Numbers. Example: `EvenHeader,OddHeader,2.5,2,2`. The header names are named text items which are offset above or below the top margin by the offset. Page numbers and total pages are calculated assuming some unnumbered pages before and after. []
 * `margin`: Page margin in units, All, Top & Bottom x Left & Right, Top x Right x Bottom x Left. Examples: `24`, `24.5x18.1`, `36x24x36x12`. When binding is `side`, the right margin starts out as binding and the left margin is the edge.  When binding is `top`, the top margin is initially the binding and the bottom margin is the edge. [24.0]
-* `page-size`: Page size in units, width x height. [576.0x576.0]
+* `page-size`: Page size in units, width x height. [612.0x792.0]
 * `footer`: Same as `header`, but with text offset below the bottom margin. []
 * `distribute-rows`: Vertical spacing of rows on the page.  Specifies how extra space is distributed. [spreadmiddle]
 
@@ -404,7 +404,7 @@ Image-Level Settings
 * `image-outline`: Image outline color, size in units. []
 * `rect`: Image rectangle: fit,aspect-ratio,percent; trim,aspect-ratio,percent; squish,aspect-ratio; zoom-level,horizontal offset,vertical offset,aspect-ratio,percent. Aspect-ratio is image aspect ratio if not specified. Percent is 50 if not specified. [100]
 * `image-shadow`: Image shadow color, blur, and horizontal and vertical offset in units. []
-* `size`: Initial image size (before resizing). [25%]
+* `size`: Initial image size (before resizing). [auto:3x2,3x2]
 * `max-size`: Maximum image size (after resizing). [100%]
 * `recurse`: Recurse directories when matching wildcard images. [true]
 * `straighten`: Straighten the image by specified angle, maximizing the image's rectangle. [0.0]

@@ -11,6 +11,8 @@
 ### Changed
 * Breaking Change: Apply rotation and flip indicated by EXIF orientation
 * Detect file date of files in zip files
+* Change default size to `size:auto:3x2,3x2`
+* Change default page size to 8.5x11"
 ### Deprecated
 ### Removed
 ### Fixed

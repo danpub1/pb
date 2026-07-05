@@ -1173,7 +1173,7 @@ var defaultSettings = map[string]DefaultSetting{
 	"cache-mode": {"0", "Book Option", "Controls Image Cache. 0=Do not cache, 1=Cache during a run but flush cache at beginning of run, 2=Fully cache image measurements across runs."},
 
 	// page
-	"page-size":       {"576.0x576.0", "Page", "Page size in units, width x height."},
+	"page-size":       {"612.0x792.0", "Page", "Page size in units, width x height."},
 	"margin":          {"24.0", "Page", "Page margin in units, All, Top & Bottom x Left & Right, Top x Right x Bottom x Left. Examples: `24`, `24.5x18.1`, `36x24x36x12`. When binding is `side`, the right margin starts out as binding and the left margin is the edge.  When binding is `top`, the top margin is initially the binding and the bottom margin is the edge."},
 	"background":      {"#F", "Page", "Color or named image to use as the page background."},
 	"distribute-rows": {"spreadmiddle", "Page", "Vertical spacing of rows on the page.  Specifies how extra space is distributed."},
@@ -1222,7 +1222,7 @@ var defaultSettings = map[string]DefaultSetting{
 	"image-background": {"#0000", "Image", "Image background color."},
 
 	// image
-	"size":       {"25%", "Image", "Initial image size (before resizing)."},
+	"size":       {"auto:3x2,3x2", "Image", "Initial image size (before resizing)."},
 	"max-size":   {"100%", "Image", "Maximum image size (after resizing)."},
 	"size-mode":  {"width", "Image", "How to interpret size: as `width` or as widith relative to `area` of square."},
 	"rect":       {"100", "Image", "Image rectangle: fit,aspect-ratio,percent; trim,aspect-ratio,percent; squish,aspect-ratio; zoom-level,horizontal offset,vertical offset,aspect-ratio,percent. Aspect-ratio is image aspect ratio if not specified. Percent is 50 if not specified."},
