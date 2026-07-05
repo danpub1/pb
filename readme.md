@@ -230,8 +230,11 @@ There are several pre-defined styles, useful as part of texts in headers and foo
 
 * `{{Date}}`: Replaced by the current date, not the date of the image file
 * `{{Year}}`: Replaced by the four digit year
-* `{{Filename}}` Replaced by the name of an image file without the path, useful with wildcards
-* `{{Fullname}}`: Replaced by the name of an image file with the path, useful with wildcards
+* `{{Filename}}` or `{{FileName}}` Replaced by the name of an image file without the path, useful with wildcards
+* `{{Fullname}}` or `{{FullName}}`: Replaced by the name of an image file with the path, useful with wildcards
+* `{{ImageName}}`: Replaced by the full name of the image as given in the file
+* `{{ExifDate}}`: Replaced by the date as found in the EXIF metadata
+* `{{FileDate}}`: Replaced by the timestamp of the file
 * `{{PageNumber}}`: Replaced by the current page number, useable in headers or footers
 * `{{TotalPages}}`: Replaced by the total number of pages in the book, useable in headers or footers
 
@@ -367,6 +370,10 @@ Column/Row/Page-Level Settings
 ------------------------------
 * `spread-percent`: How `spreadmiddle` or `spreadcenter` spreads extra at top/bottom or left/right. Useful for positioning one item 1/3 of the way down the page instead of at the center. [50.0]
 
+Column/Row/Page/Book-Level Settings
+-----------------------------------
+* `sort`: Sort consecutive images. `date` sorts by date first and then by filename, `filename` sorts only by filename, `none` or the empty string retains the given order. [none]
+
 Image/Text-Level Settings
 -------------------------
 * `column-break`: Break the column before this item. [true]
@@ -377,7 +384,7 @@ Image/Text-Level Settings
 * `corner-radius`: Give the item a superellipse-based corner. Size in units, optional power.  If power is less than zero, the corner bends inward.  If power is equal to zero, the corner is straight.  If power is one, the corner is circular.  If power is greater than one, the corner is flatter than circular. Example: `100%,2`, `2.5,1.725`. [0.0]
 * `item-align`: How to align this item in a column versus other items in the colum.  One of: `left`, `center`, `right`. `binding`, `edge`. [center]
 * `tilt`: Rotate the item this many degrees. Use this for smaller rotations, and `rotate` for bigger rotations. [0.0]
-* `rotate`: Rotate this item around its center.  One of `0`, `90`, `180`, `270`. '' means auto from EXIF if available. []
+* `rotate`: Rotate this item around its center.  One of `0`, `90`, `180`, `270`. Added to whatever rotation is indicated by EXIF orientation, if any. [0]
 
 Image-Level Settings
 --------------------
@@ -472,6 +479,11 @@ The following settings have shortcuts:
   * `row-break:true` => `row-break`
   * `column-break:true` => `column-break`
   * `current-page:true` => `current-page`
+  * `noresize:true` => `noresize`
+  * `nolayout:true` => `nolayout`
+  * `norender:true` => `norender`
+  * `watch:false` => `nowatch`
+  * `recurse:false` => `norecurse`
 * `distribute-` Settings
   * On a page, `distribute-rows:value` => value
   * On a row, `distribute-columns:value` => value
@@ -547,7 +559,6 @@ pb Selected.zip --page-break:true --font:Aptos.zip::Aptos.ttf --caption:{{Filena
 * Issue: Had problems when title pages were first, like first page cannot have some or all settings. Also first row, column, item???
 * Issue: text-background does not work with text-outline
 * Issue: Column overflow creates endless loop
-* Add wildcard sort by date using file date and EXIF date
 * Refactor & clean up
   * Break up large files
   * Latest dependencies
@@ -565,5 +576,3 @@ pb Selected.zip --page-break:true --font:Aptos.zip::Aptos.ttf --caption:{{Filena
 * UI of its own - ebitengine or web browser-based?  Launch pdf or image viewer?
 * Colorspace
 * HDR
-* Autorotate
-* Sort by EXIF date

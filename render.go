@@ -657,7 +657,7 @@ func renderText(item *PbItem, textBlockLayouts []TextBlockLayout, left float64, 
 	}
 
 	var textImage image.Image
-	rotation := item.Rotate()
+	rotation := item.IntSetting("rotate")
 	switch rotation {
 	case -90, 270:
 		temp := textBlockLayouts[0].height
@@ -943,7 +943,9 @@ func renderImage(item *PbItem, left float64, top float64, density float64, pbBoo
 		picture = straighten(picture, straightenAngle)
 	}
 
-	rotation := item.Rotate()
+	rotation := item.IntSetting("rotate")
+	exifRotation, exifFlip := exifRotate(item.exifOrientation)
+	rotation = (rotation + exifRotation) % 360
 	switch rotation {
 	case -90, 270:
 		picture = imaging.Rotate90(picture)
@@ -975,6 +977,12 @@ func renderImage(item *PbItem, left float64, top float64, density float64, pbBoo
 	}
 
 	flip := strings.ToLower(item.Setting("flip"))
+	if exifFlip {
+		if flip == "h" {
+			flip = ""
+		}
+	}
+
 	switch flip {
 	case "h":
 		picture = imaging.FlipH(picture)

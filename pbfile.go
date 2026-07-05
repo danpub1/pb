@@ -107,7 +107,7 @@ func printItems(items []PbItem, comments bool) string {
 			}
 			o.WriteString("\n")
 			if comments {
-				o.WriteString(fmt.Sprintf("/// ImageWidth:%v, ImageHeight:%v\n", theItem.imageWidthPx, theItem.imageHeightPx))
+				o.WriteString(fmt.Sprintf("/// ImageWidth:%v, ImageHeight:%v, ExifDate:%v FileDate:%v\n", theItem.imageWidthPx, theItem.imageHeightPx, theItem.exifDate, theItem.fileDate))
 			}
 		}
 		if comments {
@@ -350,14 +350,17 @@ func parse(line string, styles map[string]string) PbItem {
 			theItem.Set(pieces[0], unescape(pieces[1]))
 		} else if len(pieces) == 1 {
 			switch pieces[0] {
+			case "norender":
+			case "nolayout":
+			case "noresize":
 			case "row-break":
-				theItem.Set("row-break", "true")
 			case "column-break":
-				theItem.Set("column-break", "true")
 			case "page-break":
-				theItem.Set("page-break", "true")
 			case "current-page":
-				theItem.Set("current-page", "true")
+				theItem.Set(pieces[0], "true")
+			case "nowatch":
+			case "norecurse":
+				theItem.Set(pieces[0][2:], "false")
 			case "smaller", "much-smaller", "much-much-smaller", "much-much-much-smaller",
 				"larger", "much-larger", "much-much-larger", "much-much-much-larger":
 				theItem.Set("size", pieces[0])
@@ -412,6 +415,19 @@ func processAsLinesFromBasePath(lines []string, basePath string, styles map[stri
 
 var gExts = []string{".jpg", ".jpeg", ".png"}
 
+var zipHeaders map[string][]*zip.File = make(map[string][]*zip.File)
+
+func openZip(filename string) ([]*zip.File, error) {
+	if headers, exists := zipHeaders[filename]; exists {
+		return headers, nil
+	} else if zipReader, err := zip.OpenReader(filename); err == nil {
+		zipHeaders[filename] = zipReader.File
+		return zipReader.File, zipReader.Close()
+	} else {
+		return make([]*zip.File, 0), err
+	}
+}
+
 func glob(path string, recurse bool) ([]string, error) {
 	exts := gExts
 	for ii := len(exts); ii > 0; ii-- {
@@ -433,14 +449,14 @@ func glob(path string, recurse bool) ([]string, error) {
 			}
 			return sources, nil
 		} else {
-			if zipReader, err := zip.OpenReader(zipParts[0]); err != nil {
+			if zipReaderFile, err := openZip(zipParts[0]); err != nil {
 				log.Print(err)
 				return make([]string, 0), err
 			} else {
 				sources := make([]string, 0)
-				for f := range zipReader.File {
-					if matched, err := filepath.Match(zipParts[1], zipReader.File[f].Name); err == nil && matched {
-						sources = append(sources, zipParts[0]+"::"+zipReader.File[f].Name)
+				for f := range zipReaderFile {
+					if matched, err := filepath.Match(zipParts[1], zipReaderFile[f].Name); err == nil && matched {
+						sources = append(sources, zipParts[0]+"::"+zipReaderFile[f].Name)
 					} else if err != nil {
 						log.Print(err)
 						return make([]string, 0), err
@@ -518,62 +534,7 @@ func expandWild(item *PbItem) []PbItem {
 			}
 			slices.Sort(sources)
 			sources = slices.Compact(sources)
-			slices.SortFunc(sources, func(a string, b string) int {
-				aparts := strings.Split(a, string(os.PathSeparator))
-				bparts := strings.Split(b, string(os.PathSeparator))
-				alen := len(aparts) - 1
-				blen := len(bparts) - 1
-				ii := 0
-				for {
-					if alen >= ii && blen >= ii {
-						laparts := strings.ToLower(aparts[ii])
-						lbparts := strings.ToLower(bparts[ii])
-						if laparts == lbparts {
-							laparts = aparts[ii]
-							lbparts = bparts[ii]
-						}
-						if laparts == lbparts {
-							if ii == alen && ii == blen {
-								return 0
-							} else if ii == alen {
-								return -1
-							} else if ii == blen {
-								return 1
-							} else {
-								ii++
-								continue
-							}
-						} else {
-							if ii == alen && ii == blen {
-								if laparts > lbparts {
-									return 1
-								} else {
-									return -1
-								}
-							} else if ii == alen {
-								return -1
-							} else if ii == blen {
-								return 1
-							} else {
-								if laparts > lbparts {
-									return 1
-								} else {
-									return -1
-								}
-							}
-						}
-
-					} else {
-						if alen < ii && blen < ii {
-							return 0
-						} else if alen < ii {
-							return -1
-						} else if blen < ii {
-							return 1
-						}
-					}
-				}
-			})
+			slices.SortFunc(sources, compareFilenames)
 			if len(sources) > 1 {
 				newItems = make([]PbItem, len(sources))
 				for jj := 0; jj < len(sources); jj++ {
@@ -589,6 +550,130 @@ func expandWild(item *PbItem) []PbItem {
 	}
 
 	return newItems
+}
+
+func compareFilenames(a string, b string) int {
+	aparts := strings.Split(a, string(os.PathSeparator))
+	bparts := strings.Split(b, string(os.PathSeparator))
+	alen := len(aparts) - 1
+	blen := len(bparts) - 1
+	ii := 0
+	for {
+		if alen >= ii && blen >= ii {
+			laparts := strings.ToLower(aparts[ii])
+			lbparts := strings.ToLower(bparts[ii])
+			if laparts == lbparts {
+				laparts = aparts[ii]
+				lbparts = bparts[ii]
+			}
+			if laparts == lbparts {
+				if ii == alen && ii == blen {
+					return 0
+				} else if ii == alen {
+					return -1
+				} else if ii == blen {
+					return 1
+				} else {
+					ii++
+					continue
+				}
+			} else {
+				if ii == alen && ii == blen {
+					if laparts > lbparts {
+						return 1
+					} else {
+						return -1
+					}
+				} else if ii == alen {
+					return -1
+				} else if ii == blen {
+					return 1
+				} else {
+					if laparts > lbparts {
+						return 1
+					} else {
+						return -1
+					}
+				}
+			}
+
+		} else {
+			if alen < ii && blen < ii {
+				return 0
+			} else if alen < ii {
+				return -1
+			} else if blen < ii {
+				return 1
+			}
+		}
+	}
+}
+
+func compareItemsByFilename(a PbItem, b PbItem) int {
+	return compareFilenames(a.Setting("image"), b.Setting("image"))
+}
+
+func compareItemsByDate(a PbItem, b PbItem) int {
+	if !a.exifDate.IsZero() && b.exifDate.IsZero() {
+		return 1
+	} else if a.exifDate.IsZero() && !b.exifDate.IsZero() {
+		return -1
+	}
+	ii := a.exifDate.Compare(b.exifDate)
+	if ii != 0 {
+		return ii
+	}
+
+	if a.fileDate != 0 && b.fileDate == 0 {
+		return 1
+	} else if a.fileDate == 0 && b.fileDate != 0 {
+		return -1
+	}
+	if a.fileDate > b.fileDate {
+		ii = 1
+	} else if a.fileDate < b.fileDate {
+		ii = -1
+	}
+	if ii != 0 {
+		return ii
+	}
+
+	return compareItemsByFilename(a, b)
+}
+
+func sortItems(items []PbItem) {
+	startItem := -1
+	endItem := -1
+	sortSetting := ""
+	for ii := range items {
+		if items[ii].itemType == ItemTypeImage && startItem == -1 {
+			sortSetting = items[ii].ColumnSetting("sort")
+			startItem = ii
+			endItem = ii
+		} else if items[ii].itemType == ItemTypeImage {
+			endItem = ii
+		}
+
+		if items[ii].itemType != ItemTypeImage || ii+1 == len(items) {
+			if endItem > startItem {
+				switch sortSetting {
+				case "filename":
+					slices.SortFunc(items[startItem:endItem+1], compareItemsByFilename)
+					if Opts.Verbose("D") {
+						log.Printf("Sorted items[%v:%v]", startItem, endItem+1)
+					}
+				case "date":
+					slices.SortFunc(items[startItem:endItem+1], compareItemsByDate)
+					if Opts.Verbose("D") {
+						log.Printf("Sorted items[%v:%v]", startItem, endItem+1)
+					}
+				}
+			}
+			startItem = -1
+			endItem = -1
+			sortSetting = ""
+		}
+	}
 }
 
 func defineStyle(line string, styles map[string]string) map[string]string {
@@ -664,12 +749,18 @@ func ApplyItemSpecificStyles(items []PbItem) {
 		if items[ii].itemType == ItemTypeImage || items[ii].itemType == ItemTypeText {
 			text := items[ii].Setting("text")
 			if items[ii].itemType == ItemTypeImage {
-				imageName := items[ii].Setting("image")
+				imageActualName := items[ii].Setting("image")
+				imageName := imageActualName
 				if imageNameParts := strings.SplitN(imageName, "::", 2); len(imageNameParts) == 2 {
 					imageName = imageNameParts[1]
 				}
-				text = strings.ReplaceAll(text, "{{Filename}}", filepath.Base(imageName))
-				text = strings.ReplaceAll(text, "{{Fullname}}", filepath.Clean(imageName))
+				text = strings.ReplaceAll(text, "{{Filename}}", filepath.Base(imageName))  // Deprecated
+				text = strings.ReplaceAll(text, "{{Fullname}}", filepath.Clean(imageName)) // Deprecated
+				text = strings.ReplaceAll(text, "{{FileName}}", filepath.Base(imageName))
+				text = strings.ReplaceAll(text, "{{FullName}}", filepath.Clean(imageName))
+				text = strings.ReplaceAll(text, "{{ImageName}}", imageActualName)
+				text = strings.ReplaceAll(text, "{{FileDate}}", fmt.Sprintf("%v", time.Unix(items[ii].fileDate, 0)))
+				text = strings.ReplaceAll(text, "{{ExifDate}}", fmt.Sprintf("%v", items[ii].exifDate))
 			}
 			text = strings.ReplaceAll(text, "{{Date}}", date)
 			text = strings.ReplaceAll(text, "{{Year}}", year)
@@ -822,7 +913,6 @@ func ReadPbFile(inFiles []string, args []string) []PbItem {
 	OptimizeSettings(items)
 
 	ApplyDefaultCaptions(items)
-	ApplyItemSpecificStyles(items)
 
 	return items
 }

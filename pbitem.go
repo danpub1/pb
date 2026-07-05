@@ -20,6 +20,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/rwcarlsen/goexif/exif"
 )
@@ -303,6 +304,9 @@ type PbItem struct {
 	textBlockLayouts []TextBlockLayout
 	imageWidthPx     int
 	imageHeightPx    int
+	fileDate         int64
+	exifOrientation  int
+	exifDate         time.Time
 
 	// layout
 	page                int
@@ -526,13 +530,6 @@ func (item *PbItem) Aspect() float64 {
 
 func (item *PbItem) Density() float64 {
 	return item.FloatBookSetting("density")
-}
-
-func (item *PbItem) Rotate() int {
-	if len(item.Setting("rotate")) > 0 {
-		return item.IntSetting("rotate")
-	}
-	return 0
 }
 
 func (item *PbItem) TextInfo() *TextInfo {
@@ -782,7 +779,7 @@ func (item *PbItem) GetImage() image.Image {
 	return decodedImage
 }
 
-func (item *PbItem) GetImageConfig() (image.Config, int) {
+func (item *PbItem) GetImageConfig() (image.Config, int, time.Time) {
 	// imageFile, err := os.Open(item.Setting("image"))
 	// if err != nil {
 	// 	log.Fatal(err)
@@ -798,19 +795,20 @@ func (item *PbItem) GetImageConfig() (image.Config, int) {
 	// }
 
 	orientation := 0
+	var dateTime time.Time
 
 	imageFile := item.OpenImage()
 	if imageFile == nil {
-		return image.Config{}, orientation
+		return image.Config{}, orientation, dateTime
 	}
 	reader := imageFile.Reader()
 	if reader == nil {
-		return image.Config{}, orientation
+		return image.Config{}, orientation, dateTime
 	}
 	imageConfig, _, err := image.DecodeConfig(reader)
 	if err != nil {
 		log.Print(err)
-		return image.Config{}, orientation
+		return image.Config{}, orientation, dateTime
 	}
 	if err := imageFile.Close(); err != nil {
 		log.Print(err)
@@ -818,22 +816,26 @@ func (item *PbItem) GetImageConfig() (image.Config, int) {
 
 	imageFile = item.OpenImage()
 	if imageFile == nil {
-		return image.Config{}, orientation
+		return image.Config{}, orientation, dateTime
 	}
 	exifReader := imageFile.Reader()
 	if exifReader == nil {
-		return imageConfig, orientation
+		return imageConfig, orientation, dateTime
 	}
 
-	if x, err := exif.Decode(exifReader); err != nil {
-		//log.Printf("Exif Decode: %v", err)
-		return imageConfig, orientation
+	var exifErr error
+	var x *exif.Exif
+	if x, exifErr = exif.Decode(exifReader); exifErr != nil {
+		//log.Printf("Exif Decode: %v", exifErr)
+		return imageConfig, orientation, dateTime
 	} else if orientationTag, err := x.Get(exif.Orientation); err != nil {
-		//log.Printf("Exif Get: %v", err)
-		return imageConfig, orientation
+		// log.Printf("Exif Get: %v", exifErr)
 	} else if orientation, err = orientationTag.Int(0); err != nil {
-		//log.Printf("Exif Int(): %v", err)
-		return imageConfig, orientation
+		//log.Printf("Exif Int(): %v", exifErr)
+	}
+
+	if dateTime, exifErr = x.DateTime(); exifErr != nil {
+		//log.Printf("Exif DateTime(): %v", erexifErrr)
 	}
 
 	//log.Printf("Orientation: %v", orientation)
@@ -841,7 +843,7 @@ func (item *PbItem) GetImageConfig() (image.Config, int) {
 		log.Print(err)
 	}
 
-	return imageConfig, orientation
+	return imageConfig, orientation, dateTime
 }
 
 func (item *PbItem) ImageRectSetting() (int, int, int, float64, int) {
@@ -1104,7 +1106,7 @@ type DefaultSetting struct {
 }
 
 func sectionEnum(section string) int {
-	sections := []string{"Book", "Page", "Row", "Column", "Column/Row/Page", "Image/Text", "Image", "Text", "Book Option", "Page Option"}
+	sections := []string{"Book", "Page", "Row", "Column", "Column/Row/Page", "Column/Row/Page/Book", "Image/Text", "Image", "Text", "Book Option", "Page Option"}
 
 	if slices.Contains(sections, section) {
 		return slices.Index(sections, section)
@@ -1196,10 +1198,11 @@ var defaultSettings = map[string]DefaultSetting{
 	"item-gutter":           {"6.0", "Column", "Gutter, in units, between items in a column."},
 	"keep-columns-together": {"false", "Column", "If a column becomes too wide and there is not room for it in the next row, move it as a unit to the next page, versus breaking the page and starting a new page with the item."},
 	"spread-percent":        {"50.0", "Column/Row/Page", "How `spreadmiddle` or `spreadcenter` spreads extra at top/bottom or left/right. Useful for positioning one item 1/3 of the way down the page instead of at the center."},
+	"sort":                  {"none", "Column/Row/Page/Book", "Sort consecutive images. `date` sorts by date first and then by filename, `filename` sorts only by filename, `none` or the empty string retains the given order."},
 
 	// image or text (or similar related settings)
 	"item-align":   {"center", "Image/Text", "How to align this item in a column versus other items in the colum.  One of: `left`, `center`, `right`. `binding`, `edge`."},
-	"rotate":       {"", "Image/Text", "Rotate this item around its center.  One of `0`, `90`, `180`, `270`. '' means auto from EXIF if available"},
+	"rotate":       {"0", "Image/Text", "Rotate this item around its center.  One of `0`, `90`, `180`, `270`. Added to whatever rotation is indicated by EXIF orientation, if any."},
 	"page-break":   {"false", "Image/Text", "Break the page before this item."},
 	"row-break":    {"false", "Image/Text", "Break the row before this item."},
 	"column-break": {"true", "Image/Text", "Break the column before this item."},

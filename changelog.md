@@ -3,9 +3,14 @@
 ## [Unreleased]
 ### Added
 * Add `font-size-min` to shrink font as necessary to fit
-* Add EXIF-based rotation when rotate is not specified
+* Add `sort` column setting, sort on exif date, file date, and filename
+* Add `{{FileName}}` and `{{FullName}}` in addition to `{{Filename}}` and `{{Fullname}}`
+* Add `{{ImageName}}`, `{{ExifDate}}`, and `{{FileDate}}`
+* Add FileDate and ExifDate to the `--verbose:X` output
+* Add shortcuts `norender`, `nolayout`, `noresize`, `nowatch`, `norecurse`
 ### Changed
-* Change `rotate` to default to empty rather than zero
+* Breaking Change: Apply rotation and flip indicated by EXIF orientation
+* Detect file date of files in zip files
 ### Deprecated
 ### Removed
 ### Fixed

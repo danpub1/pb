@@ -1,6 +1,7 @@
 package main
 
 import (
+	"archive/zip"
 	"fmt"
 	"log"
 	"os"
@@ -76,9 +77,32 @@ func isCurrentPage(pb *PbBook, pp int) bool {
 func fileDate(filename string) int64 {
 	rv := time.Time{}.Unix()
 
-	fi, err := os.Stat(filename)
-	if err == nil {
-		rv = fi.ModTime().Unix()
+	if strings.Contains(filename, "::") {
+		parts := strings.SplitN(filename, "::", 2)
+		if zipFiles, err := openZip(parts[0]); err == nil {
+			idx := slices.IndexFunc(zipFiles, func(zipFile *zip.File) bool { return zipFile.Name == parts[1] })
+			if idx != -1 {
+				// log.Printf("Filename: %v, Time: %v", filename, zipFiles[idx].Modified.Unix())
+				rv = zipFiles[idx].Modified.Unix()
+			} else {
+				// log.Printf("%v\n", filename+" not found")
+				fi, err := os.Stat(parts[0])
+				if err == nil {
+					rv = fi.ModTime().Unix()
+				}
+			}
+		} else {
+			// log.Printf("Error %v opening %v\n", err, filename)
+			fi, err := os.Stat(parts[0])
+			if err == nil {
+				rv = fi.ModTime().Unix()
+			}
+		}
+	} else {
+		fi, err := os.Stat(filename)
+		if err == nil {
+			rv = fi.ModTime().Unix()
+		}
 	}
 
 	return rv
@@ -206,15 +230,19 @@ func main() {
 			log.Printf("Read input file")
 		}
 
-		if Opts.Verbose("P") {
-			fmt.Println(printItems(items, false))
-		}
-
 		numImages := getImageDimensions(items)
+		ApplyItemSpecificStyles(items) // Needs exifDate & fileDate from getImageDimensions
+
 		numTexts := getTextDimensions(items)
 
 		if Opts.Verbose("D") {
 			log.Printf("Got Dimensions for %v Images and Measured %v Texts", numImages, numTexts)
+		}
+
+		sortItems(items)
+
+		if Opts.Verbose("P") {
+			fmt.Println(printItems(items, false))
 		}
 
 		// break into columns, rows

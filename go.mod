@@ -10,4 +10,4 @@ require github.com/disintegration/imaging v1.6.2
 
 require github.com/spakin/netpbm v1.3.2
 
-require github.com/rwcarlsen/goexif v0.0.0-20190401172101-9e8deecbddbd // indirect
+require github.com/rwcarlsen/goexif v0.0.0-20190401172101-9e8deecbddbd

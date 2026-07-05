@@ -230,8 +230,11 @@ There are several pre-defined styles, useful as part of texts in headers and foo
 
 * `{{Date}}`: Replaced by the current date, not the date of the image file
 * `{{Year}}`: Replaced by the four digit year
-* `{{Filename}}` Replaced by the name of an image file without the path, useful with wildcards
-* `{{Fullname}}`: Replaced by the name of an image file with the path, useful with wildcards
+* `{{Filename}}` or `{{FileName}}` Replaced by the name of an image file without the path, useful with wildcards
+* `{{Fullname}}` or `{{FullName}}`: Replaced by the name of an image file with the path, useful with wildcards
+* `{{ImageName}}`: Replaced by the full name of the image as given in the file
+* `{{ExifDate}}`: Replaced by the date as found in the EXIF metadata
+* `{{FileDate}}`: Replaced by the timestamp of the file
 * `{{PageNumber}}`: Replaced by the current page number, useable in headers or footers
 * `{{TotalPages}}`: Replaced by the total number of pages in the book, useable in headers or footers
 
@@ -359,6 +362,11 @@ The following settings have shortcuts:
   * `row-break:true` => `row-break`
   * `column-break:true` => `column-break`
   * `current-page:true` => `current-page`
+  * `noresize:true` => `noresize`
+  * `nolayout:true` => `nolayout`
+  * `norender:true` => `norender`
+  * `watch:false` => `nowatch`
+  * `recurse:false` => `norecurse`
 * `distribute-` Settings
   * On a page, `distribute-rows:value` => value
   * On a row, `distribute-columns:value` => value
@@ -434,7 +442,6 @@ pb Selected.zip --page-break:true --font:Aptos.zip::Aptos.ttf --caption:{{Filena
 * Issue: Had problems when title pages were first, like first page cannot have some or all settings. Also first row, column, item???
 * Issue: text-background does not work with text-outline
 * Issue: Column overflow creates endless loop
-* Add wildcard sort by date using file date and EXIF date
 * Refactor & clean up
   * Break up large files
   * Latest dependencies
@@ -452,5 +459,3 @@ pb Selected.zip --page-break:true --font:Aptos.zip::Aptos.ttf --caption:{{Filena
 * UI of its own - ebitengine or web browser-based?  Launch pdf or image viewer?
 * Colorspace
 * HDR
-* Autorotate
-* Sort by EXIF date
