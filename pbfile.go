@@ -323,65 +323,62 @@ func parse(line string, styles map[string]string) PbItem {
 	settingsText = applyStyles(settingsText, styles)
 	parts := strings.Split(settingsText, " ")
 	for ii := range parts {
-		parts[ii] = strings.TrimSpace(parts[ii])
-		pieces := strings.SplitN(parts[ii], ":", 2)
-		if len(pieces) == 2 {
-			switch pieces[0] {
-			case "trim", "fit", "squish":
-				pieces[1] = pieces[0] + "," + pieces[1]
-				pieces[0] = "rect"
-			case "crop":
-				pieces[0] = "rect"
-			case "scale":
-				pieces[1] = pieces[0] + ":" + pieces[1]
-				pieces[0] = "size"
-			case "gutter":
-				switch theItem.itemType {
-				case ItemTypePage:
-					pieces[0] = "row-gutter"
-				case ItemTypeRow:
-					pieces[0] = "column-gutter"
-				case ItemTypeColumn:
-					pieces[0] = "item-gutter"
-				default:
-					log.Print("Gutter shortcut on invalid item")
-				}
-			}
-			theItem.Set(pieces[0], unescape(pieces[1]))
-		} else if len(pieces) == 1 {
-			switch pieces[0] {
-			case "norender":
-			case "nolayout":
-			case "noresize":
-			case "row-break":
-			case "column-break":
-			case "page-break":
-			case "current-page":
-				theItem.Set(pieces[0], "true")
-			case "nowatch":
-			case "norecurse":
-				theItem.Set(pieces[0][2:], "false")
-			case "smaller", "much-smaller", "much-much-smaller", "much-much-much-smaller",
-				"larger", "much-larger", "much-much-larger", "much-much-much-larger":
-				theItem.Set("size", pieces[0])
-			case "spreadtop", "spreadmiddle", "spreadbottom", "spreadleft", "spreadcenter", "spreadright", "spreadbinding", "spreadedge",
-				"top", "middle", "bottom", "left", "center", "right", "binding", "edge", "justify":
-				switch theItem.itemType {
-				case ItemTypePage:
-					theItem.Set("distribute-rows", pieces[0])
-				case ItemTypeRow:
-					theItem.Set("distribute-columns", pieces[0])
-				case ItemTypeColumn:
-					theItem.Set("distribute-items", pieces[0])
-				default:
-					log.Print("Alignment shortcut on invalid item")
-				}
-			case "help":
-			}
-		}
+		processSetting(parts[ii], &theItem)
 	}
 
 	return theItem
+}
+
+func processSetting(setting string, theItem *PbItem) {
+	setting = strings.TrimSpace(setting)
+	pieces := strings.SplitN(setting, ":", 2)
+	if len(pieces) == 2 {
+		switch pieces[0] {
+		case "trim", "fit", "squish":
+			pieces[1] = pieces[0] + "," + pieces[1]
+			pieces[0] = "rect"
+		case "crop":
+			pieces[0] = "rect"
+		case "scale":
+			pieces[1] = pieces[0] + ":" + pieces[1]
+			pieces[0] = "size"
+		case "gutter":
+			switch theItem.itemType {
+			case ItemTypePage:
+				pieces[0] = "row-gutter"
+			case ItemTypeRow:
+				pieces[0] = "column-gutter"
+			case ItemTypeColumn:
+				pieces[0] = "item-gutter"
+			default:
+				log.Print("Gutter shortcut on invalid item")
+			}
+		}
+		theItem.Set(pieces[0], unescape(pieces[1]))
+	} else if len(pieces) == 1 {
+		switch pieces[0] {
+		case "norender", "nolayout", "noresize", "row-break", "column-break", "page-break", "current-page":
+			theItem.Set(pieces[0], "true")
+		case "nowatch", "norecurse":
+			theItem.Set(pieces[0][2:], "false")
+		case "smaller", "much-smaller", "much-much-smaller", "much-much-much-smaller",
+			"larger", "much-larger", "much-much-larger", "much-much-much-larger":
+			theItem.Set("size", pieces[0])
+		case "spreadtop", "spreadmiddle", "spreadbottom", "spreadleft", "spreadcenter", "spreadright", "spreadbinding", "spreadedge",
+			"top", "middle", "bottom", "left", "center", "right", "binding", "edge", "justify":
+			switch theItem.itemType {
+			case ItemTypePage:
+				theItem.Set("distribute-rows", pieces[0])
+			case ItemTypeRow:
+				theItem.Set("distribute-columns", pieces[0])
+			case ItemTypeColumn:
+				theItem.Set("distribute-items", pieces[0])
+			default:
+				log.Print("Alignment shortcut on invalid item")
+			}
+		case "help":
+		}
+	}
 }
 
 func processAsLinesFromBasePath(lines []string, basePath string, styles map[string]string) ([]PbItem, map[string]string) {
@@ -552,9 +549,29 @@ func expandWild(item *PbItem) []PbItem {
 	return newItems
 }
 
+// split filename using path separator
+// also split off extension as a separate part
+// Causes "name (1).jpg" to sort after "name.jpg"
+func splitFilename(filename string) []string {
+	if len(filename) > 0 {
+		rv := strings.Split(filename, string(os.PathSeparator))
+		lastPart := rv[len(rv)-1]
+		lastParts := strings.Split(lastPart, ".")
+		if len(lastParts) > 1 {
+			lastPart = lastPart[0 : len(lastPart)-len(lastParts[len(lastParts)-1])-1]
+			rv = rv[0 : len(rv)-1]
+			rv = append(rv, lastPart)
+			rv = append(rv, lastParts[len(lastParts)-1])
+		}
+		return rv
+	}
+
+	return make([]string, 0)
+}
+
 func compareFilenames(a string, b string) int {
-	aparts := strings.Split(a, string(os.PathSeparator))
-	bparts := strings.Split(b, string(os.PathSeparator))
+	aparts := splitFilename(a)
+	bparts := splitFilename(b)
 	alen := len(aparts) - 1
 	blen := len(bparts) - 1
 	ii := 0
@@ -613,27 +630,52 @@ func compareItemsByFilename(a PbItem, b PbItem) int {
 	return compareFilenames(a.Setting("image"), b.Setting("image"))
 }
 
-func compareItemsByDate(a PbItem, b PbItem) int {
-	if !a.exifDate.IsZero() && b.exifDate.IsZero() {
-		return 1
-	} else if a.exifDate.IsZero() && !b.exifDate.IsZero() {
-		return -1
+var rxTimeName, _ = regexp.Compile(`([0-9]{4,4})([0-9]{2,2})([0-9]{2,2})_([0-9]{2,2})([0-9]{2,2})([0-9]{2,2})`)
+
+func itemTime(item *PbItem) time.Time {
+	itemTime := timeFromName(item)
+	if itemTime.IsZero() {
+		itemTime = item.exifDate
 	}
-	ii := a.exifDate.Compare(b.exifDate)
-	if ii != 0 {
-		return ii
+	if itemTime.IsZero() {
+		itemTime = time.Unix(item.fileDate, 0)
+	}
+	return itemTime
+}
+
+func timeFromName(item *PbItem) time.Time {
+	rv := time.Time{}
+	name := item.Setting("image")
+	if strings.Contains(name, "::") {
+		parts := strings.SplitN(name, "::", 2)
+		name = parts[1]
 	}
 
-	if a.fileDate != 0 && b.fileDate == 0 {
-		return 1
-	} else if a.fileDate == 0 && b.fileDate != 0 {
-		return -1
+	if rxTimeName.MatchString(name) {
+		parts := rxTimeName.FindStringSubmatch(name)
+		if len(parts) == 7 {
+			year := Atoi(parts[1])
+			month := time.Month(Atoi(parts[2]))
+			day := Atoi(parts[3])
+			hour := Atoi(parts[4])
+			minute := Atoi(parts[5])
+			second := Atoi(parts[6])
+			location := time.Now().Location()
+			if !item.exifDate.IsZero() {
+				location = item.exifDate.Location()
+			}
+			rv = time.Date(year, month, day, hour, minute, second, 0, location)
+		}
 	}
-	if a.fileDate > b.fileDate {
-		ii = 1
-	} else if a.fileDate < b.fileDate {
-		ii = -1
-	}
+
+	return rv
+}
+
+func compareItemsByDate(a PbItem, b PbItem) int {
+	aTime := itemTime(&a)
+	bTime := itemTime(&b)
+
+	ii := aTime.Compare(bTime)
 	if ii != 0 {
 		return ii
 	}
@@ -759,14 +801,91 @@ func ApplyItemSpecificStyles(items []PbItem) {
 				text = strings.ReplaceAll(text, "{{FileName}}", filepath.Base(imageName))
 				text = strings.ReplaceAll(text, "{{FullName}}", filepath.Clean(imageName))
 				text = strings.ReplaceAll(text, "{{ImageName}}", imageActualName)
-				text = strings.ReplaceAll(text, "{{FileDate}}", fmt.Sprintf("%v", time.Unix(items[ii].fileDate, 0)))
-				text = strings.ReplaceAll(text, "{{ExifDate}}", fmt.Sprintf("%v", items[ii].exifDate))
+				text = strings.ReplaceAll(text, "{{ImageDate}}", itemTime(&items[ii]).Format(time.DateTime))
+				text = strings.ReplaceAll(text, "{{FileDate}}", time.Unix(items[ii].fileDate, 0).Format(time.DateTime))
+				text = strings.ReplaceAll(text, "{{ExifDate}}", items[ii].exifDate.Format(time.DateTime))
 			}
+			if items[ii].itemType == ItemTypeText {
+				if strings.Contains(text, "{{NextImageDate}}") {
+					replacement := "(Undated)"
+					for jj := ii + 1; jj < len(items); jj++ {
+						if items[jj].itemType == ItemTypeImage {
+							imageDate := items[jj].exifDate
+							if imageDate.IsZero() && items[jj].fileDate != 0 {
+								imageDate = time.Unix(items[jj].fileDate, 0)
+							}
+							if !imageDate.IsZero() {
+								replacement = imageDate.Format("Monday January 2, 2006")
+							}
+							break
+						}
+					}
+					text = strings.ReplaceAll(text, "{{NextImageDate}}", replacement)
+				}
+			}
+
 			text = strings.ReplaceAll(text, "{{Date}}", date)
 			text = strings.ReplaceAll(text, "{{Year}}", year)
 			items[ii].Set("text", text)
 		}
 	}
+}
+
+func addDayHeaders(items []PbItem) []PbItem {
+
+	if len(items) == 0 {
+		return items
+	}
+
+	dayHeaders := items[0].BookSetting("day-headers")
+
+	if dayHeaders == "" {
+		return items
+	}
+
+	var dayHeader PbItem
+	found := false
+
+	if dayHeaders != "auto" {
+		for ii := range items {
+			if items[ii].itemType == ItemTypeText && items[ii].Setting("name") == dayHeaders {
+				dayHeader = items[ii].DeepCopy()
+				found = true
+			}
+		}
+	}
+
+	if !found {
+		dayHeader = PbItem{}
+		dayHeader.itemType = ItemTypeText
+		dayHeader.settings = map[string]string{}
+		dayHeader.settings["text"] = "{{NextImageDate}}"
+		dayHeader.settings["font"] = "::FiraSans-SemiBold.otf"
+		dayHeader.settings["font-size"] = "20"
+		dayHeader.settings["page-break"] = "true"
+		dayHeader.pb = items
+	}
+
+	var lastDay time.Time
+	firstHeader := true
+
+	for ii := range items {
+		if items[ii].itemType == ItemTypeImage {
+			imageDate := itemTime(&items[ii])
+			if firstHeader || imageDate.Year() != lastDay.Year() || imageDate.Month() != lastDay.Month() || imageDate.Day() != lastDay.Day() {
+				items = slices.Insert(items, ii, dayHeader.DeepCopy())
+				lastDay = imageDate
+				firstHeader = false
+			}
+		}
+	}
+
+	for ii := range items {
+		items[ii].pb = items
+	}
+
+	OptimizeSettings(items)
+	return items
 }
 
 func ApplyDefaultCaptions(items []PbItem) {
@@ -905,8 +1024,7 @@ func ReadPbFile(inFiles []string, args []string) []PbItem {
 
 	for _, arg := range args {
 		if setting, found := strings.CutPrefix(arg, "--"); found {
-			parts := strings.SplitN(setting, ":", 2)
-			items[0].Set(parts[0], parts[1])
+			processSetting(setting, &items[0])
 		}
 	}
 

@@ -8,6 +8,8 @@
 * Add `{{ImageName}}`, `{{ExifDate}}`, and `{{FileDate}}`
 * Add FileDate and ExifDate to the `--verbose:X` output
 * Add shortcuts `norender`, `nolayout`, `noresize`, `nowatch`, `norecurse`
+* Add `day-headers` setting for date sorted files and `{{NextImageDate}}` for its contents
+* Add `{{FileDate}}` f
 ### Changed
 * Breaking Change: Apply rotation and flip indicated by EXIF orientation
 * Detect file date of files in zip files

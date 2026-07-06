@@ -58,9 +58,7 @@ func exifRotate(orientation int) (int, bool) {
 	rotation := 0
 	flip := false
 	switch orientation {
-	default:
-	case 0:
-	case 1:
+	default: // including 0, 1
 		flip = false
 		rotation = 0
 	case 2:

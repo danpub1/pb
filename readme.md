@@ -235,8 +235,10 @@ There are several pre-defined styles, useful as part of texts in headers and foo
 * `{{ImageName}}`: Replaced by the full name of the image as given in the file
 * `{{ExifDate}}`: Replaced by the date as found in the EXIF metadata
 * `{{FileDate}}`: Replaced by the timestamp of the file
+* `{{ImageDate}}`: Replaced by the best-guess timestamp of the image - based on the filename, EXIF date, and modified time of the file
 * `{{PageNumber}}`: Replaced by the current page number, useable in headers or footers
 * `{{TotalPages}}`: Replaced by the total number of pages in the book, useable in headers or footers
+* `{{NextImageDate}}`: Replaced by the date only of the next image following the text.  For use with `day-headers`
 
 ## Special Texts
 
@@ -337,6 +339,7 @@ Book-Level Settings
 -------------------
 * `output-gamma`: Apply a gamma correction to the page bitmap. This is useful to lighten or darken printed output so it better matches the onscreen experience. [1.0]
 * `output-sharpen`: Apply sharpening to the page bitmap after resizing is complete. [0.0]
+* `day-headers`: Either `auto` or a named text to use as day headers. []
 * `density`: Pixels per unit when converting the content to a page bitmap.  2 pixels per pt (144 ppi) could be considered for a preview quality, and 5 pixels per pt (360 ppi) could be appropriate for printing. [2.0]
 * `binding`: The book's binding location, one of `side`, `top`, `none`.  Controls if margins are alternated by even/odd pages. [side]
 * `output-compression`: The jpeg compression level when creating the page bitmap. [92]
@@ -552,6 +555,12 @@ then reference that image in a later page
 
 ```
 pb Selected.zip --page-break:true --font:Aptos.zip::Aptos.ttf --caption:{{Filename}} --page-size:612x792 --output-file:big.pdf --verbose:D
+```
+
+### Full Collection by Date
+
+```
+pb Collection1.zip Collection2.zip --caption:{{ImageName}} --nowatch --sort:date --day-headers:auto --max-size:75% --size-mode:area --distribute-rows:spreadtop
 ```
 
 ## Things to Do

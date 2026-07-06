@@ -231,15 +231,15 @@ func main() {
 		}
 
 		numImages := getImageDimensions(items)
-		ApplyItemSpecificStyles(items) // Needs exifDate & fileDate from getImageDimensions
+		sortItems(items)
+		items = addDayHeaders(items)
 
+		ApplyItemSpecificStyles(items) // Needs exifDate & fileDate from getImageDimensions
 		numTexts := getTextDimensions(items)
 
 		if Opts.Verbose("D") {
 			log.Printf("Got Dimensions for %v Images and Measured %v Texts", numImages, numTexts)
 		}
-
-		sortItems(items)
 
 		if Opts.Verbose("P") {
 			fmt.Println(printItems(items, false))

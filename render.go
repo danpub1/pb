@@ -306,6 +306,9 @@ func writePage(img image.Image, objNum int, curPage int, outFilename string, isP
 			log.Print(err)
 			return 0, err
 		}
+		if Opts.Verbose("D") {
+			log.Printf("Wrote PNG to %v\n", outFilename)
+		}
 		return 0, nil
 	case ".jpg", ".jpeg":
 		if useMozJpeg {
@@ -317,16 +320,13 @@ func writePage(img image.Image, objNum int, curPage int, outFilename string, isP
 			}
 			return bytesWritten, nil
 		} else {
-			if Opts.Verbose("D") {
-				log.Print("Writing JPEG")
-			}
 			options := jpeg.Options{Quality: compressionLevel}
 			if err := jpeg.Encode(out, img, &options); err != nil {
 				log.Print(err)
 				return 0, err
 			}
 			if Opts.Verbose("D") {
-				log.Print("Wrote JPEG")
+				log.Printf("Wrote JPEG to %v\n", outFilename)
 			}
 			return 0, nil
 		}
@@ -341,16 +341,13 @@ func writePage(img image.Image, objNum int, curPage int, outFilename string, isP
 				return 0, err
 			}
 		} else {
-			if Opts.Verbose("D") {
-				log.Print("Writing JPEG")
-			}
 			options := jpeg.Options{Quality: compressionLevel}
 			if err := jpeg.Encode(writer, img, &options); err != nil {
 				log.Print(err)
 				return 0, err
 			}
 			if Opts.Verbose("D") {
-				log.Print("Wrote JPEG")
+				log.Printf("Wrote JPEG to %v\n", outFilename)
 			}
 		}
 
@@ -1259,6 +1256,10 @@ func renderPages(pbBook *PbBook, outPageRange string, firstIteration bool, pageH
 				dst = imaging.Sharpen(dst, outputSharpen)
 			}
 
+			if Opts.Verbose("D") {
+				log.Printf("Rendered Page %v / %v", pp+1, len(pbBook.pages))
+			}
+
 			var info OutFileInfo
 			var exists bool
 			if info, exists = outFileInfo[thisOutFilename]; !exists {
@@ -1306,9 +1307,9 @@ func renderPages(pbBook *PbBook, outPageRange string, firstIteration bool, pageH
 				return
 			}
 
-			if Opts.Verbose("D") {
-				log.Printf("Rendered Page %v / %v", pp+1, len(pbBook.pages))
-			}
+			// if Opts.Verbose("D") {
+			// 	log.Printf("Wrote Page %v / %v to %v", pp+1, len(pbBook.pages), thisOutFilename)
+			// }
 
 			info.n += thisn
 

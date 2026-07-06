@@ -235,8 +235,10 @@ There are several pre-defined styles, useful as part of texts in headers and foo
 * `{{ImageName}}`: Replaced by the full name of the image as given in the file
 * `{{ExifDate}}`: Replaced by the date as found in the EXIF metadata
 * `{{FileDate}}`: Replaced by the timestamp of the file
+* `{{ImageDate}}`: Replaced by the best-guess timestamp of the image - based on the filename, EXIF date, and modified time of the file
 * `{{PageNumber}}`: Replaced by the current page number, useable in headers or footers
 * `{{TotalPages}}`: Replaced by the total number of pages in the book, useable in headers or footers
+* `{{NextImageDate}}`: Replaced by the date only of the next image following the text.  For use with `day-headers`
 
 ## Special Texts
 
@@ -435,6 +437,12 @@ then reference that image in a later page
 
 ```
 pb Selected.zip --page-break:true --font:Aptos.zip::Aptos.ttf --caption:{{Filename}} --page-size:612x792 --output-file:big.pdf --verbose:D
+```
+
+### Full Collection by Date
+
+```
+pb Collection1.zip Collection2.zip --caption:{{ImageName}} --nowatch --sort:date --day-headers:auto --max-size:75% --size-mode:area --distribute-rows:spreadtop
 ```
 
 ## Things to Do

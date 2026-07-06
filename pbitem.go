@@ -1165,6 +1165,7 @@ var defaultSettings = map[string]DefaultSetting{
 	"output-compression":      {"92", "Book", "The jpeg compression level when creating the page bitmap"},
 	"output-mozjpeg":          {"false", "Book", "Use the mozjpeg compressor to create the page bitmap. Slower, but produces smaller files at the same quality."},
 	"output-mozjpeg-sampling": {"1x1", "Book", "The subsampling used by mozjpeg. Typically one of: `1x1` (4:4:4), `1x2` (4:4:0), `2x1` (4:2:2), `2x2` (4:2:0), `4x1` (4:1:1), `4x2` (4:1:0)."},
+	"day-headers":             {"", "Book", "Either `auto` or a named text to use as day headers."},
 
 	// book level options
 	"verbose":    {"D", "Book Option", "Zero or more of D, P, X, L.  D=Details, P=Print, X=Print with comments, L=Verbose Logging"},
