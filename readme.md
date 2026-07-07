@@ -400,7 +400,7 @@ Image-Level Settings
 * `blur`: Blur the image. [0.0]
 * `caption`: Caption Text. Typically not specified using this setting. []
 * `flip`: Flip the image either horizontally (H) or vertically (V). []
-* `size-mode`: How to interpret size: as `width` or as widith relative to `area` of square. [width]
+* `size-mode`: How to interpret size: as `width` or as width relative to `area` of square. [area]
 * `image-background`: Image background color. [#0000]
 * `image`: Image filename. Typically not specified using this setting. []
 * `image-frame`: Image frame size in units (all, top+bottomxleft+right, topxrightxbottomxleft), color or image name, position (above or below). [0]

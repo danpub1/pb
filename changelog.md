@@ -9,12 +9,13 @@
 * Add FileDate and ExifDate to the `--verbose:X` output
 * Add shortcuts `norender`, `nolayout`, `noresize`, `nowatch`, `norecurse`
 * Add `day-headers` setting for date sorted files and `{{NextImageDate}}` for its contents
-* Add `{{FileDate}}` f
+* Add `{{FileDate}}` to display the timestamp used to sort
 ### Changed
 * Breaking Change: Apply rotation and flip indicated by EXIF orientation
 * Detect file date of files in zip files
 * Change default size to `size:auto:3x2,3x2`
 * Change default page size to 8.5x11"
+* Default `size-mode` to the value `area`
 ### Deprecated
 ### Removed
 ### Fixed
