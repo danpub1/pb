@@ -1225,7 +1225,7 @@ var defaultSettings = map[string]DefaultSetting{
 	// image
 	"size":       {"auto:3x2,3x2", "Image", "Initial image size (before resizing)."},
 	"max-size":   {"100%", "Image", "Maximum image size (after resizing)."},
-	"size-mode":  {"width", "Image", "How to interpret size: as `width` or as widith relative to `area` of square."},
+	"size-mode":  {"area", "Image", "How to interpret size: as `width` or as width relative to `area` of square."},
 	"rect":       {"100", "Image", "Image rectangle: fit,aspect-ratio,percent; trim,aspect-ratio,percent; squish,aspect-ratio; zoom-level,horizontal offset,vertical offset,aspect-ratio,percent. Aspect-ratio is image aspect ratio if not specified. Percent is 50 if not specified."},
 	"straighten": {"0.0", "Image", "Straighten the image by specified angle, maximizing the image's rectangle"},
 	"brightness": {"0.0", "Image", "Adjust image brightness, -100.0 to 100.0"},

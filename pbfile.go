@@ -844,6 +844,7 @@ func addDayHeaders(items []PbItem) []PbItem {
 	}
 
 	var dayHeader PbItem
+	var dayHeaderPage *PbItem
 	found := false
 
 	if dayHeaders != "auto" {
@@ -864,16 +865,37 @@ func addDayHeaders(items []PbItem) []PbItem {
 		dayHeader.settings["font-size"] = "20"
 		dayHeader.settings["page-break"] = "true"
 		dayHeader.pb = items
+
+		if items[0].BookSetting("distribute-rows") != "spreadtop" {
+			dayHeaderPage = &PbItem{}
+			dayHeaderPage.itemType = ItemTypePage
+			dayHeaderPage.settings = map[string]string{}
+			dayHeaderPage.settings["distribute-rows"] = "spreadtop"
+			dayHeaderPage.pb = items
+		}
+	} else {
+		if dayHeader.Setting("distribute-rows") != "spreadtop" {
+			dayHeaderPage = &PbItem{}
+			dayHeaderPage.itemType = ItemTypePage
+			dayHeaderPage.settings = map[string]string{}
+			dayHeaderPage.settings["distribute-rows"] = "spreadtop"
+			dayHeaderPage.pb = items
+		}
 	}
 
 	var lastDay time.Time
 	firstHeader := true
 
-	for ii := range items {
+	for ii := 0; ii < len(items); ii++ {
 		if items[ii].itemType == ItemTypeImage {
 			imageDate := itemTime(&items[ii])
 			if firstHeader || imageDate.Year() != lastDay.Year() || imageDate.Month() != lastDay.Month() || imageDate.Day() != lastDay.Day() {
+				if dayHeaderPage != nil {
+					items = slices.Insert(items, ii, dayHeaderPage.DeepCopy())
+					ii++
+				}
 				items = slices.Insert(items, ii, dayHeader.DeepCopy())
+				ii++
 				lastDay = imageDate
 				firstHeader = false
 			}
