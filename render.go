@@ -280,29 +280,22 @@ func (writer *PdfJpegObjectWriter) Finish() (int, error) {
 	return bytesWritten, err
 }
 
-func writePage(img image.Image, objNum int, curPage int, outFilename string, isPageRangeMulti bool, compressionLevel int, useMozJpeg bool, samplingFactor string, cjpegCmd string) (int, error) {
-	ext := filepath.Ext(outFilename)
-	format := strings.ToLower(ext)
-	if isPageRangeMulti && format != ".pdf" {
-		outFilename = strings.TrimSuffix(outFilename, ext)
-		outFilename = fmt.Sprintf(outFilename+"-%v"+ext, curPage)
+func writeImageFile(picture image.Image, outFilename string, format string, useMozJpeg bool, compressionLevel int, samplingFactor string, cjpegCmd string) (int, error) {
+	if len(format) == 0 {
+		ext := filepath.Ext(outFilename)
+		format = strings.ToLower(ext)
 	}
 
-	var out *os.File
-	var err error
-	if format != ".pdf" {
-		out, err = os.Create(outFilename)
-	} else {
-		out, err = os.OpenFile(outFilename, os.O_WRONLY|os.O_APPEND, 0666)
-	}
+	out, err := os.Create(outFilename)
 	if err != nil {
 		log.Print(err)
 		return 0, err
 	}
 	defer out.Close()
+
 	switch format {
 	case ".png":
-		if err := png.Encode(out, img); err != nil {
+		if err := png.Encode(out, picture); err != nil {
 			log.Print(err)
 			return 0, err
 		}
@@ -314,14 +307,14 @@ func writePage(img image.Image, objNum int, curPage int, outFilename string, isP
 		if useMozJpeg {
 			bytesWritten := 0
 			var err error
-			if bytesWritten, err = writeJPEG(img, out, compressionLevel, samplingFactor, cjpegCmd); err != nil {
+			if bytesWritten, err = writeJPEG(picture, out, compressionLevel, samplingFactor, cjpegCmd); err != nil {
 				log.Print(err)
 				return 0, err
 			}
 			return bytesWritten, nil
 		} else {
 			options := jpeg.Options{Quality: compressionLevel}
-			if err := jpeg.Encode(out, img, &options); err != nil {
+			if err := jpeg.Encode(out, picture, &options); err != nil {
 				log.Print(err)
 				return 0, err
 			}
@@ -330,7 +323,32 @@ func writePage(img image.Image, objNum int, curPage int, outFilename string, isP
 			}
 			return 0, nil
 		}
+	}
+
+	return 0, nil
+}
+
+func writePage(img image.Image, objNum int, curPage int, outFilename string, isPageRangeMulti bool, compressionLevel int, useMozJpeg bool, samplingFactor string, cjpegCmd string) (int, error) {
+	ext := filepath.Ext(outFilename)
+	format := strings.ToLower(ext)
+	if isPageRangeMulti && format != ".pdf" {
+		outFilename = strings.TrimSuffix(outFilename, ext)
+		outFilename = fmt.Sprintf(outFilename+"-%v"+ext, curPage)
+	}
+
+	switch format {
+	case ".png", ".jpg", ".jpeg":
+		return writeImageFile(img, outFilename, format, useMozJpeg, compressionLevel, samplingFactor, cjpegCmd)
 	case ".pdf":
+		var out *os.File
+		var err error
+		out, err = os.OpenFile(outFilename, os.O_WRONLY|os.O_APPEND, 0666)
+		if err != nil {
+			log.Print(err)
+			return 0, err
+		}
+		defer out.Close()
+
 		writer := PdfJpegObjectWriter{}
 		writer.Start(out, objNum, img.Bounds().Dx(), img.Bounds().Dy())
 
@@ -1351,4 +1369,42 @@ func renderPages(pbBook *PbBook, outPageRange string, firstIteration bool, pageH
 	}
 
 	lastOutFileInfo = outFileInfo
+}
+
+func renderTextImages(pbBook *PbBook) {
+	for pp := range pbBook.pages {
+		page := &pbBook.pages[pp]
+
+		if len(page.rows) == 0 || len(page.rows[0].columns) == 0 || len(page.rows[0].columns[0].items) == 0 {
+			continue
+		}
+
+		item := page.rows[0].columns[0].items[0].item
+
+		if item == nil || item.BoolPageSetting("norender") {
+			continue
+		}
+
+		density := item.Density()
+
+		for row := range page.rows {
+			for column := range page.rows[row].columns {
+				for columnItem := range page.rows[row].columns[column].items {
+					item = page.rows[row].columns[column].items[columnItem].item
+
+					if item.itemType == ItemTypeText {
+						if sOutputFile := item.Setting("text-output-file"); len(sOutputFile) > 0 {
+							textImage, _, _ := renderText(item, item.textBlockLayouts, 0, 0, density)
+							if textImage != nil {
+								_, err := writeImageFile(textImage, sOutputFile, "", item.BoolSetting("output-mozjpeg"), item.IntSetting("output-compression"), item.Setting("output-mozjpeg-sampling"), item.PageSetting("cjpeg-command"))
+								if err != nil {
+									log.Printf("Error writing text image: %v", err)
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
 }

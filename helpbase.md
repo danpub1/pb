@@ -458,7 +458,6 @@ pb Collection1.zip Collection2.zip --caption:{{ImageName}} --nowatch --sort:date
   * Any other go-novice mistakes
 * Support input from files better so everything can be done by dropping files on the app
     * Redirect stdout with a book-level setting - to create both pdf and .pb files in one command without options
-* Output a text as an image (can do already, need to get height from verbose output)
 * Input and output handlers for more file types
 * Sigmoidal brightness/lightness Adjustment? (i.e. sigmoidal but on a different channel)
 * Highlights, midtones, shadows Adjustment

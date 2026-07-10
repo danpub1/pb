@@ -428,6 +428,7 @@ Text-Level Settings
 * `letterspacing`: Letter spacing, units. [0.0]
 * `linespacing`: Line spacing, multiple of lines. [1.0]
 * `padding`: Padding around text block, (all, top+bottom,left-right, top+right+bottom+left). [3.5]
+* `text-output-file`: Save the text block in an image file. []
 * `text-align`: Text alignmnet: left, center, right, justified. [left]
 * `text-background`: Text background color. [#0000]
 * `text-color`: Text color. [#0]
@@ -579,7 +580,6 @@ pb Collection1.zip Collection2.zip --caption:{{ImageName}} --nowatch --sort:date
   * Any other go-novice mistakes
 * Support input from files better so everything can be done by dropping files on the app
     * Redirect stdout with a book-level setting - to create both pdf and .pb files in one command without options
-* Output a text as an image (can do already, need to get height from verbose output)
 * Input and output handlers for more file types
 * Sigmoidal brightness/lightness Adjustment? (i.e. sigmoidal but on a different channel)
 * Highlights, midtones, shadows Adjustment

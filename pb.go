@@ -317,6 +317,7 @@ func main() {
 			log.Printf("Laid out pages")
 		}
 
+		renderTextImages(pbBook)
 		renderPages(pbBook, pageRange, firstIteration, flat)
 
 		if Opts.Verbose("X") {
