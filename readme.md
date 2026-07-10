@@ -341,10 +341,12 @@ Book-Level Settings
 * `output-sharpen`: Apply sharpening to the page bitmap after resizing is complete. [0.0]
 * `day-headers`: Either `auto` or a named text to use as day headers. []
 * `density`: Pixels per unit when converting the content to a page bitmap.  2 pixels per pt (144 ppi) could be considered for a preview quality, and 5 pixels per pt (360 ppi) could be appropriate for printing. [2.0]
+* `subtitle`: Subtitle. []
 * `binding`: The book's binding location, one of `side`, `top`, `none`.  Controls if margins are alternated by even/odd pages. [side]
 * `output-compression`: The jpeg compression level when creating the page bitmap. [92]
 * `output-mozjpeg-sampling`: The subsampling used by mozjpeg. Typically one of: `1x1` (4:4:4), `1x2` (4:4:0), `2x1` (4:2:2), `2x2` (4:2:0), `4x1` (4:1:1), `4x2` (4:1:0). [1x1]
 * `units`: The units of measure used in laying out the book.  One of `in`, `cm`, `mm`, `pt`. [pt]
+* `title`: Title. []
 * `output-mozjpeg`: Use the mozjpeg compressor to create the page bitmap. Slower, but produces smaller files at the same quality. [false]
 
 Page-Level Settings
@@ -441,6 +443,7 @@ Text-Level Settings
 Book-Level Options
 ------------------
 * `cache-mode`: Controls Image Cache. 0=Do not cache, 1=Cache during a run but flush cache at beginning of run, 2=Fully cache image measurements across runs. [0]
+* `deduplicate`: Deletes duplicate images. [false]
 * `page-range`: Include the specified pages in the output. `*` means only changed pages, `$` means changed pages but update PDF.  Examples: `1-10,50-`, `1-2,*`. [$]
 * `watch`: Regenerate the output when the input file changes, versus generate the output once and then exit. [true]
 * `verbose`: Zero or more of D, P, X, L.  D=Details, P=Print, X=Print with comments, L=Verbose Logging. [D]
@@ -485,6 +488,7 @@ The following settings have shortcuts:
   * `noresize:true` => `noresize`
   * `nolayout:true` => `nolayout`
   * `norender:true` => `norender`
+  * `deduplicate:true` => `deduplicate`
   * `watch:false` => `nowatch`
   * `recurse:false` => `norecurse`
 * `distribute-` Settings

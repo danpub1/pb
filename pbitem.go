@@ -711,6 +711,37 @@ func (imageReader *ImageReader) Close() error {
 	return nil
 }
 
+func (item *PbItem) HashImage() string {
+	imageFile := item.OpenImage()
+	if imageFile == nil {
+		return ""
+	}
+	defer imageFile.Close()
+
+	reader := imageFile.Reader()
+	if reader == nil {
+		return ""
+	}
+
+	buffer := make([]byte, 256*1024)
+	hash := sha256.New()
+
+	for {
+		n, err := reader.Read(buffer)
+		if n > 0 {
+			hash.Write(buffer[:n])
+		}
+		if err != nil && err != io.EOF {
+			log.Printf("Error %v reading %v", err, item.Setting("image"))
+		}
+		if err != nil {
+			break
+		}
+	}
+
+	return hex.EncodeToString(hash.Sum(nil))
+}
+
 func (item *PbItem) OpenImage() *ImageReader {
 	imageReader := ImageReader{}
 
@@ -1166,12 +1197,15 @@ var defaultSettings = map[string]DefaultSetting{
 	"output-mozjpeg":          {"false", "Book", "Use the mozjpeg compressor to create the page bitmap. Slower, but produces smaller files at the same quality."},
 	"output-mozjpeg-sampling": {"1x1", "Book", "The subsampling used by mozjpeg. Typically one of: `1x1` (4:4:4), `1x2` (4:4:0), `2x1` (4:2:2), `2x2` (4:2:0), `4x1` (4:1:1), `4x2` (4:1:0)."},
 	"day-headers":             {"", "Book", "Either `auto` or a named text to use as day headers."},
+	"title":                   {"", "Book", "Title."},
+	"subtitle":                {"", "Book", "Subtitle."},
 
 	// book level options
-	"verbose":    {"D", "Book Option", "Zero or more of D, P, X, L.  D=Details, P=Print, X=Print with comments, L=Verbose Logging"},
-	"page-range": {"$", "Book Option", "Include the specified pages in the output. `*` means only changed pages, `$` means changed pages but update PDF.  Examples: `1-10,50-`, `1-2,*`."},
-	"watch":      {"true", "Book Option", "Regenerate the output when the input file changes, versus generate the output once and then exit."},
-	"cache-mode": {"0", "Book Option", "Controls Image Cache. 0=Do not cache, 1=Cache during a run but flush cache at beginning of run, 2=Fully cache image measurements across runs."},
+	"verbose":     {"D", "Book Option", "Zero or more of D, P, X, L.  D=Details, P=Print, X=Print with comments, L=Verbose Logging"},
+	"page-range":  {"$", "Book Option", "Include the specified pages in the output. `*` means only changed pages, `$` means changed pages but update PDF.  Examples: `1-10,50-`, `1-2,*`."},
+	"watch":       {"true", "Book Option", "Regenerate the output when the input file changes, versus generate the output once and then exit."},
+	"cache-mode":  {"0", "Book Option", "Controls Image Cache. 0=Do not cache, 1=Cache during a run but flush cache at beginning of run, 2=Fully cache image measurements across runs."},
+	"deduplicate": {"false", "Book Option", "Deletes duplicate images"},
 
 	// page
 	"page-size":       {"612.0x792.0", "Page", "Page size in units, width x height."},

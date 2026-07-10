@@ -108,6 +108,40 @@ func fileDate(filename string) int64 {
 	return rv
 }
 
+func fileSize(filename string) uint64 {
+	var rv uint64 = 0
+
+	if strings.Contains(filename, "::") {
+		parts := strings.SplitN(filename, "::", 2)
+		if zipFiles, err := openZip(parts[0]); err == nil {
+			idx := slices.IndexFunc(zipFiles, func(zipFile *zip.File) bool { return zipFile.Name == parts[1] })
+			if idx != -1 {
+				// log.Printf("Filename: %v, Time: %v", filename, zipFiles[idx].Modified.Unix())
+				rv = zipFiles[idx].UncompressedSize64
+			} else {
+				// log.Printf("%v\n", filename+" not found")
+				fi, err := os.Stat(parts[0])
+				if err == nil {
+					rv = uint64(fi.Size())
+				}
+			}
+		} else {
+			// log.Printf("Error %v opening %v\n", err, filename)
+			fi, err := os.Stat(parts[0])
+			if err == nil {
+				rv = uint64(fi.Size())
+			}
+		}
+	} else {
+		fi, err := os.Stat(filename)
+		if err == nil {
+			rv = uint64(fi.Size())
+		}
+	}
+
+	return rv
+}
+
 func hasFilesToWatch(filenames []string) bool {
 	for _, filename := range filenames {
 		if !strings.Contains(filename, "*") && !strings.Contains(filename, "::") {
@@ -232,6 +266,7 @@ func main() {
 
 		numImages := getImageDimensions(items)
 		sortItems(items)
+		items = deduplicate(items)
 		items = addDayHeaders(items)
 
 		ApplyItemSpecificStyles(items) // Needs exifDate & fileDate from getImageDimensions

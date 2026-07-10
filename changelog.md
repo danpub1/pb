@@ -9,7 +9,9 @@
 * Add FileDate and ExifDate to the `--verbose:X` output
 * Add shortcuts `norender`, `nolayout`, `noresize`, `nowatch`, `norecurse`
 * Add `day-headers` setting for date sorted files and `{{NextImageDate}}` for its contents
+* Add `title` and `subtitle` for creating a title page from the command line
 * Add `{{FileDate}}` to display the timestamp used to sort
+* Add `deduplicate` book option setting
 ### Changed
 * Breaking Change: Apply rotation and flip indicated by EXIF orientation
 * Detect file date of files in zip files
@@ -19,6 +21,7 @@
 ### Deprecated
 ### Removed
 ### Fixed
+* Recursing into zip files
 
 ## v1.1.0
 

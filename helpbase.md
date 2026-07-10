@@ -367,6 +367,7 @@ The following settings have shortcuts:
   * `noresize:true` => `noresize`
   * `nolayout:true` => `nolayout`
   * `norender:true` => `norender`
+  * `deduplicate:true` => `deduplicate`
   * `watch:false` => `nowatch`
   * `recurse:false` => `norecurse`
 * `distribute-` Settings

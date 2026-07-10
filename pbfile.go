@@ -357,7 +357,7 @@ func processSetting(setting string, theItem *PbItem) {
 		theItem.Set(pieces[0], unescape(pieces[1]))
 	} else if len(pieces) == 1 {
 		switch pieces[0] {
-		case "norender", "nolayout", "noresize", "row-break", "column-break", "page-break", "current-page":
+		case "norender", "nolayout", "noresize", "row-break", "column-break", "page-break", "current-page", "deduplicate":
 			theItem.Set(pieces[0], "true")
 		case "nowatch", "norecurse":
 			theItem.Set(pieces[0][2:], "false")
@@ -410,7 +410,7 @@ func processAsLinesFromBasePath(lines []string, basePath string, styles map[stri
 	return items, styles
 }
 
-var gExts = []string{".jpg", ".jpeg", ".png"}
+var gExts = []string{".jpg", ".jpeg", ".png", ".zip"}
 
 var zipHeaders map[string][]*zip.File = make(map[string][]*zip.File)
 
@@ -426,6 +426,8 @@ func openZip(filename string) ([]*zip.File, error) {
 }
 
 func glob(path string, recurse bool) ([]string, error) {
+	log.Printf("Expanding wildcarded filename: %v", path)
+
 	exts := gExts
 	for ii := len(exts); ii > 0; ii-- {
 		exts = append(exts, strings.ToUpper(exts[ii-1]))
@@ -435,6 +437,9 @@ func glob(path string, recurse bool) ([]string, error) {
 		if zipParts[1] == "*" {
 			sources := make([]string, 0)
 			for _, ext := range exts {
+				if strings.ToLower(ext) == ".zip" {
+					continue
+				}
 				sources2, err := glob(zipParts[0]+"::"+zipParts[1]+ext, recurse)
 				if err != nil {
 					log.Print(err)
@@ -485,6 +490,21 @@ func glob(path string, recurse bool) ([]string, error) {
 		if err != nil {
 			log.Print(err)
 			return make([]string, 0), err
+		}
+
+		if strings.HasSuffix(strings.ToLower(path), ".zip") {
+			zipSources := make([]string, 0)
+			for ii := range sources {
+				sources2, err := glob(sources[ii]+"::*", recurse)
+				if err != nil {
+					log.Print(err)
+					return make([]string, 0), err
+				}
+				if len(sources2) > 0 {
+					zipSources = append(zipSources, sources2...)
+				}
+			}
+			sources = zipSources
 		}
 
 		rPath = filepath.Clean(rPath)
@@ -831,6 +851,101 @@ func ApplyItemSpecificStyles(items []PbItem) {
 	}
 }
 
+type dedupEntry struct {
+	size     uint64
+	filename string
+	index    int
+}
+
+func deduplicate(items []PbItem) []PbItem {
+	if len(items) > 0 {
+		if items[0].BoolSetting("deduplicate") {
+			if Opts.Verbose("D") {
+				log.Printf("Deduplicating %v items", len(items))
+			}
+
+			// Make a list of everything sorted by size
+			sizes := make([]dedupEntry, 0, len(items))
+			for ii := range items {
+				if items[ii].itemType == ItemTypeImage {
+					filename := items[ii].Setting("image")
+					sizes = append(sizes, dedupEntry{fileSize(filename), filename, ii})
+				}
+			}
+			slices.SortFunc(sizes, func(a dedupEntry, b dedupEntry) int {
+				if a.size > b.size {
+					return 1
+				} else if b.size > a.size {
+					return -1
+				} else if a.index > b.index {
+					return 1
+				} else if b.index > a.index {
+					return -1
+				} else {
+					return 0
+				}
+			})
+
+			// identify the duplicates by size in that list
+			possibleDups := make([]dedupEntry, 0)
+			var last *dedupEntry = &dedupEntry{0, "", -1}
+			inDup := false
+			for ii := range sizes {
+				if sizes[ii].size == last.size {
+					if !inDup {
+						possibleDups = append(possibleDups, *last)
+					}
+					possibleDups = append(possibleDups, sizes[ii])
+					inDup = true
+				} else {
+					inDup = false
+					last = &sizes[ii]
+				}
+			}
+
+			// identify the duplicates by hash of the ones that are duplicated by size
+			hashes := make([]string, 0, len(possibleDups))
+			filenames := make([]string, 0, len(possibleDups))
+			actualDups := make([]int, 0)
+			deduplicated := 0
+			for ii := 0; ii < len(possibleDups); ii++ {
+				hash := items[possibleDups[ii].index].HashImage()
+				if !slices.Contains(hashes, hash) {
+					hashes = append(hashes, hash)
+					filenames = append(filenames, possibleDups[ii].filename)
+				} else {
+					actualDups = append(actualDups, possibleDups[ii].index)
+					if Opts.Verbose("D") {
+						log.Printf("Deduplicating %v, keeping %v", possibleDups[ii].filename, filenames[slices.Index(hashes, hash)])
+					}
+				}
+			}
+
+			slices.Sort(actualDups)
+			slices.Reverse(actualDups)
+
+			for _, ii := range actualDups {
+				items = slices.Delete(items, ii, ii+1)
+				deduplicated++
+			}
+
+			if deduplicated > 0 {
+				for ii := range items {
+					items[ii].pb = items
+				}
+
+				OptimizeSettings(items)
+
+				if Opts.Verbose("D") {
+					log.Printf("Deduplicated %v items", deduplicated)
+				}
+			}
+		}
+	}
+
+	return items
+}
+
 func addDayHeaders(items []PbItem) []PbItem {
 
 	if len(items) == 0 {
@@ -838,16 +953,20 @@ func addDayHeaders(items []PbItem) []PbItem {
 	}
 
 	dayHeaders := items[0].BookSetting("day-headers")
+	title := items[0].BookSetting("title")
+	subtitle := items[0].BookSetting("subtitle")
 
-	if dayHeaders == "" {
+	if dayHeaders == "" && title == "" && subtitle == "" {
 		return items
 	}
 
 	var dayHeader PbItem
 	var dayHeaderPage *PbItem
+	var titleItem *PbItem
+	var subtitleItem *PbItem
 	found := false
 
-	if dayHeaders != "auto" {
+	if dayHeaders != "auto" && dayHeaders != "" {
 		for ii := range items {
 			if items[ii].itemType == ItemTypeText && items[ii].Setting("name") == dayHeaders {
 				dayHeader = items[ii].DeepCopy()
@@ -856,7 +975,7 @@ func addDayHeaders(items []PbItem) []PbItem {
 		}
 	}
 
-	if !found {
+	if dayHeaders == "auto" || (dayHeaders != "" && !found) {
 		dayHeader = PbItem{}
 		dayHeader.itemType = ItemTypeText
 		dayHeader.settings = map[string]string{}
@@ -883,19 +1002,58 @@ func addDayHeaders(items []PbItem) []PbItem {
 		}
 	}
 
+	if len(title) > 0 {
+		titleItem = &PbItem{}
+		titleItem.itemType = ItemTypeText
+		titleItem.settings = map[string]string{}
+		titleItem.settings["text"] = unescapeText(title)
+		titleItem.settings["font"] = "::FiraSans-Heavy.otf"
+		titleItem.settings["font-size"] = "36"
+		titleItem.settings["text-align"] = "center"
+		titleItem.pb = items
+	}
+
+	if len(subtitle) > 0 {
+		subtitleItem = &PbItem{}
+		subtitleItem.itemType = ItemTypeText
+		subtitleItem.settings = map[string]string{}
+		subtitleItem.settings["text"] = unescapeText(subtitle)
+		subtitleItem.settings["font"] = "::FiraSans-Regular.otf"
+		subtitleItem.settings["font-size"] = "14"
+		subtitleItem.settings["text-align"] = "center"
+		subtitleItem.pb = items
+	}
+
 	var lastDay time.Time
 	firstHeader := true
 
 	for ii := 0; ii < len(items); ii++ {
 		if items[ii].itemType == ItemTypeImage {
+			if firstHeader && titleItem != nil {
+				items = slices.Insert(items, ii, titleItem.DeepCopy())
+				ii++
+			}
+			if firstHeader && subtitleItem != nil {
+				items = slices.Insert(items, ii, subtitleItem.DeepCopy())
+				ii++
+			}
 			imageDate := itemTime(&items[ii])
 			if firstHeader || imageDate.Year() != lastDay.Year() || imageDate.Month() != lastDay.Month() || imageDate.Day() != lastDay.Day() {
-				if dayHeaderPage != nil {
-					items = slices.Insert(items, ii, dayHeaderPage.DeepCopy())
+				if len(dayHeaders) > 0 {
+					if dayHeaderPage != nil {
+						items = slices.Insert(items, ii, dayHeaderPage.DeepCopy())
+						ii++
+					}
+					items = slices.Insert(items, ii, dayHeader.DeepCopy())
+					ii++
+				} else if firstHeader && (titleItem != nil || subtitleItem != nil) {
+					newPage := &PbItem{}
+					newPage.itemType = ItemTypePage
+					newPage.settings = map[string]string{}
+					newPage.pb = items
+					items = slices.Insert(items, ii, newPage.DeepCopy())
 					ii++
 				}
-				items = slices.Insert(items, ii, dayHeader.DeepCopy())
-				ii++
 				lastDay = imageDate
 				firstHeader = false
 			}
@@ -1040,14 +1198,14 @@ func ReadPbFile(inFiles []string, args []string) []PbItem {
 		}
 	}
 
-	for ii := range items {
-		items[ii].pb = items
-	}
-
 	for _, arg := range args {
 		if setting, found := strings.CutPrefix(arg, "--"); found {
 			processSetting(setting, &items[0])
 		}
+	}
+
+	for ii := range items {
+		items[ii].pb = items
 	}
 
 	OptimizeSettings(items)
