@@ -13,6 +13,7 @@
 * Add `{{FileDate}}` to display the timestamp used to sort
 * Add `deduplicate` book option setting
 * Add `text-output-file` text setting to save text to a png or jpeg
+* Add sets of images into multiple output files by date
 ### Changed
 * Breaking Change: Apply rotation and flip indicated by EXIF orientation
 * Detect file date of files in zip files

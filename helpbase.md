@@ -384,6 +384,29 @@ The following settings have shortcuts:
     * `justify`
 * `verbose:H` => `help`
 
+## Day Headers, Title, Subtitle
+
+If Day Headers or a title or subtitle are defined:
+
+1. The file should be sorted by date
+1. Pages are inserted for each day header
+1. A page is inserted for the title page
+1. A page is started for each day header
+1. The output file name, title, and subtitle may contain various date segments that cause the output to be broken into multiple files.
+This allows breaking the output into multiple files, each with a title page
+    * {{YYYY}} is replaced by the four digit year, e.g. 2006
+    * {{YY}} is replaced by the two digit year, e.g. 06
+    * {{MM}} is replaced by the four digit year and two digit month, e.g. 2006-01
+    * {{MONTH}} is replaced by the textual month and year e.g. January 2006
+    * {{DD}} is replaced by the four digit year, and two digit month and day, e.g. 2006-01-02
+    * {{DATE}} is replaced by the textual date, e.g. January 2, 2006
+    * {{QQ}} is replaced by the four digit year and one digit quarter, e.g. 2006-Q1
+    * {{QUARTER}} is replaced by textual year & quarter, e.g. First Quarter, 2006
+    * {{HH}} is replaced by the four digit year and one digit half, e.g. 2006-H1
+    * {{HALF}} is replaced by the textual year & half, e.g. First Half, 2006
+    * {{WW}} is replaced by the four digit year and week number, e.g. 2006-W1
+    * {{WEEK}} is replaced by the textual week number, e.g. Week 1, 2006
+
 ## Command Line Options
 
 * `input-file`: Specify the input `.pb` file.  Multiple files may be specified and are processed in the order listed.  Zip files may be specified and are treated as a container of images.

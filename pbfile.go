@@ -426,7 +426,7 @@ func openZip(filename string) ([]*zip.File, error) {
 }
 
 func glob(path string, recurse bool) ([]string, error) {
-	log.Printf("Expanding wildcarded filename: %v", path)
+	// log.Printf("Expanding wildcarded filename: %v", path)
 
 	exts := gExts
 	for ii := len(exts); ii > 0; ii-- {
@@ -830,10 +830,7 @@ func ApplyItemSpecificStyles(items []PbItem) {
 					replacement := "(Undated)"
 					for jj := ii + 1; jj < len(items); jj++ {
 						if items[jj].itemType == ItemTypeImage {
-							imageDate := items[jj].exifDate
-							if imageDate.IsZero() && items[jj].fileDate != 0 {
-								imageDate = time.Unix(items[jj].fileDate, 0)
-							}
+							imageDate := itemTime(&items[jj])
 							if !imageDate.IsZero() {
 								replacement = imageDate.Format("Monday January 2, 2006")
 							}
@@ -946,117 +943,117 @@ func deduplicate(items []PbItem) []PbItem {
 	return items
 }
 
+func filenameForDate(baseFilename string, filedate time.Time) string {
+	quarter := (int(filedate.Month())-1)/3 + 1
+	half := (int(filedate.Month())-1)/6 + 1
+	sNumbers := []string{"First", "Second", "Third", "Fourth"}
+	weekyear, week := filedate.ISOWeek()
+	baseFilename = strings.ReplaceAll(baseFilename, "{{YYYY}}", filedate.Format("2006"))
+	baseFilename = strings.ReplaceAll(baseFilename, "{{YY}}", filedate.Format("06"))
+	baseFilename = strings.ReplaceAll(baseFilename, "{{MM}}", filedate.Format("2006-01"))
+	baseFilename = strings.ReplaceAll(baseFilename, "{{MONTH}}", filedate.Format("January 2006"))
+	baseFilename = strings.ReplaceAll(baseFilename, "{{DD}}", filedate.Format("2006-01-02"))
+	baseFilename = strings.ReplaceAll(baseFilename, "{{DATE}}", filedate.Format("January 2, 2006"))
+	baseFilename = strings.ReplaceAll(baseFilename, "{{QQ}}", fmt.Sprintf("%v-Q%v", filedate.Format("2006"), quarter))
+	baseFilename = strings.ReplaceAll(baseFilename, "{{QUARTER}}", fmt.Sprintf("%v Quarter, %v", sNumbers[quarter-1], filedate.Format("2006")))
+	baseFilename = strings.ReplaceAll(baseFilename, "{{HH}}", fmt.Sprintf("%v-H%v", filedate.Format("2006"), half))
+	baseFilename = strings.ReplaceAll(baseFilename, "{{HALF}}", fmt.Sprintf("%v Half, %v", sNumbers[half-1], filedate.Format("2006")))
+	baseFilename = strings.ReplaceAll(baseFilename, "{{WW}}", fmt.Sprintf("%v-W%v", weekyear, week))
+	baseFilename = strings.ReplaceAll(baseFilename, "{{WEEK}}", fmt.Sprintf("Week %v, %v", week, weekyear))
+	return baseFilename
+}
+
 func addDayHeaders(items []PbItem) []PbItem {
 
 	if len(items) == 0 {
 		return items
 	}
 
-	dayHeaders := items[0].BookSetting("day-headers")
-	title := items[0].BookSetting("title")
-	subtitle := items[0].BookSetting("subtitle")
-
+	dayHeaders := unescapeText(items[0].BookSetting("day-headers"))
+	title := unescapeText(items[0].BookSetting("title"))
+	subtitle := unescapeText(items[0].BookSetting("subtitle"))
 	if dayHeaders == "" && title == "" && subtitle == "" {
 		return items
 	}
 
-	var dayHeader PbItem
-	var dayHeaderPage *PbItem
-	var titleItem *PbItem
-	var subtitleItem *PbItem
-	found := false
+	dayHeader := PbItem{}
+	dayHeader.itemType = ItemTypeText
+	dayHeader.settings = map[string]string{}
+	dayHeader.settings["font"] = "::FiraSans-SemiBold.otf"
+	dayHeader.settings["font-size"] = "20"
+	dayHeader.settings["page-break"] = "true"
 
-	if dayHeaders != "auto" && dayHeaders != "" {
-		for ii := range items {
-			if items[ii].itemType == ItemTypeText && items[ii].Setting("name") == dayHeaders {
-				dayHeader = items[ii].DeepCopy()
-				found = true
-			}
-		}
-	}
+	titleItem := PbItem{}
+	titleItem.itemType = ItemTypeText
+	titleItem.settings = map[string]string{}
+	titleItem.settings["font"] = "::FiraSans-Heavy.otf"
+	titleItem.settings["font-size"] = "36"
+	titleItem.settings["text-align"] = "center"
 
-	if dayHeaders == "auto" || (dayHeaders != "" && !found) {
-		dayHeader = PbItem{}
-		dayHeader.itemType = ItemTypeText
-		dayHeader.settings = map[string]string{}
-		dayHeader.settings["text"] = "{{NextImageDate}}"
-		dayHeader.settings["font"] = "::FiraSans-SemiBold.otf"
-		dayHeader.settings["font-size"] = "20"
-		dayHeader.settings["page-break"] = "true"
-		dayHeader.pb = items
+	subtitleItem := PbItem{}
+	subtitleItem.itemType = ItemTypeText
+	subtitleItem.settings = map[string]string{}
+	subtitleItem.settings["font"] = "::FiraSans-Regular.otf"
+	subtitleItem.settings["font-size"] = "14"
+	subtitleItem.settings["text-align"] = "center"
 
-		if items[0].BookSetting("distribute-rows") != "spreadtop" {
-			dayHeaderPage = &PbItem{}
-			dayHeaderPage.itemType = ItemTypePage
-			dayHeaderPage.settings = map[string]string{}
-			dayHeaderPage.settings["distribute-rows"] = "spreadtop"
-			dayHeaderPage.pb = items
-		}
-	} else {
-		if dayHeader.Setting("distribute-rows") != "spreadtop" {
-			dayHeaderPage = &PbItem{}
-			dayHeaderPage.itemType = ItemTypePage
-			dayHeaderPage.settings = map[string]string{}
-			dayHeaderPage.settings["distribute-rows"] = "spreadtop"
-			dayHeaderPage.pb = items
-		}
-	}
+	pageHeader := PbItem{}
+	pageHeader.itemType = ItemTypePage
+	pageHeader.settings = map[string]string{}
 
-	if len(title) > 0 {
-		titleItem = &PbItem{}
-		titleItem.itemType = ItemTypeText
-		titleItem.settings = map[string]string{}
-		titleItem.settings["text"] = unescapeText(title)
-		titleItem.settings["font"] = "::FiraSans-Heavy.otf"
-		titleItem.settings["font-size"] = "36"
-		titleItem.settings["text-align"] = "center"
-		titleItem.pb = items
-	}
-
-	if len(subtitle) > 0 {
-		subtitleItem = &PbItem{}
-		subtitleItem.itemType = ItemTypeText
-		subtitleItem.settings = map[string]string{}
-		subtitleItem.settings["text"] = unescapeText(subtitle)
-		subtitleItem.settings["font"] = "::FiraSans-Regular.otf"
-		subtitleItem.settings["font-size"] = "14"
-		subtitleItem.settings["text-align"] = "center"
-		subtitleItem.pb = items
-	}
-
+	outputFile := items[0].BookSetting("output-file")
 	var lastDay time.Time
-	firstHeader := true
 
+	lastOutputFile := ""
 	for ii := 0; ii < len(items); ii++ {
 		if items[ii].itemType == ItemTypeImage {
-			if firstHeader && titleItem != nil {
-				items = slices.Insert(items, ii, titleItem.DeepCopy())
-				ii++
-			}
-			if firstHeader && subtitleItem != nil {
-				items = slices.Insert(items, ii, subtitleItem.DeepCopy())
-				ii++
-			}
 			imageDate := itemTime(&items[ii])
-			if firstHeader || imageDate.Year() != lastDay.Year() || imageDate.Month() != lastDay.Month() || imageDate.Day() != lastDay.Day() {
-				if len(dayHeaders) > 0 {
-					if dayHeaderPage != nil {
-						items = slices.Insert(items, ii, dayHeaderPage.DeepCopy())
-						ii++
-					}
-					items = slices.Insert(items, ii, dayHeader.DeepCopy())
-					ii++
-				} else if firstHeader && (titleItem != nil || subtitleItem != nil) {
-					newPage := &PbItem{}
-					newPage.itemType = ItemTypePage
-					newPage.settings = map[string]string{}
-					newPage.pb = items
-					items = slices.Insert(items, ii, newPage.DeepCopy())
+			thisOutputFile := filenameForDate(outputFile, imageDate)
+
+			if thisOutputFile != lastOutputFile {
+				if thisOutputFile != outputFile {
+					items = slices.Insert(items, ii, pageHeader.DeepCopy())
+					items[ii].Set("output-file", thisOutputFile)
+					items[ii].Set("distribute-rows", "spreadtop")
 					ii++
 				}
-				lastDay = imageDate
-				firstHeader = false
+				if len(title) > 0 {
+					items = slices.Insert(items, ii, titleItem.DeepCopy())
+					items[ii].Set("text", filenameForDate(title, imageDate))
+					ii++
+				}
+				if len(subtitle) > 0 {
+					items = slices.Insert(items, ii, subtitleItem.DeepCopy())
+					items[ii].Set("text", filenameForDate(subtitle, imageDate))
+					ii++
+				}
 			}
+
+			if thisOutputFile != lastOutputFile || imageDate.Year() != lastDay.Year() || imageDate.Month() != lastDay.Month() || imageDate.Day() != lastDay.Day() {
+				if len(dayHeaders) > 0 {
+					items = slices.Insert(items, ii, pageHeader.DeepCopy())
+					items[ii].Set("output-file", thisOutputFile)
+					items[ii].Set("distribute-rows", "spreadtop")
+					items[ii].Set("text", filenameForDate(subtitle, imageDate))
+					ii++
+
+					items = slices.Insert(items, ii, dayHeader.DeepCopy())
+					if dayHeaders == "auto" {
+						items[ii].Set("text", "{{NextImageDate}}")
+					} else {
+						items[ii].Set("text", filenameForDate(dayHeaders, imageDate))
+					}
+					ii++
+				} else if thisOutputFile != lastOutputFile && (len(title) > 0 || len(subtitle) > 0) {
+					items = slices.Insert(items, ii, pageHeader.DeepCopy())
+					items[ii].Set("output-file", thisOutputFile)
+					ii++
+				}
+
+				lastDay = imageDate
+			}
+
+			lastOutputFile = thisOutputFile
 		}
 	}
 
