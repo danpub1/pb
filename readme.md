@@ -593,9 +593,11 @@ pb Collection1.zip Collection2.zip --caption:{{ImageName}} --nowatch --sort:date
 
 ## Things to Do
 
-* Issue: Had problems when title pages were first, like first page cannot have some or all settings. Also first row, column, item???
-* Issue: text-background does not work with text-outline
-* Issue: Column overflow creates endless loop
+* Issues
+  * Problems when title pages were first, like first page cannot have some or all settings. Also first row, column, item???
+  * text-background does not work with text-outline
+  * Column overflow creates endless loop
+  * Moz-jpeg output errors out, especially when it takes less time
 * Refactor & clean up
   * Break up large files
   * Latest dependencies
@@ -604,11 +606,12 @@ pb Collection1.zip Collection2.zip --caption:{{ImageName}} --nowatch --sort:date
 * Support input from files better so everything can be done by dropping files on the app
     * Redirect stdout with a book-level setting - to create both pdf and .pb files in one command without options
 * Input and output handlers for more file types
-* Sigmoidal brightness/lightness Adjustment? (i.e. sigmoidal but on a different channel)
-* Highlights, midtones, shadows Adjustment
-* HSL Adjustment
+* Image Processing
+  * Sigmoidal brightness/lightness Adjustment? (i.e. sigmoidal but on a different channel)
+  * Highlights, midtones, shadows Adjustment
+  * HSL Adjustment
 * Image, font https://... downloaded and then cached (in a zip file?)
 * Calendar pages
 * UI of its own - ebitengine or web browser-based?  Launch pdf or image viewer?
-* Colorspace
-* HDR
+* Input and output Colorspace
+* Greater than 8-bits per sample
