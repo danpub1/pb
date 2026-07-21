@@ -307,6 +307,7 @@ type PbItem struct {
 	fileDate         int64
 	exifOrientation  int
 	exifDate         time.Time
+	imageDate        time.Time
 
 	// layout
 	page                int
@@ -410,7 +411,7 @@ func (item *PbItem) TextWrap() int {
 }
 
 func (item *PbItem) Binding() int {
-	switch strings.ToLower(item.BookSetting("binding")) {
+	switch strings.ToLower(item.PageSetting("binding")) {
 	case "side":
 		return BindingSide
 	case "left":
@@ -866,7 +867,7 @@ func (item *PbItem) GetImageConfig() (image.Config, int, time.Time) {
 	}
 
 	if dateTime, exifErr = x.DateTime(); exifErr != nil {
-		//log.Printf("Exif DateTime(): %v", erexifErrr)
+		//log.Printf("Exif DateTime(): %v", erexifErr)
 	}
 
 	//log.Printf("Orientation: %v", orientation)
@@ -1115,10 +1116,14 @@ func (item *PbItem) pageDimensions() (float64, float64) {
 	return ContainerSize(item.PageSetting("page-size"), item.PageSetting("margin"))
 }
 
-func (item *PbItem) PageSizePts() (int, int) {
+func round(val float64, decimalPoints int) float64 {
+	return math.Round(val*math.Pow10(decimalPoints)) / math.Pow10(decimalPoints)
+}
+
+func (item *PbItem) PageSizePts() (float64, float64) {
 	units := item.Units()
 	w, h := ContainerSize(item.PageSetting("page-size"), "0")
-	return int(lengthToPoints(w, units)), int(lengthToPoints(h, units))
+	return round(lengthToPoints(w, units), 4), round(lengthToPoints(h, units), 4)
 }
 
 func (source *PbItem) DeepCopy() PbItem {
@@ -1190,7 +1195,7 @@ var defaultSettings = map[string]DefaultSetting{
 	// book
 	"units":                   {"pt", "Book", "The units of measure used in laying out the book.  One of `in`, `cm`, `mm`, `pt`"},
 	"density":                 {"2.0", "Book", "Pixels per unit when converting the content to a page bitmap.  2 pixels per pt (144 ppi) could be considered for a preview quality, and 5 pixels per pt (360 ppi) could be appropriate for printing."},
-	"binding":                 {"side", "Book", "The book's binding location, one of `side`, `top`, `none`.  Controls if margins are alternated by even/odd pages."},
+	"binding":                 {"none", "Page", "The book's binding location, one of `side`, `top`, `none`.  Controls if margins are alternated by even/odd pages."},
 	"output-gamma":            {"1.0", "Book", "Apply a gamma correction to the page bitmap. This is useful to lighten or darken printed output so it better matches the onscreen experience."},
 	"output-sharpen":          {"0.0", "Book", "Apply sharpening to the page bitmap after resizing is complete."},
 	"output-compression":      {"92", "Book", "The jpeg compression level when creating the page bitmap"},
@@ -1199,6 +1204,7 @@ var defaultSettings = map[string]DefaultSetting{
 	"day-headers":             {"", "Book", "Either `auto` or a named text to use as day headers."},
 	"title":                   {"", "Book", "Title."},
 	"subtitle":                {"", "Book", "Subtitle."},
+	"max-pages":               {"0", "Book", "Maximum number of pages per PDF file"},
 
 	// book level options
 	"verbose":     {"D", "Book Option", "Zero or more of D, P, X, L.  D=Details, P=Print, X=Print with comments, L=Verbose Logging"},
@@ -1206,6 +1212,7 @@ var defaultSettings = map[string]DefaultSetting{
 	"watch":       {"true", "Book Option", "Regenerate the output when the input file changes, versus generate the output once and then exit."},
 	"cache-mode":  {"0", "Book Option", "Controls Image Cache. 0=Do not cache, 1=Cache during a run but flush cache at beginning of run, 2=Fully cache image measurements across runs."},
 	"deduplicate": {"false", "Book Option", "Deletes duplicate images"},
+	"assemble":    {"", "Book Option", "Assembles pages from PDFs for printing"},
 
 	// page
 	"page-size":       {"612.0x792.0", "Page", "Page size in units, width x height."},
@@ -1222,6 +1229,7 @@ var defaultSettings = map[string]DefaultSetting{
 	"noresize":      {"false", "Page Option", "For debugging. After distributing images to pages, do not resize them to fill the page."},
 	"nolayout":      {"false", "Page Option", "For debugging. After distributing images to pages, do not distribute them in the freee space."},
 	"norender":      {"false", "Page Option", "For debugging. Do not render this page to a bitmap."},
+	"noprocess":     {"false", "Page Option", "Do not layout, resize, or render the page"},
 	"current-page":  {"false", "Page", "Include this page in the output regardless of whether it included in the page range."},
 
 	// row
@@ -1415,39 +1423,39 @@ func (item *PbItem) DefaultSetting(setting string) string {
 func OptimizeSettings(book []PbItem) {
 	for ii := range book {
 		item := &book[ii]
-		if !item.hasSettings {
-			item.bookSetting = -1
-			item.pageSetting = -1
-			item.rowSetting = -1
-			item.columnSetting = -1
-			for ii, anItem := range item.pb {
-				switch anItem.itemType {
-				case ItemTypeBook:
-					item.bookSetting = ii
-				case ItemTypePage:
-					item.pageSetting = ii
-				case ItemTypeRow:
-					item.rowSetting = ii
-				case ItemTypeColumn:
-					item.columnSetting = ii
-				}
-				if &item.pb[ii] == item {
-					break
-				}
-			}
 
-			if item.columnSetting < item.rowSetting {
-				item.columnSetting = -1
-			}
-			if item.rowSetting < item.pageSetting {
-				item.rowSetting = -1
-			}
-			if item.pageSetting < item.bookSetting {
-				item.pageSetting = -1
-			}
+		item.bookSetting = -1
+		item.pageSetting = -1
+		item.rowSetting = -1
+		item.columnSetting = -1
 
-			item.hasSettings = true
+		for ii, anItem := range item.pb {
+			switch anItem.itemType {
+			case ItemTypeBook:
+				item.bookSetting = ii
+			case ItemTypePage:
+				item.pageSetting = ii
+			case ItemTypeRow:
+				item.rowSetting = ii
+			case ItemTypeColumn:
+				item.columnSetting = ii
+			}
+			if &item.pb[ii] == item {
+				break
+			}
 		}
+
+		if item.columnSetting < item.rowSetting {
+			item.columnSetting = -1
+		}
+		if item.rowSetting < item.pageSetting {
+			item.rowSetting = -1
+		}
+		if item.pageSetting < item.bookSetting {
+			item.pageSetting = -1
+		}
+
+		item.hasSettings = true
 	}
 }
 

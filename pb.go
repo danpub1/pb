@@ -226,23 +226,15 @@ func main() {
 	args := os.Args[1:]
 
 	inFiles = make([]string, 0)
-	foundHelp := false
 
 	for _, arg := range args {
 		if !strings.HasPrefix(arg, "--") {
 			inFiles = append(inFiles, arg)
 		}
-		if arg == "--help" && !foundHelp {
+		if arg == "--help" {
 			fmt.Println(printHelp())
-			foundHelp = true
+			return
 		}
-	}
-
-	if len(inFiles) == 0 {
-		if !foundHelp {
-			log.Print("No input file(s) specified")
-		}
-		return
 	}
 
 	_, lastModTime = fileChanged(inFiles, time.Time{})
@@ -255,9 +247,8 @@ func main() {
 
 		Opts.Set(items)
 
-		if !foundHelp && firstIteration && Opts.Verbose("H") {
-			fmt.Println(printHelp())
-			foundHelp = true
+		if firstIteration && len(inFiles) == 0 && (len(items) == 0 || len(items[0].BookSetting("assemble")) == 0) {
+			log.Print("No input specified")
 		}
 
 		if Opts.Verbose("D") {
@@ -319,6 +310,7 @@ func main() {
 
 		renderTextImages(pbBook)
 		renderPages(pbBook, pageRange, firstIteration, flat)
+		assemble(items)
 
 		if Opts.Verbose("X") {
 			fmt.Println(printItems(items, true))

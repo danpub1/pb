@@ -12,7 +12,9 @@ import (
 	"math"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -156,8 +158,8 @@ func writeNewline(outFilename string) (int, error) {
 
 type PageInfo struct {
 	offset   int
-	width    int
-	height   int
+	width    float64
+	height   float64
 	pageNum  int
 	objNum   int
 	pageHash string
@@ -201,7 +203,7 @@ func writeFooter(outFilename string, bytesWritten int, pageInfo []PageInfo) (int
 			n, err = buffer.WriteString(fmt.Sprintf("%v 0 obj\n<</Length %v>>\nstream\n%v\nendstream\nendobj\n", ii*3+numPages+3+1, len(cmd), cmd))
 			bytesWritten += n
 			objList = append(objList, PageInfo{bytesWritten, 0, 0, 0, 0, ""})
-			n, err = buffer.WriteString(fmt.Sprintf("%v 0 obj\n<</Type/Page/MediaBox[0 0 %v %v]/Rotate 0/Resources %v 0 R/Contents %v 0 R/Parent %v 0 R>>\nendobj\n", ii*3+numPages+3+2, pageInfo[ii].width, pageInfo[ii].height, ii*3+numPages+3+0, ii*3+numPages+3+1, numPages+2))
+			n, err = buffer.WriteString(fmt.Sprintf("%v 0 obj\n<</Type/Page/MediaBox[0 0 %v %v]/Resources %v 0 R/Contents %v 0 R/Parent %v 0 R>>\nendobj\n", ii*3+numPages+3+2, pageInfo[ii].width, pageInfo[ii].height, ii*3+numPages+3+0, ii*3+numPages+3+1, numPages+2))
 			bytesWritten += n
 		}
 
@@ -1142,14 +1144,63 @@ type OutFileInfo struct {
 
 var lastOutFileInfo map[string]OutFileInfo
 
+func maxOutFileName(item *PbItem, outFileInfo map[string]OutFileInfo) string {
+	outFileName := item.PageSetting("output-file")
+
+	ext := path.Ext(outFileName)
+	if strings.ToLower(ext) != ".pdf" {
+		return outFileName
+	}
+
+	outFileNameOnly, _ := strings.CutSuffix(outFileName, ext)
+	maxOutFileNumber := -1
+	maxPages := item.IntBookSetting("max-pages")
+
+	for kk, vv := range outFileInfo {
+		if p1, exists := strings.CutPrefix(kk, outFileNameOnly); exists {
+			if p2, exists := strings.CutSuffix(p1, ext); exists {
+				if p3, exists := strings.CutPrefix(p2, "-"); exists {
+					outFileNumber := Atoi(p3)
+					if outFileNumber > maxOutFileNumber {
+						maxOutFileNumber = outFileNumber
+					}
+				} else {
+					maxOutFileNumber = 0
+				}
+				if len(vv.offsets) < maxPages || maxPages <= 0 {
+					outFileName = kk
+					maxOutFileNumber = -1
+					break
+				}
+			}
+		}
+	}
+
+	if maxOutFileNumber >= 0 {
+		outFileName = fmt.Sprintf("%v-%v%v", outFileNameOnly, maxOutFileNumber+1, ext)
+	}
+
+	return outFileName
+}
+
+func freeObject(pages []PageInfo) int {
+	objNum := 1
+	for _, page := range pages {
+		if page.objNum != objNum {
+			break
+		}
+		objNum++
+	}
+	return objNum
+}
+
 func renderPages(pbBook *PbBook, outPageRange string, firstIteration bool, pageHashes []string) {
 	outFileInfo := make(map[string]OutFileInfo, 0)
 
 	isPageRangeMulti := isPageRangeMulti(outPageRange, firstIteration, pbBook)
 
 	backgroundCache := make([]BackgroundCacheItem, 0)
-
-	usedObjs := make([]int, 0)
+	usedObjs := make(map[string][]int)
 	if !firstIteration && lastOutFileInfo != nil {
 		for pp := range pbBook.pages {
 			page := &pbBook.pages[pp]
@@ -1173,7 +1224,10 @@ func renderPages(pbBook *PbBook, outPageRange string, firstIteration bool, pageH
 			if _, exists := lastOutFileInfo[thisOutFilename]; exists {
 				for ii := range lastOutFileInfo[thisOutFilename].offsets {
 					if lastOutFileInfo[thisOutFilename].offsets[ii].pageHash == pageHashes[pp] {
-						usedObjs = append(usedObjs, lastOutFileInfo[thisOutFilename].offsets[ii].objNum)
+						if _, exists := usedObjs[thisOutFilename]; !exists {
+							usedObjs[thisOutFilename] = make([]int, 0)
+						}
+						usedObjs[thisOutFilename] = append(usedObjs[thisOutFilename], lastOutFileInfo[thisOutFilename].offsets[ii].objNum)
 						break
 					}
 				}
@@ -1181,7 +1235,9 @@ func renderPages(pbBook *PbBook, outPageRange string, firstIteration bool, pageH
 		}
 	}
 
-	slices.Sort(usedObjs)
+	for ii := range usedObjs {
+		slices.Sort(usedObjs[ii])
+	}
 
 	for pp := range pbBook.pages {
 		changed := false
@@ -1200,18 +1256,31 @@ func renderPages(pbBook *PbBook, outPageRange string, firstIteration bool, pageH
 		}
 		item := page.rows[0].columns[0].items[0].item
 
-		thisOutFilename := item.PageSetting("output-file")
+		thisOutFilename := maxOutFileName(item, outFileInfo)
 
 		if isPageInRange(outPageRange, pp, firstIteration) || isCurrentPage(pbBook, pp) {
 			var top float64
 			var bottom float64
 			var left float64
+			var right float64
 			var dst *image.NRGBA = nil
 			density := 1.0
 
 			pageWidth, pageHeight := FloatSize(item.PageSetting("page-size"))
 			density = item.Density()
-			top, _, bottom, left = FourTwoOne(item.PageSetting("margin"))
+			top, right, bottom, left = FourTwoOne(item.PageSetting("margin"))
+			if pp%2 == 1 {
+				switch item.Binding() {
+				case BindingSide:
+					temp := left
+					left = right
+					right = temp
+				case BindingTop:
+					temp := top
+					top = bottom
+					bottom = temp
+				}
+			}
 			widthDots := int(math.Round(dotsFromUnitsFloat(pageWidth, density)))
 			heightDots := int(math.Round(dotsFromUnitsFloat(pageHeight, density)))
 			dst = image.NewNRGBA(image.Rect(0, 0, widthDots, heightDots))
@@ -1307,14 +1376,14 @@ func renderPages(pbBook *PbBook, outPageRange string, firstIteration bool, pageH
 			}
 
 			objNum := 1
-			for _, ii := range usedObjs {
+			for _, ii := range usedObjs[thisOutFilename] {
 				if ii != objNum {
 					break
 				}
 				objNum++
 			}
-			usedObjs = append(usedObjs, objNum)
-			slices.Sort(usedObjs)
+			usedObjs[thisOutFilename] = append(usedObjs[thisOutFilename], objNum)
+			slices.Sort(usedObjs[thisOutFilename])
 
 			w, h := item.PageSizePts()
 			info.offsets = append(info.offsets, PageInfo{info.n, w, h, pp, objNum, pageHashes[pp]})
@@ -1408,3 +1477,417 @@ func renderTextImages(pbBook *PbBook) {
 		}
 	}
 }
+
+type pdfFile struct {
+	osFile  *os.File
+	pages   []int
+	offsets []int64
+	root    int
+}
+
+func (pdfFile *pdfFile) getPdfObject(objNum int) []byte {
+	rv := make([]byte, 0)
+
+	buffer := make([]byte, 256*1024)
+	target := []byte("\nendobj\n")
+	lenTarget := len(target)
+	headerSkipped := 0
+	for {
+		found := false
+		n, err := pdfFile.osFile.ReadAt(buffer, pdfFile.offsets[objNum-1]+int64(len(rv)+headerSkipped))
+		if n > 0 {
+			if len(rv) == 0 {
+				newLine := slices.Index(buffer, '\n')
+				if newLine >= 0 {
+					buffer = buffer[newLine+1:]
+					n -= newLine + 1
+					headerSkipped = newLine + 1
+				}
+			}
+
+			for ii := range n - lenTarget {
+				if slices.Compare(buffer[ii:ii+lenTarget], target) == 0 {
+					n = ii
+					found = true
+					break
+				}
+			}
+			rv = append(rv, buffer[:n]...)
+		}
+
+		if err != nil && err != io.EOF {
+			log.Print(err)
+		}
+
+		if err != nil || found {
+			break
+		}
+	}
+	return rv
+}
+
+// <</Type/Catalog/Pages 12 0 R>>
+var rxCatalog, _ = regexp.Compile("<</Type/Catalog/Pages ([1-9][0-9]*) 0 R>>")
+
+// returns the object number of the pages object
+func (pdfFile *pdfFile) getPdfCatalogObject() int {
+	catalog := string(pdfFile.getPdfObject(pdfFile.root))
+	parts := rxCatalog.FindStringSubmatch(catalog)
+	return Atoi(parts[1])
+}
+
+// <</Type/Pages/Count 10/Kids[15 0 R 18 0 R 21 0 R 24 0 R 27 0 R 30 0 R 33 0 R 36 0 R 39 0 R 42 0 R]>>
+var rxPages, _ = regexp.Compile(`<</Type/Pages/Count ([1-9][0-9]*)/Kids\[([1-9][0-9]* 0 R( [1-9][0-9]* 0 R)*)]>`)
+
+// returns the object numbers of the page objects
+func (pdfFile *pdfFile) getPdfPagesObject() []int {
+	objNum := pdfFile.getPdfCatalogObject()
+	pages := string(pdfFile.getPdfObject(objNum))
+	parts := rxPages.FindStringSubmatch(pages)
+	rv := make([]int, Atoi(parts[1]))
+	parts = strings.Split(parts[2], " ")
+	for ii := 0; ii < len(parts); ii += 3 {
+		rv[ii/3] = Atoi(parts[ii])
+	}
+	return rv
+}
+
+// <</Type/Page/MediaBox[0 0 612 792]/Resources 13 0 R/Contents 14 0 R/Parent 12 0 R>>
+var rxPage, rxPageErr = regexp.Compile(`<</Type/Page/MediaBox\[0 0 ((0|[1-9][0-9]*)(\.[0-9]+)?) ((0|[1-9][0-9]*)(\.[0-9]+)?)](/Rotate 0)?(/Resources ([1-9][0-9]*) 0 R/Contents ([1-9][0-9]*) 0 R)?/Parent ([1-9][0-9]*) 0 R>>`)
+
+// returns the media box width, media box height, resources object number, contents object number
+func (pdfFile *pdfFile) getPdfPageObject(pageNum int) (float64, float64, int, int) {
+	page := string(pdfFile.getPdfObject(pdfFile.pages[pageNum]))
+	parts := rxPage.FindStringSubmatch(page)
+	if len(parts[9]) > 0 {
+		return Atof(parts[1]), Atof(parts[4]), Atoi(parts[9]), Atoi(parts[10])
+	} else {
+		return Atof(parts[1]), Atof(parts[4]), 0, 0
+	}
+}
+
+// not needed, get the object number for the page image from the resource object
+// <</Length 29>>
+// stream
+// q 612 0 0 792 0 0 cm /I1 Do Q
+// endstream
+// func (pdfFile *pdfFile) getPdfPageContentObject(pageNum int) []string {
+// 	return nil
+// }
+
+// <</XObject<</I1 ([1-9][0-9]*) 0 R>>>>
+var rxResource, _ = regexp.Compile("<</XObject<</I[1-9][0-9]* ([1-9][0-9]*) 0 R>>>>")
+
+// returns the object number of the page resource
+func (pdfFile *pdfFile) getPdfPageResourceObject(objNum int) int {
+	resource := string(pdfFile.getPdfObject(objNum))
+	parts := rxResource.FindStringSubmatch(resource)
+	return Atoi(parts[1])
+}
+
+// returns the media box width, media box height, image object data
+func (pdfFile *pdfFile) getPdfPage(pageNum int) (float64, float64, []byte) {
+	width, height, resourcesObjNum, _ := pdfFile.getPdfPageObject(pageNum)
+	if resourcesObjNum > 0 {
+		imageObjNum := pdfFile.getPdfPageResourceObject(resourcesObjNum)
+		return width, height, pdfFile.getPdfObject(imageObjNum)
+	} else {
+		return width, height, nil
+	}
+}
+
+func getPdfFile(osFile *os.File) pdfFile {
+	pdfFile := pdfFile{}
+
+	pdfFile.osFile = osFile
+
+	const minLength = 64
+	readBuffer := make([]byte, minLength)
+
+	if stat, err := osFile.Stat(); err != nil {
+		log.Print(err)
+	} else if stat.Size() < minLength {
+		log.Printf("File is too short: %v\n", stat.Size())
+	} else if n, err := osFile.ReadAt(readBuffer, stat.Size()-int64(len(readBuffer))); err != nil && err != io.EOF {
+		log.Print(err)
+	} else if slices.Compare(readBuffer[n-6:n], []byte("\n%%EOF")) != 0 {
+		log.Print("Missing EOF")
+	} else {
+		slices.Reverse(readBuffer)                // make it easier to index
+		readBuffer = readBuffer[6:]               // skip the \n%%EOF
+		newline := slices.Index(readBuffer, '\n') // find the next newline
+		readBuffer = readBuffer[:newline]
+		slices.Reverse(readBuffer)
+		startXref := Atoi(string(readBuffer))
+		readBuffer = make([]byte, stat.Size()-int64(startXref))
+		if n, err := osFile.ReadAt(readBuffer, int64(startXref)); err != nil && err != io.EOF {
+			log.Print(err)
+		} else if n != len(readBuffer) {
+			log.Printf("Did not read expected xref")
+		} else if content := string(readBuffer); len(content) == 0 {
+			log.Print("No Xref")
+		} else if contents := strings.Split(content, "\n"); len(contents) < 11 {
+			log.Printf("Insufficient lines in xref")
+		} else {
+			pdfFile.offsets = make([]int64, 0, len(contents)-8)
+			for ii := 3; ii < len(contents)-5; ii++ {
+				parts := strings.SplitN(contents[ii], " ", 3)
+				pdfFile.offsets = append(pdfFile.offsets, int64(Atoi(parts[0])))
+			}
+			trailerObj := contents[len(contents)-4]
+			trailerObj = strings.TrimSuffix(strings.TrimPrefix(trailerObj, "<<"), ">>")
+			parts := strings.Split(trailerObj, "/")
+			parts = strings.Split(parts[2], " ")
+			pdfFile.root = Atoi(parts[1])
+		}
+	}
+
+	pdfFile.pages = pdfFile.getPdfPagesObject()
+	pdfFile.osFile = osFile
+	return pdfFile
+}
+
+func openPdfFile(filename string) *pdfFile {
+	if len(filename) == 0 {
+		log.Printf("No filename")
+		return nil
+	} else if osFile, err := os.Open(filename); err != nil {
+		log.Print(err)
+		return nil
+	} else if pdfFile := getPdfFile(osFile); pdfFile.offsets == nil {
+		log.Printf("No Trailer")
+		osFile.Close()
+		return nil
+	} else {
+		return &pdfFile
+	}
+}
+
+func (pdfFile *pdfFile) Close() {
+	if pdfFile.osFile != nil {
+		pdfFile.osFile.Close()
+	}
+}
+
+func (pdfFile *pdfFile) getPdfPagesForPageRange(pageRange string) []int {
+
+	rv := make([]int, 0)
+
+	if len(pageRange) == 0 {
+		pageRange = "*"
+	}
+
+	numPages := len(pdfFile.pages)
+
+	for ii := 0; ii < numPages; ii++ {
+		if isPageInRange(pageRange, ii, true) {
+			rv = append(rv, ii)
+		}
+	}
+
+	return rv
+}
+
+type assembledPdfPage struct {
+	imageObject int
+	width       float64
+	height      float64
+}
+
+func assemble(items []PbItem) {
+	if len(items) == 0 {
+		return
+	}
+
+	setting := items[0].Setting("assemble")
+	defaultWidth, defaultHeight := FloatSize(items[0].Setting("page-size"))
+
+	pages := make([]assembledPdfPage, 0)
+	currentObject := 1
+
+	parts := strings.Split(setting, "+")
+	// output-file+input.pdf[:page-range]+#[:612x792]+...
+	if len(parts) > 1 {
+		currentOffset := int64(0)
+		if osFile, err := os.OpenFile(parts[0], os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666); err != nil {
+			log.Print(err)
+		} else {
+			defer osFile.Close()
+			n, err := osFile.WriteString("%PDF-1.7\n")
+			if err != nil {
+				log.Print(err)
+			}
+			currentOffset += int64(n)
+			xref := make([]int64, 0)
+			for ii := 1; ii < len(parts); ii++ {
+				if strings.HasPrefix(parts[ii], "#") {
+					if parts[ii] == "#" {
+						pages = append(pages, assembledPdfPage{0, defaultWidth, defaultHeight})
+					} else if sizeParts := strings.SplitN(parts[ii], ":", 2); len(sizeParts) == 2 {
+						thisWidth, thisHeight := FloatSize(sizeParts[1])
+						pages = append(pages, assembledPdfPage{0, thisWidth, thisHeight})
+					} else {
+						pages = append(pages, assembledPdfPage{0, defaultWidth, defaultHeight})
+					}
+				} else {
+					pageRange := "*"
+					fileName := parts[ii]
+					if strings.Contains(parts[ii], ":") {
+						fileParts := strings.SplitN(parts[ii], ":", 2)
+						pageRange = fileParts[1]
+						fileName = fileParts[0]
+					}
+
+					if pdfFile := openPdfFile(fileName); pdfFile != nil {
+						defer pdfFile.Close()
+						for _, ii := range pdfFile.getPdfPagesForPageRange(pageRange) {
+							width, height, pageData := pdfFile.getPdfPage(ii)
+							if pageData != nil {
+								xref = append(xref, currentOffset)
+								n, err := fmt.Fprintf(osFile, "%v 0 obj\n", currentObject)
+								currentOffset += int64(n)
+								if err != nil {
+									log.Print(err)
+								}
+								n, err = osFile.Write(pageData)
+								currentOffset += int64(n)
+								if err != nil {
+									log.Print(err)
+								}
+								n, err = osFile.WriteString("\nendobj\n")
+								currentOffset += int64(n)
+								if err != nil {
+									log.Print(err)
+								}
+								pages = append(pages, assembledPdfPage{currentObject, width, height})
+								currentObject++
+							} else {
+								pages = append(pages, assembledPdfPage{0, width, height})
+							}
+						}
+					}
+				}
+			}
+
+			if len(pages) > 0 {
+				xref = append(xref, currentOffset)
+				n, err := fmt.Fprintf(osFile, "%v 0 obj\n<</Type/Catalog/Pages %v 0 R>>\nendobj\n", currentObject, currentObject+1)
+				currentOffset += int64(n)
+				if err != nil {
+					log.Print(err)
+				}
+				catalog := currentObject
+				currentObject++
+
+				xref = append(xref, currentOffset)
+				n, err = fmt.Fprintf(osFile, "%v 0 obj\n<</Type/Pages/Count %v/Kids[", currentObject, len(pages))
+				currentOffset += int64(n)
+				if err != nil {
+					log.Print(err)
+				}
+				curPage := currentObject + 1
+				for ii, page := range pages {
+					if ii != 0 {
+						n, err = fmt.Fprintf(osFile, " ")
+						currentOffset += int64(n)
+						if err != nil {
+							log.Print(err)
+						}
+					}
+
+					if page.imageObject == 0 {
+						n, err = fmt.Fprintf(osFile, "%v 0 R", curPage)
+						curPage++
+					} else {
+						n, err = fmt.Fprintf(osFile, "%v 0 R", curPage+2)
+						curPage += 3
+					}
+					currentOffset += int64(n)
+					if err != nil {
+						log.Print(err)
+					}
+				}
+				n, err = osFile.WriteString("]>>\nendobj\n")
+				currentOffset += int64(n)
+				if err != nil {
+					log.Print(err)
+				}
+				parentObject := currentObject
+				currentObject++
+
+				curPage = currentObject
+				for _, page := range pages {
+					if page.imageObject == 0 {
+						xref = append(xref, currentOffset)
+						n, err = fmt.Fprintf(osFile, "%v 0 obj\n<</Type/Page/MediaBox[0 0 %v %v]/Parent %v 0 R>>\nendobj\n", curPage, page.width, page.height, parentObject)
+						currentOffset += int64(n)
+						if err != nil {
+							log.Print(err)
+						}
+						currentObject++
+						curPage++
+					} else {
+						contents := fmt.Sprintf("q %v 0 0 %v 0 0 cm /I%v Do Q", page.width, page.height, page.imageObject)
+
+						xref = append(xref, currentOffset)
+						n, err = fmt.Fprintf(osFile, "%v 0 obj\n<</XObject<</I%v %v 0 R>>>>\nendobj\n", curPage, page.imageObject, page.imageObject)
+						currentOffset += int64(n)
+						if err != nil {
+							log.Print(err)
+						}
+						currentObject++
+
+						xref = append(xref, currentOffset)
+						n, err = fmt.Fprintf(osFile, "%v 0 obj\n<</Length %v>>\nstream\n%v\nendstream\nendobj\n", curPage+1, len(contents), contents)
+						currentOffset += int64(n)
+						if err != nil {
+							log.Print(err)
+						}
+						currentObject++
+
+						xref = append(xref, currentOffset)
+						n, err = fmt.Fprintf(osFile, "%v 0 obj\n<</Type/Page/MediaBox[0 0 %v %v]/Resources %v 0 R/Contents %v 0 R/Parent %v 0 R>>\nendobj\n", curPage+2, page.width, page.height, curPage, curPage+1, parentObject)
+						currentOffset += int64(n)
+						if err != nil {
+							log.Print(err)
+						}
+						currentObject++
+
+						curPage += 3
+					}
+				}
+
+				n, err = fmt.Fprintf(osFile, "xref\n0 %v\n0000000000 00001 f\n", len(xref))
+				for _, ii := range xref {
+					n, err = fmt.Fprintf(osFile, "%010d 00000 n\n", ii)
+				}
+
+				n, err = fmt.Fprintf(osFile, "trailer\n<</Size %v/Root %v 0 R>>\nstartxref\n%v\n%%%%EOF", len(xref), catalog, currentOffset)
+			}
+		}
+	}
+}
+
+// PDF structure:
+//    xref table = 1 zeroth entry + x bitmaps + 1 catalog + 1 pages + x * (Resource, Content, Mediabox)
+//       number of entries is 4x + 3, so (number of entries - 3) / 4 = number of pages
+//    Trailer tells us catalog is object #, which tells us pages is object #,
+//      which lists the page / media box for each page, which refers to the resources and content for each page
+//      and the resources tells which object is the image for the page
+
+// Output PDF header
+// Iterate over input list
+//    If blank, append a blank page to the in-memory list of pages
+//    If PDF, iterate over the pages specified
+//       Output an object for each page
+//       Append the page to the in-memory list of pages
+// Output the catalog
+// Output the Pages
+// Iterate over the in-memory list of pages
+//    If not blank output Resource
+//    If not blank output Contents
+//    Output Page
+// Output xref table
+// Output trailer
+// Output startxref
+// Output EOF

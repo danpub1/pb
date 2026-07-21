@@ -126,6 +126,11 @@ func FloatSize(sSize string) (float64, float64) {
 	return Atof(w), Atof(h)
 }
 
+func IntSize(sSize string) (int, int) {
+	w, h := Size(sSize)
+	return Atoi(w), Atoi(h)
+}
+
 func Size(sSize string) (string, string) {
 	if len(sSize) == 0 {
 		return "0", "0"

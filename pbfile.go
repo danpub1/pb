@@ -332,7 +332,16 @@ func parse(line string, styles map[string]string) PbItem {
 func processSetting(setting string, theItem *PbItem) {
 	setting = strings.TrimSpace(setting)
 	pieces := strings.SplitN(setting, ":", 2)
-	if len(pieces) == 2 {
+	if pieces[0] == "adjust-by-name" {
+		adjustments := strings.Split(pieces[1], "+")
+		for ii := range adjustments {
+			parts := strings.SplitN(adjustments[ii], ",", 2)
+			entry := AdjustByNameEntry{}
+			entry.rx, _ = regexp.Compile(parts[0])
+			entry.duration = time.Duration(int64(Atoi(parts[1])) * int64(1000) * int64(1000) * int64(1000) * int64(60))
+			adjustByName = append(adjustByName, entry)
+		}
+	} else if len(pieces) == 2 {
 		switch pieces[0] {
 		case "trim", "fit", "squish":
 			pieces[1] = pieces[0] + "," + pieces[1]
@@ -359,6 +368,10 @@ func processSetting(setting string, theItem *PbItem) {
 		switch pieces[0] {
 		case "norender", "nolayout", "noresize", "row-break", "column-break", "page-break", "current-page", "deduplicate":
 			theItem.Set(pieces[0], "true")
+		case "noprocess":
+			theItem.Set("norender", "true")
+			theItem.Set("nolayout", "true")
+			theItem.Set("noresize", "true")
 		case "nowatch", "norecurse":
 			theItem.Set(pieces[0][2:], "false")
 		case "smaller", "much-smaller", "much-much-smaller", "much-much-much-smaller",
@@ -457,7 +470,7 @@ func glob(path string, recurse bool) ([]string, error) {
 			} else {
 				sources := make([]string, 0)
 				for f := range zipReaderFile {
-					if matched, err := filepath.Match(zipParts[1], zipReaderFile[f].Name); err == nil && matched {
+					if matched, err := filepath.Match(zipParts[1], filepath.Base(zipReaderFile[f].Name)); err == nil && matched {
 						sources = append(sources, zipParts[0]+"::"+zipReaderFile[f].Name)
 					} else if err != nil {
 						log.Print(err)
@@ -650,9 +663,23 @@ func compareItemsByFilename(a PbItem, b PbItem) int {
 	return compareFilenames(a.Setting("image"), b.Setting("image"))
 }
 
-var rxTimeName, _ = regexp.Compile(`([0-9]{4,4})([0-9]{2,2})([0-9]{2,2})_([0-9]{2,2})([0-9]{2,2})([0-9]{2,2})`)
+// was: ([0-9]{4,4})([0-9]{2,2})([0-9]{2,2})_([0-9]{2,2})([0-9]{2,2})([0-9]{2,2})
+// That has 6 submatches
+// This has 7 submatches
+var rxTimeName, _ = regexp.Compile(`((19|20)[0-9]{2,2})(0[1-9]|1[0-2])([012][1-9]|3[0-1])_([01][0-9]|2[0-3])([0-5][0-9])([0-5][0-9])`)
+
+type AdjustByNameEntry struct {
+	rx       *regexp.Regexp
+	duration time.Duration
+}
+
+var adjustByName []AdjustByNameEntry
 
 func itemTime(item *PbItem) time.Time {
+	if !item.imageDate.IsZero() {
+		return item.imageDate
+	}
+
 	itemTime := timeFromName(item)
 	if itemTime.IsZero() {
 		itemTime = item.exifDate
@@ -660,6 +687,17 @@ func itemTime(item *PbItem) time.Time {
 	if itemTime.IsZero() {
 		itemTime = time.Unix(item.fileDate, 0)
 	}
+
+	if !itemTime.IsZero() {
+		for ii := range adjustByName {
+			if adjustByName[ii].rx.MatchString(item.Setting("image")) {
+				itemTime = itemTime.Add(adjustByName[ii].duration)
+				item.imageDate = itemTime
+				break
+			}
+		}
+	}
+
 	return itemTime
 }
 
@@ -673,13 +711,13 @@ func timeFromName(item *PbItem) time.Time {
 
 	if rxTimeName.MatchString(name) {
 		parts := rxTimeName.FindStringSubmatch(name)
-		if len(parts) == 7 {
+		if len(parts) == 8 {
 			year := Atoi(parts[1])
-			month := time.Month(Atoi(parts[2]))
-			day := Atoi(parts[3])
-			hour := Atoi(parts[4])
-			minute := Atoi(parts[5])
-			second := Atoi(parts[6])
+			month := time.Month(Atoi(parts[3]))
+			day := Atoi(parts[4])
+			hour := Atoi(parts[5])
+			minute := Atoi(parts[6])
+			second := Atoi(parts[7])
 			location := time.Now().Location()
 			if !item.exifDate.IsZero() {
 				location = item.exifDate.Location()
@@ -832,7 +870,7 @@ func ApplyItemSpecificStyles(items []PbItem) {
 						if items[jj].itemType == ItemTypeImage {
 							imageDate := itemTime(&items[jj])
 							if !imageDate.IsZero() {
-								replacement = imageDate.Format("Monday January 2, 2006")
+								replacement = imageDate.Format("Monday, January 2, 2006")
 							}
 							break
 						}
@@ -954,6 +992,7 @@ func filenameForDate(baseFilename string, filedate time.Time) string {
 	baseFilename = strings.ReplaceAll(baseFilename, "{{MONTH}}", filedate.Format("January 2006"))
 	baseFilename = strings.ReplaceAll(baseFilename, "{{DD}}", filedate.Format("2006-01-02"))
 	baseFilename = strings.ReplaceAll(baseFilename, "{{DATE}}", filedate.Format("January 2, 2006"))
+	baseFilename = strings.ReplaceAll(baseFilename, "{{DATE-HEADER}}", filedate.Format("Monday, January 2, 2006"))
 	baseFilename = strings.ReplaceAll(baseFilename, "{{QQ}}", fmt.Sprintf("%v-Q%v", filedate.Format("2006"), quarter))
 	baseFilename = strings.ReplaceAll(baseFilename, "{{QUARTER}}", fmt.Sprintf("%v Quarter, %v", sNumbers[quarter-1], filedate.Format("2006")))
 	baseFilename = strings.ReplaceAll(baseFilename, "{{HH}}", fmt.Sprintf("%v-H%v", filedate.Format("2006"), half))
@@ -1014,7 +1053,13 @@ func addDayHeaders(items []PbItem) []PbItem {
 				if thisOutputFile != outputFile {
 					items = slices.Insert(items, ii, pageHeader.DeepCopy())
 					items[ii].Set("output-file", thisOutputFile)
-					items[ii].Set("distribute-rows", "spreadtop")
+					if len(title) > 0 || len(subtitle) > 0 {
+						items[ii].Set("distribute-rows", "middle")
+						items[ii].Set("spread-percent", "33")
+					} else {
+						items[ii].Set("distribute-rows", "spreadtop")
+						items[ii].Set("spread-percent", "50")
+					}
 					ii++
 				}
 				if len(title) > 0 {
@@ -1034,6 +1079,7 @@ func addDayHeaders(items []PbItem) []PbItem {
 					items = slices.Insert(items, ii, pageHeader.DeepCopy())
 					items[ii].Set("output-file", thisOutputFile)
 					items[ii].Set("distribute-rows", "spreadtop")
+					items[ii].Set("spread-percent", "50")
 					items[ii].Set("text", filenameForDate(subtitle, imageDate))
 					ii++
 
@@ -1047,6 +1093,8 @@ func addDayHeaders(items []PbItem) []PbItem {
 				} else if thisOutputFile != lastOutputFile && (len(title) > 0 || len(subtitle) > 0) {
 					items = slices.Insert(items, ii, pageHeader.DeepCopy())
 					items[ii].Set("output-file", thisOutputFile)
+					items[ii].Set("distribute-rows", "spreadmiddle")
+					items[ii].Set("spread-percent", "50")
 					ii++
 				}
 
@@ -1096,7 +1144,7 @@ func readInputFile(inFile string, styles map[string]string) ([]PbItem, map[strin
 
 	lowerFile := strings.ToLower(inFile)
 
-	if strings.HasSuffix(lowerFile, ".zip") {
+	if strings.HasSuffix(lowerFile, ".zip") && !strings.ContainsAny(lowerFile, "*?") {
 		inFile = inFile + "::*"
 		lowerFile = strings.ToLower(inFile)
 	}

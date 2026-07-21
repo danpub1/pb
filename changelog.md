@@ -14,16 +14,26 @@
 * Add `deduplicate` book option setting
 * Add `text-output-file` text setting to save text to a png or jpeg
 * Add sets of images into multiple output files by date
+* Add `adjust-by-name` to adjust timestamp of images matching filename
+* Add `noprocess`
+* Add `{{DATE-HEADER}}` replaceable text for title & subtitle
+* Add `max-pages`
+* Add `assemble` to assemble other PDFs from output PDFs
 ### Changed
 * Breaking Change: Apply rotation and flip indicated by EXIF orientation
 * Detect file date of files in zip files
 * Change default size to `size:auto:3x2,3x2`
 * Change default page size to 8.5x11"
 * Default `size-mode` to the value `area`
+* Restructure command line processing to allow no input files when --assemble is present
 ### Deprecated
 ### Removed
 ### Fixed
 * Recursing into zip files
+* Correctly use row-specific spread-percent when aligning rows
+* Margins & Binding
+* Don't truncate PDF page sizes to integers
+
 
 ## v1.1.0
 

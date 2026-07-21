@@ -738,7 +738,7 @@ func layoutPages(pbBook *PbBook, outPageRange string, firstIteration bool) {
 					case AlignSpreadCenter:
 						spreadPercent := 50.0
 						if rowItem := page.rows[row].PbItem(); rowItem != nil {
-							spreadPercent = rowItem.FloatPageSetting("spread-percent")
+							spreadPercent = rowItem.FloatRowSetting("spread-percent")
 						}
 						interSpace := extraRowWidth / float64(NumColumnLayout(page.rows[row].columns)+1)
 						numColumn := 0
