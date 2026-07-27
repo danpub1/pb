@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## v2.0.0
 ### Added
 * Add `font-size-min` to shrink font as necessary to fit
 * Add `sort` column setting, sort on exif date, file date, and filename
