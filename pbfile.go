@@ -2,6 +2,8 @@ package main
 
 import (
 	"archive/zip"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"io/fs"
@@ -366,13 +368,13 @@ func processSetting(setting string, theItem *PbItem) {
 		theItem.Set(pieces[0], unescape(pieces[1]))
 	} else if len(pieces) == 1 {
 		switch pieces[0] {
-		case "norender", "nolayout", "noresize", "row-break", "column-break", "page-break", "current-page", "deduplicate":
+		case "norender", "nolayout", "noresize", "row-break", "column-break", "page-break", "current-page", "deduplicate", "pack", "pack-page":
 			theItem.Set(pieces[0], "true")
 		case "noprocess":
 			theItem.Set("norender", "true")
 			theItem.Set("nolayout", "true")
 			theItem.Set("noresize", "true")
-		case "nowatch", "norecurse":
+		case "nowatch", "norecurse", "nopack":
 			theItem.Set(pieces[0][2:], "false")
 		case "smaller", "much-smaller", "much-much-smaller", "much-much-much-smaller",
 			"larger", "much-larger", "much-much-larger", "much-much-much-larger":
@@ -663,6 +665,30 @@ func compareItemsByFilename(a PbItem, b PbItem) int {
 	return compareFilenames(a.Setting("image"), b.Setting("image"))
 }
 
+var _seed = ""
+
+func seed(item *PbItem) string {
+	if len(_seed) == 0 {
+		_seed = item.BookSetting("seed")
+		if len(_seed) == 0 {
+			_seed = fmt.Sprint(time.Now().UnixNano())
+			if Opts.Verbose("DD") {
+				log.Printf("Seed: %v", _seed)
+			}
+		}
+	}
+	return _seed
+}
+
+func compareItemsByHash(a PbItem, b PbItem) int {
+	hashbytes := sha256.Sum256([]byte(a.Setting("image") + seed(&a)))
+	ahash := hex.EncodeToString(hashbytes[:])
+	hashbytes = sha256.Sum256([]byte(b.Setting("image") + seed(&b)))
+	bhash := hex.EncodeToString(hashbytes[:])
+
+	return strings.Compare(ahash, bhash)
+}
+
 // was: ([0-9]{4,4})([0-9]{2,2})([0-9]{2,2})_([0-9]{2,2})([0-9]{2,2})([0-9]{2,2})
 // That has 6 submatches
 // This has 7 submatches
@@ -757,6 +783,11 @@ func sortItems(items []PbItem) {
 		if items[ii].itemType != ItemTypeImage || ii+1 == len(items) {
 			if endItem > startItem {
 				switch sortSetting {
+				case "hash":
+					slices.SortFunc(items[startItem:endItem+1], compareItemsByHash)
+					if Opts.Verbose("D") {
+						log.Printf("Sorted items[%v:%v]", startItem, endItem+1)
+					}
 				case "filename":
 					slices.SortFunc(items[startItem:endItem+1], compareItemsByFilename)
 					if Opts.Verbose("D") {
@@ -895,7 +926,7 @@ type dedupEntry struct {
 func deduplicate(items []PbItem) []PbItem {
 	if len(items) > 0 {
 		if items[0].BoolSetting("deduplicate") {
-			if Opts.Verbose("D") {
+			if Opts.Verbose("DD") {
 				log.Printf("Deduplicating %v items", len(items))
 			}
 
@@ -950,7 +981,7 @@ func deduplicate(items []PbItem) []PbItem {
 					filenames = append(filenames, possibleDups[ii].filename)
 				} else {
 					actualDups = append(actualDups, possibleDups[ii].index)
-					if Opts.Verbose("D") {
+					if Opts.Verbose("DD") {
 						log.Printf("Deduplicating %v, keeping %v", possibleDups[ii].filename, filenames[slices.Index(hashes, hash)])
 					}
 				}
@@ -1080,7 +1111,6 @@ func addDayHeaders(items []PbItem) []PbItem {
 					items[ii].Set("output-file", thisOutputFile)
 					items[ii].Set("distribute-rows", "spreadtop")
 					items[ii].Set("spread-percent", "50")
-					items[ii].Set("text", filenameForDate(subtitle, imageDate))
 					ii++
 
 					items = slices.Insert(items, ii, dayHeader.DeepCopy())

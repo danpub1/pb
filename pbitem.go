@@ -73,6 +73,7 @@ const (
 	AlignSpreadBottom
 	AlignSpreadBinding
 	AlignSpreadEdge
+	AlignSpreadPack
 	AlignLeft         = AlignTop
 	AlignCenter       = AlignMiddle
 	AlignRight        = AlignBottom
@@ -428,6 +429,10 @@ func (item *PbItem) Binding() int {
 }
 
 func (item *PbItem) Align(whichAlign string) int {
+	if item.BoolPageSetting("pack-page") {
+		return AlignSpreadPack
+	}
+
 	settingVal := ""
 
 	switch whichAlign {
@@ -889,7 +894,7 @@ func (item *PbItem) ImageRectSetting() (int, int, int, float64, int) {
 
 	if len(parts) > 5 || len(parts) < 1 {
 		wr, hr, _, _ := calcStraighten(float64(item.imageWidthPx), float64(item.imageHeightPx), item.FloatSetting("straighten"))
-		return 1, 0, 0, wr / hr, 50
+		return 100, 0, 0, wr / hr, 50
 	}
 
 	zoom := 100
@@ -944,6 +949,16 @@ func (item *PbItem) ImageRectSetting() (int, int, int, float64, int) {
 	if len(parts) > nextPart && len(parts[nextPart]) > 0 {
 		offset = Atoi(parts[nextPart])
 		offset = int(math.Min(math.Max(float64(offset), 0), 100))
+	} else if zoom == 0 { // trim only because it is used by packing
+		origAspect := float64(item.imageWidthPx) / float64(item.imageHeightPx)
+		subject := item.IntSetting("subject") // 0000-9999 = ## width ## height
+		if subject >= 0 && subject <= 9999 {
+			if aspect > origAspect {
+				offset = subject % 100
+			} else {
+				offset = subject / 100
+			}
+		}
 	}
 
 	return zoom, xOffset, yOffset, aspect, offset
@@ -1213,6 +1228,7 @@ var defaultSettings = map[string]DefaultSetting{
 	"cache-mode":  {"0", "Book Option", "Controls Image Cache. 0=Do not cache, 1=Cache during a run but flush cache at beginning of run, 2=Fully cache image measurements across runs."},
 	"deduplicate": {"false", "Book Option", "Deletes duplicate images"},
 	"assemble":    {"", "Book Option", "Assembles pages from PDFs for printing"},
+	"seed":        {"1", "Book Option", "Random Seed"},
 
 	// page
 	"page-size":       {"612.0x792.0", "Page", "Page size in units, width x height."},
@@ -1222,6 +1238,8 @@ var defaultSettings = map[string]DefaultSetting{
 	"row-gutter":      {"6.0", "Page", "Gutter, in units, between rows"},
 	"header":          {"", "Page", "Name of even page text, Name of odd page text, Offset from the margin in units, Number of Leading Pages without Page Numbers, Number of Trailing Pages without Page Numbers. Example: `EvenHeader,OddHeader,2.5,2,2`. The header names are named text items which are offset above or below the top margin by the offset. Page numbers and total pages are calculated assuming some unnumbered pages before and after."},
 	"footer":          {"", "Page", "Same as `header`, but with text offset below the bottom margin."},
+	"pack-page":       {"false", "Page", "Pack contents of page"},
+	"pack-gutter":     {"6.0", "Page", "Gutter to use when packing"},
 
 	// page level options
 	"output-file":   {"out.pdf", "Page Option", ""},
@@ -1281,6 +1299,8 @@ var defaultSettings = map[string]DefaultSetting{
 	"recurse":    {"true", "Image", "Recurse directories when matching wildcard images"},
 	"image":      {"", "Image", "Image filename. Typically not specified using this setting."},
 	"caption":    {"", "Image", "Caption Text. Typically not specified using this setting."},
+	"subject":    {"5050", "Image", "Subject location 1-9 horizontally, 1-9 vertically"},
+	"pack":       {"true", "Image", "Include this when packing"},
 
 	// text
 	"caption-position":   {"below", "Text", "Caption position above or below"},

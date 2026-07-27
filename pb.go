@@ -267,13 +267,12 @@ func main() {
 			log.Printf("Got Dimensions for %v Images and Measured %v Texts", numImages, numTexts)
 		}
 
-		if Opts.Verbose("P") {
+		if Opts.Verbose("P") && !Opts.Verbose("PP") {
 			fmt.Println(printItems(items, false))
 		}
 
 		// break into columns, rows
 		pbBook := breakIntoPages(items)
-
 		if Opts.Verbose("D") {
 			log.Printf("Paginated: %v pages", len(pbBook.pages))
 		}
@@ -296,25 +295,28 @@ func main() {
 
 		// calculate sizes that fills available space
 		resizePages(pbBook, pageRange, firstIteration)
-
 		if Opts.Verbose("D") {
 			log.Printf("Resized pages")
 		}
 
 		// determine positions on page
 		layoutPages(pbBook, pageRange, firstIteration)
-
 		if Opts.Verbose("D") {
 			log.Printf("Laid out pages")
+		}
+
+		packPages(pbBook, pageRange, firstIteration)
+		if Opts.Verbose("D") {
+			log.Printf("Packed pages")
+		}
+
+		if Opts.Verbose("PP") {
+			fmt.Println(printItems(items, true))
 		}
 
 		renderTextImages(pbBook)
 		renderPages(pbBook, pageRange, firstIteration, flat)
 		assemble(items)
-
-		if Opts.Verbose("X") {
-			fmt.Println(printItems(items, true))
-		}
 
 		if !hasFilesToWatch(inFiles) || !Opts.Watch() {
 			break

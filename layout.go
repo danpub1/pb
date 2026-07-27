@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log"
 	"math"
 )
 
@@ -19,10 +20,7 @@ func rowHeight(items []PbItem, page int, row int, maxColumn int) float64 {
 				columnHeight = 0.0
 			}
 
-			captionGutter := 0.0
-			if items[ii].imageHeight > 0 && items[ii].textHeight > 0 {
-				captionGutter = Atof(items[ii].Setting("caption-gutter"))
-			}
+			captionGutter := items[ii].CaptionGutter()
 
 			columnHeight += items[ii].yOffset + items[ii].imageHeight + captionGutter + items[ii].textHeight
 			rowHeight = math.Max(rowHeight, columnHeight)
@@ -97,10 +95,7 @@ func breakIntoPages(items []PbItem) *PbBook {
 		}
 
 		items[ii].textWidth, items[ii].textHeight, items[ii].imageWidth, items[ii].imageHeight, items[ii].bestTextBlockLayout = items[ii].baseDimensions()
-		captionGutter := 0.0
-		if items[ii].imageHeight > 0 && items[ii].textHeight > 0 {
-			captionGutter = Atof(items[ii].Setting("caption-gutter"))
-		}
+		captionGutter := items[ii].CaptionGutter()
 
 		itemWidth := math.Max(items[ii].textWidth, items[ii].imageWidth)
 		itemHeight := items[ii].imageHeight + captionGutter + items[ii].textHeight
@@ -275,7 +270,36 @@ func breakIntoPages(items []PbItem) *PbBook {
 		}
 	}
 
-	return ToPbBook(items)
+	pbBook := ToPbBook(items)
+
+	for pp, page := range pbBook.pages {
+		rowLengths := make([]float64, 0)
+		for row := range page.rows {
+			for column := range page.rows[row].columns {
+				for item := range page.rows[row].columns[column].items {
+					if page.rows[row].columns[column].items[item].item.inLayout {
+						rowLengths = accrueRowLength(rowLengths, row, page.rows[row].columns[column].items[item].item)
+					}
+				}
+			}
+		}
+		shortestRow := -1.0
+		longestRow := -1.0
+		for _, rowLength := range rowLengths {
+			if shortestRow == -1.0 || shortestRow > rowLength {
+				shortestRow = rowLength
+			}
+			if longestRow == -1.0 || longestRow < rowLength {
+				longestRow = rowLength
+			}
+		}
+
+		if Opts.Verbose("DD") {
+			log.Printf("Page %v: %v Rows, Row Length Ratio: %v\n", pp+1, len(page.rows), shortestRow/longestRow)
+		}
+
+	}
+	return pbBook
 }
 
 var firstTimeResizeCache bool = true
@@ -445,6 +469,27 @@ func deserializePage(jsonValue string, page *PbPage) {
 			}
 		}
 	}
+}
+
+func accrueRowLength(rowLengths []float64, row int, item *PbItem) []float64 {
+	if item == nil || (item.itemType != ItemTypeImage && item.itemType != ItemTypeText) {
+		return rowLengths
+	}
+
+	thisRow := 0.0
+	if item.itemType == ItemTypeText {
+		thisRow = item.textWidth
+	} else {
+		thisRow = max(item.imageWidth, item.textWidth)
+	}
+
+	if row == len(rowLengths) {
+		rowLengths = append(rowLengths, thisRow)
+	} else {
+		rowLengths[row] += thisRow
+	}
+
+	return rowLengths
 }
 
 func resizePages(pb *PbBook, outPageRange string, firstIteration bool) {
@@ -661,6 +706,36 @@ func layoutPages(pbBook *PbBook, outPageRange string, firstIteration bool) {
 									numItem++
 								}
 							}
+						case AlignSpreadPack:
+							// Same as Justify except for single item in column
+							// Single item in column in first row == top
+							// Single item in column in last row == bottom
+							numItems := NumItemLayout(page.rows[row].columns[column].items)
+
+							if row == 0 && numItems == 1 { // Top
+								// Do nothing for top
+							} else if row == len(page.rows)-1 && numItems == 1 { // Bottom
+								for item := range page.rows[row].columns[column].items {
+									if page.rows[row].columns[column].items[item].item.inLayout {
+										page.rows[row].columns[column].items[item].item.yOffset += extraColumnHeight
+									}
+								}
+							} else { // Justify
+								if NumItemLayout(page.rows[row].columns[column].items) == 1 {
+									if page.rows[row].columns[column].items[0].item.inLayout {
+										page.rows[row].columns[column].items[0].item.yOffset += extraColumnHeight / 2
+									}
+								} else {
+									interSpace := extraColumnHeight / float64(NumItemLayout(page.rows[row].columns[column].items)-1)
+									numItem := 0
+									for item := range page.rows[row].columns[column].items {
+										if page.rows[row].columns[column].items[item].item.inLayout {
+											page.rows[row].columns[column].items[item].item.yOffset += interSpace * float64(numItem)
+											numItem++
+										}
+									}
+								}
+							}
 						}
 					}
 				}
@@ -688,7 +763,7 @@ func layoutPages(pbBook *PbBook, outPageRange string, firstIteration bool) {
 								}
 							}
 						}
-					case AlignJustify:
+					case AlignJustify, AlignSpreadPack:
 						if NumColumnLayout(page.rows[row].columns) == 1 {
 							for item := range page.rows[row].columns[0].items {
 								if page.rows[row].columns[0].items[item].item.inLayout {
@@ -787,7 +862,7 @@ func layoutPages(pbBook *PbBook, outPageRange string, firstIteration bool) {
 							}
 						}
 					}
-				case AlignJustify:
+				case AlignJustify, AlignSpreadPack:
 					if NumRowLayout(page.rows) == 1 {
 						for column := range page.rows[0].columns {
 							for item := range page.rows[0].columns[column].items {
@@ -864,6 +939,172 @@ func layoutPages(pbBook *PbBook, outPageRange string, firstIteration bool) {
 						if NumColumnLayout(page.rows[row].columns) > 0 {
 							numRow++
 						}
+					}
+				}
+			}
+
+			page.updateOffsets()
+		}
+	}
+}
+
+const (
+	CanGrowTop    = 1
+	CanGrowBottom = 2
+	CanGrowLeft   = 4
+	CanGrowRight  = 8
+)
+
+func overlaps(aa *PbItem, bb *PbItem) (bool, bool, float64, float64, float64, float64) {
+
+	aaWidth, aaHeight, bbWidth, bbHeight := 0.0, 0.0, 0.0, 0.0
+
+	if aa.itemType == ItemTypeImage {
+		aaWidth = max(aa.imageWidth, aa.textWidth)
+		aaHeight = aa.imageHeight + aa.textHeight + aa.CaptionGutter()
+	} else {
+		aaWidth = aa.textWidth
+		aaHeight = aa.textHeight
+	}
+	aaTop := aa.yOffset
+	aaLeft := aa.xOffset
+	aaBottom := aaTop + aaHeight
+	aaRight := aaLeft + aaWidth
+
+	if bb.itemType == ItemTypeImage {
+		bbWidth = max(bb.imageWidth, bb.textWidth)
+		bbHeight = bb.imageHeight + bb.textHeight + bb.CaptionGutter()
+	} else {
+		bbWidth = bb.textWidth
+		bbHeight = bb.textHeight
+	}
+	bbTop := bb.yOffset
+	bbLeft := bb.xOffset
+	bbBottom := bbTop + bbHeight
+	bbRight := bbLeft + bbWidth
+
+	overlapsV := (bbLeft >= aaLeft && bbLeft < aaRight) || (bbRight >= aaLeft && bbRight < aaRight) ||
+		(bbLeft <= aaLeft && bbRight >= aaRight) || (aaLeft <= bbLeft && aaRight >= bbRight)
+
+	overlapsH := (bbTop >= aaTop && bbTop < aaBottom) || (bbBottom >= aaTop && bbBottom < aaBottom) ||
+		(bbTop <= aaTop && bbBottom >= aaBottom) || (aaTop <= bbTop && aaBottom >= bbBottom)
+
+	return overlapsV, overlapsH, aaWidth, aaHeight, bbWidth, bbHeight
+}
+
+func packPages(pbBook *PbBook, outPageRange string, firstIteration bool) {
+	for pp := range pbBook.pages {
+		if isPageInRange(outPageRange, pp, firstIteration) || isCurrentPage(pbBook, pp) {
+			page := &pbBook.pages[pp]
+
+			if pageItem := page.PbItem(); pageItem == nil || (pageItem.BoolPageSetting("nolayout") || !pageItem.BoolPageSetting("pack-page")) {
+				continue
+			} else {
+				items := make([]*PbItem, 0)
+				foundInvalid := false
+			findItems:
+				for rowNum := range page.rows {
+					for columnNum := range page.rows[rowNum].columns {
+						for columnItemNum := range page.rows[rowNum].columns[columnNum].items {
+							item := page.rows[rowNum].columns[columnNum].items[columnItemNum].item
+							if item.itemType != ItemTypeImage && item.itemType != ItemTypeText {
+								foundInvalid = true
+								log.Printf("Found Invalid Item on page %v\n", pp)
+								break findItems
+							}
+							items = append(items, item)
+						}
+					}
+				}
+
+				if foundInvalid {
+					continue
+				}
+
+				amount := 0.5 / pageItem.Density()
+				gutter := pageItem.FloatPageSetting("pack-gutter")
+
+				for {
+					grewAnItem := false
+
+					for ii := range items {
+						if items[ii].itemType == ItemTypeText || len(items[ii].Setting("text")) > 0 || !items[ii].BoolSetting("pack") {
+							continue
+						}
+
+						canGrow := CanGrowTop | CanGrowBottom | CanGrowLeft | CanGrowRight
+
+						if items[ii].xOffset-amount <= 0 {
+							canGrow &= ^CanGrowLeft
+						}
+
+						if items[ii].yOffset-amount <= 0 {
+							canGrow &= ^CanGrowTop
+						}
+
+						if items[ii].xOffset+items[ii].imageWidth+amount >= page.availableWidth {
+							canGrow &= ^CanGrowRight
+						}
+
+						if items[ii].yOffset+items[ii].imageHeight+amount >= page.availableHeight {
+							canGrow &= ^CanGrowBottom
+						}
+
+						if canGrow == 0 {
+							continue
+						}
+
+						for jj := range items {
+							if ii != jj {
+								overlapsV, overlapsH, iiWidth, iiHeight, jjWidth, jjHeight := overlaps(items[ii], items[jj])
+
+								if overlapsH && items[ii].xOffset > items[jj].xOffset && items[ii].xOffset-amount <= items[jj].xOffset+jjWidth+gutter {
+									canGrow &= ^CanGrowLeft
+								}
+
+								if overlapsV && items[ii].yOffset > items[jj].yOffset && items[ii].yOffset-amount <= items[jj].yOffset+jjHeight+gutter {
+									canGrow &= ^CanGrowTop
+								}
+
+								if overlapsH && items[jj].xOffset > items[ii].xOffset && items[ii].xOffset+iiWidth+amount >= items[jj].xOffset-gutter {
+									canGrow &= ^CanGrowRight
+								}
+
+								if overlapsV && items[jj].yOffset > items[ii].yOffset && items[ii].yOffset+iiHeight+amount >= items[jj].yOffset-gutter {
+									canGrow &= ^CanGrowBottom
+								}
+
+								if canGrow == 0 {
+									break
+								}
+							}
+						}
+
+						if canGrow != 0 {
+							if canGrow&CanGrowLeft != 0 {
+								items[ii].xOffset -= amount
+								items[ii].imageWidth += amount
+							}
+							if canGrow&CanGrowTop != 0 {
+								items[ii].yOffset -= amount
+								items[ii].imageHeight += amount
+							}
+							if canGrow&CanGrowRight != 0 {
+								items[ii].imageWidth += amount
+							}
+							if canGrow&CanGrowBottom != 0 {
+								items[ii].imageHeight += amount
+							}
+
+							rect := fmt.Sprintf("trim,%v:%v", int(math.Round(items[ii].imageWidth*1000)), int(math.Round(items[ii].imageHeight*1000)))
+
+							items[ii].Set("rect", rect)
+							grewAnItem = true
+						}
+					}
+
+					if !grewAnItem {
+						break
 					}
 				}
 			}

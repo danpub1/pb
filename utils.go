@@ -17,7 +17,7 @@ const (
 )
 
 func VerboseLog(message string) {
-	if Opts.Verbose("L") {
+	if Opts.Verbose("DDD") {
 		log.Print("/// VERBOSE: " + message)
 	}
 }

@@ -19,6 +19,9 @@
 * Add `{{DATE-HEADER}}` replaceable text for title & subtitle
 * Add `max-pages`
 * Add `assemble` to assemble other PDFs from output PDFs
+* Add `pack-page`, `pack-gutter`, `pack` (image), and `subject`
+* Add `sort:hash` and `seed`
+* Add verbose output that shows the ratio of the longest to shortest row before resizing as an indication of whether the page is filled well.
 ### Changed
 * Breaking Change: Apply rotation and flip indicated by EXIF orientation
 * Detect file date of files in zip files
@@ -26,6 +29,7 @@
 * Change default page size to 8.5x11"
 * Default `size-mode` to the value `area`
 * Restructure command line processing to allow no input files when --assemble is present
+* Changed verbose modes to `D`, `DD` (new), and `DDD` (was `L`) and verbose output modes to `P` and `PP` was (`X`)
 ### Deprecated
 ### Removed
 ### Fixed
