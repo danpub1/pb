@@ -16,6 +16,7 @@ Uses:
   * Greeting card
   * Poster
 * Create slides for a presentation
+* Create pictures decorated with text for a photo frame
 
 ## Introduction
 
