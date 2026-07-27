@@ -6,9 +6,15 @@ From a marked-up list of photos, it generates a reasonably formatted photobook. 
 Uses:
 * Make a nicely arranged photo book with captions and text describing the photos
 * Make contact sheets of all the photos in a folder
-* Make a nicely arranged collection of all the photos in a folder - not as small as a contact sheet, but not as finished as a photo book
-* Layout pictures on a page in specific sizes for printing
-* Create a collage for a calendar page or a greeting card
+* Print some pictures
+  * Make a nicely arranged collection of all the photos in a folder - not as small as a contact sheet, but not as finished as a photo book
+  * Layout pictures on a page in specific sizes for printing, so you can frame it
+  * Use rounded corners on a picture to make it circular for putting in a Christmas ornament photo frame
+  * Just print some pictures without firing up The GIMP or LibreOffice, etc
+* Create a collage
+  * Calendar page
+  * Greeting card
+  * Poster
 * Create slides for a presentation
 
 ## Introduction
