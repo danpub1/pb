@@ -1,6 +1,27 @@
 # Changelog
+## Unreleased
+### Added
+* Tip for making a collage
+### Changed
+### Deprecated
+### Removed
+### Fixed
+* Fix crop rectangle calculation
+* Do not break out of subsequent iterations with page-range:$
 
 ## v2.0.0
+### Overview
+* Add setting `font-size-min` to create a text block that shrinks its font as necessary to fit. This is useful in making slides for a presentation.
+* Add various features to support creating a useable PDF from a file folder or zip file full of pictures
+  * Use EXIF orientation
+  * `sort` to allow sorting by date so pictures from multiple photographers can be merged
+  * `adjust-by-name` to adjust the image date/time to synchronize pictures from multiple cameras
+  * `deduplicate` (which depends on sorting by date) to eliminate duplicates that were shared among photographers
+  * `day-headers` for annotating date-sorted content
+  * `title`, `subtitle` for making a title page for each output file
+  * Filenames with parts of dates to break large sets of pictures into multiple PDFs
+  * `assemble` to create PDFs with the right number of pages to send to a printer (typically divisible by 4)
+* Add image packing - resizing with changing aspect ratio to fill available space.  Makes a collage.
 ### Added
 * Add `font-size-min` to shrink font as necessary to fit
 * Add `sort` column setting, sort on exif date, file date, and filename

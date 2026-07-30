@@ -389,28 +389,15 @@ func scaleToRect(picture image.Image, item *PbItem) image.Image {
 	srcAspect := wr / hr
 
 	if zoom > 0 && zoom < 100 {
-		newWr := wr
-		newHr := hr
-		if dstAspect > srcAspect { // dst is wider than src
-			newHr = hr * float64(zoom) / 100.0
-			newWr = newHr * dstAspect
-			if newWr > wr {
-				newWr = wr
-			}
-		} else { // dst is taller than src
-			newWr = wr * float64(zoom) / 100.0
-			newHr = newWr / dstAspect
-			if newHr > hr {
-				newHr = hr
-			}
-		}
+		newWr := wr * float64(zoom) / 100.0
+		newHr := hr * float64(zoom) / 100.0
 		xOffset := int(math.Round((wr - newWr) * float64(zoomXOffset) / 100.0))
 		yOffset := int(math.Round((hr - newHr) * float64(zoomYOffset) / 100.0))
 		picture = imaging.Crop(picture, image.Rectangle{image.Point{xOffset, yOffset}, image.Point{xOffset + int(math.Round(newWr)), yOffset + int(math.Round(newHr))}})
 		wr = newWr
 		hr = newHr
 		srcAspect = wr / hr
-		zoom = 1
+		zoom = 0
 	}
 
 	dstWidth := int(math.Round(wr))
@@ -1241,7 +1228,7 @@ func renderPages(pbBook *PbBook, outPageRange string, firstIteration bool, pageH
 
 	for pp := range pbBook.pages {
 		changed := false
-		if changed, _ = fileChanged(inFiles, lastModTime); changed {
+		if changed, _ = fileChanged(inFiles, lastModTime); changed && !firstIteration {
 			lastOutFileInfo = nil
 			return
 		}
