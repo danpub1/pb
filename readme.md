@@ -362,6 +362,8 @@ Page-Level Settings
 * `pack-gutter`: Gutter to use when packing. [6.0]
 * `row-gutter`: Gutter, in units, between rows. [6.0]
 * `current-page`: Include this page in the output regardless of whether it included in the page range. [false]
+* `pack-max-aspect`: Maximum aspect to resize to when packing. [2:1]
+* `pack-min-aspect`: Maximum aspect to resize to when packing. [1:2]
 * `header`: Name of even page text, Name of odd page text, Offset from the margin in units, Number of Leading Pages without Page Numbers, Number of Trailing Pages without Page Numbers. Example: `EvenHeader,OddHeader,2.5,2,2`. The header names are named text items which are offset above or below the top margin by the offset. Page numbers and total pages are calculated assuming some unnumbered pages before and after. []
 * `pack-page`: Pack contents of page. [false]
 * `margin`: Page margin in units, All, Top & Bottom x Left & Right, Top x Right x Bottom x Left. Examples: `24`, `24.5x18.1`, `36x24x36x12`. When binding is `side`, the right margin starts out as binding and the left margin is the edge.  When binding is `top`, the top margin is initially the binding and the bottom margin is the edge. [24.0]

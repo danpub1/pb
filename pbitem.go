@@ -1206,6 +1206,26 @@ func printHelp() string {
 	return strings.ReplaceAll(helpbase, "{{Settings}}", o.String())
 }
 
+func (item *PbItem) packAspects() (float64, float64) {
+	return item.packAspect("pack-max-aspect"), item.packAspect("pack-min-aspect")
+}
+
+func (item *PbItem) packAspect(which string) float64 {
+	aspect := 1.0
+	aspectString := item.Setting(which)
+	aspectString = strings.ReplaceAll(aspectString, "x", ":")
+	if strings.ContainsAny(aspectString, ":") {
+		parts := strings.SplitN(aspectString, ":", 2)
+		if len(parts) == 2 {
+			aspect = Atof(parts[0]) / Atof(parts[1])
+		}
+	} else {
+		aspect = Atof(aspectString)
+	}
+
+	return aspect
+}
+
 var defaultSettings = map[string]DefaultSetting{
 	// book
 	"units":                   {"pt", "Book", "The units of measure used in laying out the book.  One of `in`, `cm`, `mm`, `pt`"},
@@ -1240,6 +1260,8 @@ var defaultSettings = map[string]DefaultSetting{
 	"footer":          {"", "Page", "Same as `header`, but with text offset below the bottom margin."},
 	"pack-page":       {"false", "Page", "Pack contents of page"},
 	"pack-gutter":     {"6.0", "Page", "Gutter to use when packing"},
+	"pack-max-aspect": {"2:1", "Page", "Maximum aspect to resize to when packing"},
+	"pack-min-aspect": {"1:2", "Page", "Maximum aspect to resize to when packing"},
 
 	// page level options
 	"output-file":   {"out.pdf", "Page Option", ""},

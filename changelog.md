@@ -2,6 +2,8 @@
 ## Unreleased
 ### Added
 * Tip for making a collage
+* pack-max-aspect, pack-min-aspect
+* After packing, center items in remaining space
 ### Changed
 ### Deprecated
 ### Removed

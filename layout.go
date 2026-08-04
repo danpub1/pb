@@ -949,14 +949,13 @@ func layoutPages(pbBook *PbBook, outPageRange string, firstIteration bool) {
 }
 
 const (
-	CanGrowTop    = 1
-	CanGrowBottom = 2
-	CanGrowLeft   = 4
-	CanGrowRight  = 8
+	CanMoveTop    = 1
+	CanMoveBottom = 2
+	CanMoveLeft   = 4
+	CanMoveRight  = 8
 )
 
 func overlaps(aa *PbItem, bb *PbItem) (bool, bool, float64, float64, float64, float64) {
-
 	aaWidth, aaHeight, bbWidth, bbHeight := 0.0, 0.0, 0.0, 0.0
 
 	if aa.itemType == ItemTypeImage {
@@ -992,6 +991,117 @@ func overlaps(aa *PbItem, bb *PbItem) (bool, bool, float64, float64, float64, fl
 	return overlapsV, overlapsH, aaWidth, aaHeight, bbWidth, bbHeight
 }
 
+func canGrow(items []*PbItem, ii int, amount float64, gutter float64, page *PbPage) int {
+	return canMoveGrow(items, ii, amount, gutter, page, false)
+}
+
+func canMove(items []*PbItem, ii int, amount float64, gutter float64, page *PbPage) int {
+	return canMoveGrow(items, ii, amount, gutter, page, true)
+}
+
+func canMoveGrow(items []*PbItem, ii int, amount float64, gutter float64, page *PbPage, move bool) int {
+	if items == nil || ii < 0 || ii > len(items) || (items[ii].itemType != ItemTypeImage && items[ii].itemType != ItemTypeText) {
+		return 0
+	}
+
+	canMove := CanMoveTop | CanMoveBottom | CanMoveLeft | CanMoveRight
+
+	// If moving, don't move things away from the edges
+	if move {
+		if items[ii].xOffset <= 0 {
+			canMove &= ^CanMoveLeft
+			canMove &= ^CanMoveRight
+		}
+
+		if items[ii].yOffset <= 0 {
+			canMove &= ^CanMoveTop
+			canMove &= ^CanMoveBottom
+		}
+
+		if items[ii].itemType == ItemTypeImage {
+			if items[ii].xOffset+math.Max(items[ii].imageWidth, items[ii].textWidth) >= page.availableWidth {
+				canMove &= ^CanMoveLeft
+				canMove &= ^CanMoveRight
+			}
+			if items[ii].yOffset+items[ii].imageHeight+items[ii].textHeight+items[ii].CaptionGutter() >= page.availableHeight {
+				canMove &= ^CanMoveTop
+				canMove &= ^CanMoveBottom
+			}
+		} else {
+			if items[ii].xOffset+items[ii].textWidth >= page.availableWidth {
+				canMove &= ^CanMoveLeft
+				canMove &= ^CanMoveRight
+			}
+			if items[ii].yOffset+items[ii].textHeight >= page.availableHeight {
+				canMove &= ^CanMoveTop
+				canMove &= ^CanMoveBottom
+			}
+		}
+	}
+
+	if items[ii].xOffset-amount <= 0 {
+		canMove &= ^CanMoveLeft
+	}
+
+	if items[ii].yOffset-amount <= 0 {
+		canMove &= ^CanMoveTop
+	}
+
+	if items[ii].itemType == ItemTypeImage {
+		if items[ii].xOffset+math.Max(items[ii].imageWidth, items[ii].textWidth)+amount >= page.availableWidth {
+			canMove &= ^CanMoveRight
+		}
+		if items[ii].yOffset+items[ii].imageHeight+items[ii].textHeight+items[ii].CaptionGutter()+amount >= page.availableHeight {
+			canMove &= ^CanMoveBottom
+		}
+	} else {
+		if items[ii].xOffset+items[ii].textWidth+amount >= page.availableWidth {
+			canMove &= ^CanMoveRight
+		}
+		if items[ii].yOffset+items[ii].textHeight+amount >= page.availableHeight {
+			canMove &= ^CanMoveBottom
+		}
+	}
+
+	if items[ii].itemType == ItemTypeImage && move == false {
+		maxAspect, minAspect := items[ii].packAspects()
+		aspect := items[ii].imageWidth / items[ii].imageHeight
+		if aspect > maxAspect || aspect < minAspect {
+			canMove = 0
+		}
+	}
+
+	if canMove != 0 {
+		for jj := range items {
+			if ii != jj {
+				overlapsV, overlapsH, iiWidth, iiHeight, jjWidth, jjHeight := overlaps(items[ii], items[jj])
+
+				if overlapsH && items[ii].xOffset > items[jj].xOffset && items[ii].xOffset-amount <= items[jj].xOffset+jjWidth+gutter {
+					canMove &= ^CanMoveLeft
+				}
+
+				if overlapsV && items[ii].yOffset > items[jj].yOffset && items[ii].yOffset-amount <= items[jj].yOffset+jjHeight+gutter {
+					canMove &= ^CanMoveTop
+				}
+
+				if overlapsH && items[jj].xOffset > items[ii].xOffset && items[ii].xOffset+iiWidth+amount >= items[jj].xOffset-gutter {
+					canMove &= ^CanMoveRight
+				}
+
+				if overlapsV && items[jj].yOffset > items[ii].yOffset && items[ii].yOffset+iiHeight+amount >= items[jj].yOffset-gutter {
+					canMove &= ^CanMoveBottom
+				}
+
+				if canMove == 0 {
+					break
+				}
+			}
+		}
+	}
+
+	return canMove
+}
+
 func packPages(pbBook *PbBook, outPageRange string, firstIteration bool) {
 	for pp := range pbBook.pages {
 		if isPageInRange(outPageRange, pp, firstIteration) || isCurrentPage(pbBook, pp) {
@@ -1002,6 +1112,7 @@ func packPages(pbBook *PbBook, outPageRange string, firstIteration bool) {
 			} else {
 				items := make([]*PbItem, 0)
 				foundInvalid := false
+
 			findItems:
 				for rowNum := range page.rows {
 					for columnNum := range page.rows[rowNum].columns {
@@ -1024,88 +1135,98 @@ func packPages(pbBook *PbBook, outPageRange string, firstIteration bool) {
 				amount := 0.5 / pageItem.Density()
 				gutter := pageItem.FloatPageSetting("pack-gutter")
 
+				firstIteration := true
+
 				for {
-					grewAnItem := false
+					VerboseLog(fmt.Sprintf("Growing Page %v", pp))
+					grewItems := false
+					for {
+						grewAnItem := false
 
-					for ii := range items {
-						if items[ii].itemType == ItemTypeText || len(items[ii].Setting("text")) > 0 || !items[ii].BoolSetting("pack") {
-							continue
-						}
+						for ii := range items {
+							if items[ii].itemType == ItemTypeText || len(items[ii].Setting("text")) > 0 || !items[ii].BoolSetting("pack") {
+								continue
+							}
 
-						canGrow := CanGrowTop | CanGrowBottom | CanGrowLeft | CanGrowRight
+							canGrow := canGrow(items, ii, amount, gutter, page)
 
-						if items[ii].xOffset-amount <= 0 {
-							canGrow &= ^CanGrowLeft
-						}
-
-						if items[ii].yOffset-amount <= 0 {
-							canGrow &= ^CanGrowTop
-						}
-
-						if items[ii].xOffset+items[ii].imageWidth+amount >= page.availableWidth {
-							canGrow &= ^CanGrowRight
-						}
-
-						if items[ii].yOffset+items[ii].imageHeight+amount >= page.availableHeight {
-							canGrow &= ^CanGrowBottom
-						}
-
-						if canGrow == 0 {
-							continue
-						}
-
-						for jj := range items {
-							if ii != jj {
-								overlapsV, overlapsH, iiWidth, iiHeight, jjWidth, jjHeight := overlaps(items[ii], items[jj])
-
-								if overlapsH && items[ii].xOffset > items[jj].xOffset && items[ii].xOffset-amount <= items[jj].xOffset+jjWidth+gutter {
-									canGrow &= ^CanGrowLeft
+							if canGrow != 0 {
+								if canGrow&CanMoveLeft != 0 {
+									items[ii].xOffset -= amount
+									items[ii].imageWidth += amount
+								}
+								if canGrow&CanMoveTop != 0 {
+									items[ii].yOffset -= amount
+									items[ii].imageHeight += amount
+								}
+								if canGrow&CanMoveRight != 0 {
+									items[ii].imageWidth += amount
+								}
+								if canGrow&CanMoveBottom != 0 {
+									items[ii].imageHeight += amount
 								}
 
-								if overlapsV && items[ii].yOffset > items[jj].yOffset && items[ii].yOffset-amount <= items[jj].yOffset+jjHeight+gutter {
-									canGrow &= ^CanGrowTop
-								}
-
-								if overlapsH && items[jj].xOffset > items[ii].xOffset && items[ii].xOffset+iiWidth+amount >= items[jj].xOffset-gutter {
-									canGrow &= ^CanGrowRight
-								}
-
-								if overlapsV && items[jj].yOffset > items[ii].yOffset && items[ii].yOffset+iiHeight+amount >= items[jj].yOffset-gutter {
-									canGrow &= ^CanGrowBottom
-								}
-
-								if canGrow == 0 {
-									break
-								}
+								rect := fmt.Sprintf("trim,%v:%v", int(math.Round(items[ii].imageWidth*1000)), int(math.Round(items[ii].imageHeight*1000)))
+								items[ii].Set("rect", rect)
+								grewAnItem = true
+								grewItems = true
 							}
 						}
 
-						if canGrow != 0 {
-							if canGrow&CanGrowLeft != 0 {
-								items[ii].xOffset -= amount
-								items[ii].imageWidth += amount
-							}
-							if canGrow&CanGrowTop != 0 {
-								items[ii].yOffset -= amount
-								items[ii].imageHeight += amount
-							}
-							if canGrow&CanGrowRight != 0 {
-								items[ii].imageWidth += amount
-							}
-							if canGrow&CanGrowBottom != 0 {
-								items[ii].imageHeight += amount
-							}
-
-							rect := fmt.Sprintf("trim,%v:%v", int(math.Round(items[ii].imageWidth*1000)), int(math.Round(items[ii].imageHeight*1000)))
-
-							items[ii].Set("rect", rect)
-							grewAnItem = true
+						if !grewAnItem {
+							break
 						}
 					}
 
-					if !grewAnItem {
+					if !grewItems && !firstIteration {
 						break
 					}
+
+					VerboseLog(fmt.Sprintf("Moving Page %v", pp))
+					movedItems := false
+
+					for ii := range items {
+						amountLeft, amountRight, amountUp, amountDown := 0.0, 0.0, 0.0, 0.0
+						multiplier := 1
+						for {
+							thisAmount := amount * float64(multiplier)
+							canMove := canMove(items, ii, thisAmount, gutter, page)
+							if canMove == 0 {
+								break
+							}
+							if canMove&CanMoveLeft != 0 {
+								amountLeft = thisAmount
+							}
+							if canMove&CanMoveRight != 0 {
+								amountRight = thisAmount
+							}
+							if canMove&CanMoveTop != 0 {
+								amountUp = thisAmount
+							}
+							if canMove&CanMoveBottom != 0 {
+								amountDown = thisAmount
+							}
+							multiplier++
+						}
+
+						if amountRight-amountLeft != 0 {
+							items[ii].xOffset += (amountRight - amountLeft) / 2
+							movedItems = true
+							//VerboseLog(fmt.Sprintf("Moving %v.%v LR %v", pp+1, ii, (amountRight-amountLeft)/2))
+						}
+
+						if amountDown-amountUp != 0 {
+							items[ii].yOffset += (amountDown - amountUp) / 2
+							movedItems = true
+							//VerboseLog(fmt.Sprintf("Moving %v.%v UD %v", pp+1, ii, (amountDown-amountUp)/2))
+						}
+					}
+
+					if !grewItems && !movedItems {
+						break
+					}
+
+					firstIteration = false
 				}
 			}
 
