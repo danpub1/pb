@@ -317,6 +317,7 @@ type PbItem struct {
 	textWidth           float64
 	textHeight          float64
 	bestTextBlockLayout int
+	baseAspect          float64
 	imageWidth          float64
 	imageHeight         float64
 	xOffset             float64
@@ -1206,13 +1207,39 @@ func printHelp() string {
 	return strings.ReplaceAll(helpbase, "{{Settings}}", o.String())
 }
 
-func (item *PbItem) packAspects() (float64, float64) {
-	return item.packAspect("pack-max-aspect"), item.packAspect("pack-min-aspect")
+func (item *PbItem) packAspects() (float64, float64, float64, float64) {
+	aspectsSetting := item.Setting("pack-aspects")
+	aspects := strings.SplitN(aspectsSetting, ",", 4)
+
+	landscapeMax, landscapeMin, portraitMax, portraitMin := 2.0, 1.0, 1.0, 0.5
+
+	switch len(aspects) {
+	case 1:
+		landscapeMax = packAspect(aspects[0], landscapeMax)
+		landscapeMin = 1.0
+		portraitMax = 1.0
+		portraitMin = 1 / landscapeMax
+	case 2:
+		landscapeMax = packAspect(aspects[0], landscapeMax)
+		landscapeMin = packAspect(aspects[1], landscapeMin)
+		portraitMax = 1 / landscapeMin
+		portraitMin = 1 / landscapeMax
+	case 3:
+		landscapeMax = packAspect(aspects[0], landscapeMax)
+		landscapeMin = packAspect(aspects[1], landscapeMin)
+		portraitMax = 1 / landscapeMin
+		portraitMin = packAspect(aspects[2], portraitMin)
+	case 4:
+		landscapeMax = packAspect(aspects[0], landscapeMax)
+		landscapeMin = packAspect(aspects[1], landscapeMin)
+		portraitMax = packAspect(aspects[2], portraitMax)
+		portraitMin = packAspect(aspects[3], portraitMin)
+	}
+
+	return landscapeMax, landscapeMin, portraitMax, portraitMin
 }
 
-func (item *PbItem) packAspect(which string) float64 {
-	aspect := 1.0
-	aspectString := item.Setting(which)
+func packAspect(aspectString string, aspect float64) float64 {
 	aspectString = strings.ReplaceAll(aspectString, "x", ":")
 	if strings.ContainsAny(aspectString, ":") {
 		parts := strings.SplitN(aspectString, ":", 2)
@@ -1260,8 +1287,7 @@ var defaultSettings = map[string]DefaultSetting{
 	"footer":          {"", "Page", "Same as `header`, but with text offset below the bottom margin."},
 	"pack-page":       {"false", "Page", "Pack contents of page"},
 	"pack-gutter":     {"6.0", "Page", "Gutter to use when packing"},
-	"pack-max-aspect": {"2:1", "Page", "Maximum aspect to resize to when packing"},
-	"pack-min-aspect": {"1:2", "Page", "Maximum aspect to resize to when packing"},
+	"pack-aspects":    {"2:1,1:1,1:2,1:1", "Page", "Aspect limits to restrict to when packing (landscape-max, landscape-min, portrait-min, portrait-max)"},
 
 	// page level options
 	"output-file":   {"out.pdf", "Page Option", ""},

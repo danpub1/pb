@@ -1064,10 +1064,16 @@ func canMoveGrow(items []*PbItem, ii int, amount float64, gutter float64, page *
 	}
 
 	if items[ii].itemType == ItemTypeImage && move == false {
-		maxAspect, minAspect := items[ii].packAspects()
+		landscapeMax, landscapeMin, portraitMax, portraitMin := items[ii].packAspects()
 		aspect := items[ii].imageWidth / items[ii].imageHeight
-		if aspect > maxAspect || aspect < minAspect {
-			canMove = 0
+		if items[ii].baseAspect > 1 {
+			if aspect > landscapeMax || aspect < landscapeMin {
+				canMove = 0
+			}
+		} else {
+			if aspect > portraitMax || aspect < portraitMin {
+				canMove = 0
+			}
 		}
 	}
 
@@ -1122,6 +1128,8 @@ func packPages(pbBook *PbBook, outPageRange string, firstIteration bool) {
 								foundInvalid = true
 								log.Printf("Found Invalid Item on page %v\n", pp)
 								break findItems
+							} else if item.itemType == ItemTypeImage {
+								item.baseAspect = item.imageWidth / item.imageHeight
 							}
 							items = append(items, item)
 						}

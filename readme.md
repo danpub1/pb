@@ -358,12 +358,11 @@ Book-Level Settings
 
 Page-Level Settings
 -------------------
+* `pack-aspects`: Aspect limits to restrict to when packing (landscape-max, landscape-min, portrait-min, portrait-max). [2:1,1:1,1:2,1:1]
 * `background`: Color or named image to use as the page background. [#F]
 * `pack-gutter`: Gutter to use when packing. [6.0]
 * `row-gutter`: Gutter, in units, between rows. [6.0]
 * `current-page`: Include this page in the output regardless of whether it included in the page range. [false]
-* `pack-max-aspect`: Maximum aspect to resize to when packing. [2:1]
-* `pack-min-aspect`: Maximum aspect to resize to when packing. [1:2]
 * `header`: Name of even page text, Name of odd page text, Offset from the margin in units, Number of Leading Pages without Page Numbers, Number of Trailing Pages without Page Numbers. Example: `EvenHeader,OddHeader,2.5,2,2`. The header names are named text items which are offset above or below the top margin by the offset. Page numbers and total pages are calculated assuming some unnumbered pages before and after. []
 * `pack-page`: Pack contents of page. [false]
 * `margin`: Page margin in units, All, Top & Bottom x Left & Right, Top x Right x Bottom x Left. Examples: `24`, `24.5x18.1`, `36x24x36x12`. When binding is `side`, the right margin starts out as binding and the left margin is the edge.  When binding is `top`, the top margin is initially the binding and the bottom margin is the edge. [24.0]
@@ -678,7 +677,7 @@ which is probably a reasonable stand-in for "balanced layout", where a larger nu
   * Highlights, midtones, shadows Adjustment
   * HSL Adjustment
   * Input Colorspace
-* Everything supported with drag and drop: Redirect verbose:P and verbose:X output with a book-level setting - to create both pdf and .pb files in one command without options.
+* Everything supported with drag and drop: Redirect verbose:P and verbose:PP output with a book-level setting - to create both pdf and .pb files in one command without options.
 * Input and output handlers for more file types
 * Powerpoint output
 * Image, font https://... downloaded and then cached (in a zip file?)

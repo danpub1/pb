@@ -546,7 +546,7 @@ which is probably a reasonable stand-in for "balanced layout", where a larger nu
   * Highlights, midtones, shadows Adjustment
   * HSL Adjustment
   * Input Colorspace
-* Everything supported with drag and drop: Redirect verbose:P and verbose:X output with a book-level setting - to create both pdf and .pb files in one command without options.
+* Everything supported with drag and drop: Redirect verbose:P and verbose:PP output with a book-level setting - to create both pdf and .pb files in one command without options.
 * Input and output handlers for more file types
 * Powerpoint output
 * Image, font https://... downloaded and then cached (in a zip file?)

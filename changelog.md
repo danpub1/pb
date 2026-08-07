@@ -2,7 +2,7 @@
 ## Unreleased
 ### Added
 * Tip for making a collage
-* pack-max-aspect, pack-min-aspect
+* Add pack-aspects to keep pictures from getting too elongated or too square
 * After packing, center items in remaining space
 ### Changed
 ### Deprecated
