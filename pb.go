@@ -255,8 +255,78 @@ func main() {
 			log.Printf("Read input file")
 		}
 
+		sortSetting := ""
+		if len(items) > 0 {
+			if vv, exists := items[0].settings["sort"]; exists {
+				if _, exists := strings.CutSuffix(vv, ",all"); exists {
+					sortSetting = vv
+				}
+			}
+		}
+
+		if len(sortSetting) > 0 && strings.Contains(strings.TrimSuffix(sortSetting, ",all"), ",") {
+			startRange := 0
+			endRange := 0
+
+			parts := strings.SplitN(sortSetting, ",", 3)
+			startRange = Atoi(parts[0])
+			endRange = Atoi(parts[1])
+
+			var bestPerPageRange int
+			var bestPerRowRange int
+			var bestPageCount int
+			var bestIndex int
+			for ii := range endRange - startRange + 1 {
+				newItems := make([]PbItem, 0, len(items))
+				for jj := range items {
+					newItems = append(newItems, items[jj].DeepCopy())
+					newItems[jj].pb = newItems
+				}
+
+				getImageDimensions(newItems)
+				sortItems(newItems, fmt.Sprintf("%v,all", ii+startRange), false)
+				newItems = deduplicate(newItems)
+				newItems = addDayHeaders(newItems)
+
+				ApplyItemSpecificStyles(newItems) // Needs exifDate & fileDate from getImageDimensions
+				getTextDimensions(newItems)
+
+				// break into columns, rows
+				pbBook, perPageRange, perRowRange := breakIntoPages(newItems)
+				pageCount := len(pbBook.pages)
+
+				const rowRangeWt = 0.5
+				const pageRangeWt = 1.0 - rowRangeWt
+				if ii == 0 || pageCount > 0 {
+					if ii == 0 ||
+						pageCount < bestPageCount ||
+						(pageCount == bestPageCount && float64(perPageRange)*pageRangeWt+float64(perRowRange)*rowRangeWt < float64(bestPerPageRange)*pageRangeWt+float64(bestPerRowRange)*rowRangeWt) {
+						bestPageCount = pageCount
+						bestPerPageRange = perPageRange
+						bestPerRowRange = perRowRange
+						bestIndex = ii
+						if Opts.Verbose("D") {
+							log.Printf("Best Page Count: %v, best per-page-range: %v, best per-row-range: %v, seed: %v", bestPageCount, bestPerPageRange, bestPerRowRange, ii+startRange)
+						}
+					} else if pageCount == bestPageCount && float64(perPageRange)*pageRangeWt+float64(perRowRange)*rowRangeWt < float64(bestPerPageRange)*pageRangeWt+float64(bestPerRowRange)*rowRangeWt {
+						if Opts.Verbose("D") {
+							log.Printf("Best Page Count: %v, best per-page-range: %v, best per-row-range: %v, seed: %v", bestPageCount, bestPerPageRange, bestPerRowRange, ii+startRange)
+						}
+					}
+				}
+			}
+
+			sortSetting = fmt.Sprintf("%v,all", bestIndex+startRange)
+			if Opts.Verbose("D") {
+				log.Printf("Calculated best seed: %v", bestIndex+startRange)
+			}
+		}
+
 		numImages := getImageDimensions(items)
-		sortItems(items)
+		if Opts.Verbose("D") {
+			log.Printf("Sorting with sortSetting = %v", sortSetting)
+		}
+		sortItems(items, sortSetting, true)
 		items = deduplicate(items)
 		items = addDayHeaders(items)
 
@@ -272,7 +342,7 @@ func main() {
 		}
 
 		// break into columns, rows
-		pbBook := breakIntoPages(items)
+		pbBook, _, _ := breakIntoPages(items)
 		if Opts.Verbose("D") {
 			log.Printf("Paginated: %v pages", len(pbBook.pages))
 		}

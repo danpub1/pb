@@ -69,7 +69,7 @@ func (source *breakIntoPageState) DeepCopy() breakIntoPageState {
 	}
 }
 
-func breakIntoPages(items []PbItem) *PbBook {
+func breakIntoPages(items []PbItem) (*PbBook, int, int) {
 	s := breakIntoPageState{}
 	stateStack := make([]breakIntoPageState, len(items))
 
@@ -260,11 +260,15 @@ func breakIntoPages(items []PbItem) *PbBook {
 					ii = ii - 1
 					s = stateStack[ii].DeepCopy()
 				} else {
-					// TODO: If this is the only thing on the page and it's still too big? (Endless loop)
-					VerboseLog(fmt.Sprintf("Column too tall, breaking page at %v\n", ii))
-					items[ii].Set("page-break", "true")
-					ii = ii - 1
-					s = stateStack[ii].DeepCopy()
+					if !items[ii].BoolSetting("page-break") {
+						// TODO: If this is the only thing on the page and it's still too big? (Endless loop)
+						VerboseLog(fmt.Sprintf("Column too tall, breaking page at %v\n", ii))
+						items[ii].Set("page-break", "true")
+						ii = ii - 1
+						s = stateStack[ii].DeepCopy()
+					} else {
+						VerboseLog(fmt.Sprintf("Column too tall at %v\n", ii))
+					}
 				}
 			}
 		}
@@ -272,34 +276,53 @@ func breakIntoPages(items []PbItem) *PbBook {
 
 	pbBook := ToPbBook(items)
 
-	for pp, page := range pbBook.pages {
-		rowLengths := make([]float64, 0)
+	mostImagesOnPage := 0
+	leastImagesOnPage := 0
+	mostImagesInRow := 0
+	leastImagesInRow := 0
+
+	for _, page := range pbBook.pages {
+		imagesOnPage := 0
+		pageMostImagesInRow := 0
+		pageLeastImagesInRow := 0
 		for row := range page.rows {
+			imagesInRow := 0
 			for column := range page.rows[row].columns {
 				for item := range page.rows[row].columns[column].items {
 					if page.rows[row].columns[column].items[item].item.inLayout {
-						rowLengths = accrueRowLength(rowLengths, row, page.rows[row].columns[column].items[item].item)
+						imagesOnPage++
+						imagesInRow++
 					}
 				}
 			}
-		}
-		shortestRow := -1.0
-		longestRow := -1.0
-		for _, rowLength := range rowLengths {
-			if shortestRow == -1.0 || shortestRow > rowLength {
-				shortestRow = rowLength
+
+			if imagesInRow > pageMostImagesInRow {
+				pageMostImagesInRow = imagesInRow
 			}
-			if longestRow == -1.0 || longestRow < rowLength {
-				longestRow = rowLength
+
+			if imagesInRow < pageLeastImagesInRow || pageLeastImagesInRow == 0 {
+				pageLeastImagesInRow = imagesInRow
 			}
 		}
 
-		if Opts.Verbose("DD") {
-			log.Printf("Page %v: %v Rows, Row Length Ratio: %v\n", pp+1, len(page.rows), shortestRow/longestRow)
+		if pageLeastImagesInRow < leastImagesInRow || leastImagesInRow == 0 {
+			leastImagesInRow = pageLeastImagesInRow
 		}
 
+		if pageMostImagesInRow > mostImagesInRow {
+			mostImagesInRow = pageMostImagesInRow
+		}
+
+		if imagesOnPage > mostImagesOnPage {
+			mostImagesOnPage = imagesOnPage
+		}
+
+		if imagesOnPage < leastImagesOnPage || leastImagesOnPage == 0 {
+			leastImagesOnPage = imagesOnPage
+		}
 	}
-	return pbBook
+
+	return pbBook, mostImagesOnPage - leastImagesOnPage, mostImagesInRow - leastImagesInRow
 }
 
 var firstTimeResizeCache bool = true

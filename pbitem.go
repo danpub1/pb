@@ -652,31 +652,33 @@ func (item *PbItem) baseDimensions() (float64, float64, float64, float64, int) {
 	pageAspect := maxW / maxH
 	cg := item.CaptionGutter()
 
-	for {
-		tw, th, best := item.textForImageDimensions(w, h)
+	tw, th, best := item.textForImageDimensions(w, h)
 
-		if math.Max(w, tw) <= maxW && h+th+cg <= maxH {
-			return tw, th, w, h, best
-		}
+	if math.Max(w, tw) <= maxW && h+th+cg <= maxH {
+		return tw, th, w, h, best
+	}
 
-		// TODO: This is not the right way
-		log.Print("Unsupported resize")
-		if aspect > pageAspect {
-			w = maxW
-			h = w / aspect
-			if h+th+cg > maxH {
-				h = maxH - th - cg
-				w = h * aspect
-			}
-		} else {
+	// TODO: This is not the right way
+	log.Print("Unsupported resize")
+
+	if aspect > pageAspect {
+		w = maxW
+		h = w / aspect
+		if h+th+cg > maxH {
 			h = maxH - th - cg
 			w = h * aspect
-			if w > maxW {
-				w = maxW
-				h = w / aspect
-			}
+		}
+	} else {
+		h = maxH - th - cg
+		w = h * aspect
+		if w > maxW {
+			w = maxW
+			h = w / aspect
 		}
 	}
+
+	tw, th, best = item.textForImageDimensions(w, h)
+	return tw, th, w, h, best
 }
 
 type ImageReader struct {
@@ -1148,6 +1150,35 @@ func (source *PbItem) DeepCopy() PbItem {
 	maps.Copy(dest.settings, source.settings)
 	dest.itemType = source.itemType
 	dest.pb = source.pb
+
+	// dest.textBlockLayouts
+	dest.imageWidthPx = source.imageWidthPx
+	dest.imageHeightPx = source.imageHeightPx
+	dest.fileDate = source.fileDate
+	dest.exifOrientation = source.exifOrientation
+	//dest.exifDate = source.exifDate
+	//dest.imageDate = source.imageDate
+
+	dest.page = source.page
+	dest.row = source.row
+	dest.column = source.column
+	dest.textWidth = source.textWidth
+	dest.textHeight = source.textHeight
+	dest.bestTextBlockLayout = source.bestTextBlockLayout
+	dest.baseAspect = source.baseAspect
+	dest.imageWidth = source.imageWidth
+	dest.imageHeight = source.imageHeight
+	dest.xOffset = source.xOffset
+	dest.yOffset = source.yOffset
+	dest.inLayout = source.inLayout
+
+	// settings
+	dest.hasSettings = source.hasSettings
+	dest.bookSetting = source.bookSetting
+	dest.pageSetting = source.pageSetting
+	dest.rowSetting = source.rowSetting
+	dest.columnSetting = source.columnSetting
+
 	return dest
 }
 
@@ -1275,7 +1306,6 @@ var defaultSettings = map[string]DefaultSetting{
 	"cache-mode":  {"0", "Book Option", "Controls Image Cache. 0=Do not cache, 1=Cache during a run but flush cache at beginning of run, 2=Fully cache image measurements across runs."},
 	"deduplicate": {"false", "Book Option", "Deletes duplicate images"},
 	"assemble":    {"", "Book Option", "Assembles pages from PDFs for printing"},
-	"seed":        {"1", "Book Option", "Random Seed"},
 
 	// page
 	"page-size":       {"612.0x792.0", "Page", "Page size in units, width x height."},
@@ -1307,7 +1337,7 @@ var defaultSettings = map[string]DefaultSetting{
 	"item-gutter":           {"6.0", "Column", "Gutter, in units, between items in a column."},
 	"keep-columns-together": {"false", "Column", "If a column becomes too wide and there is not room for it in the next row, move it as a unit to the next page, versus breaking the page and starting a new page with the item."},
 	"spread-percent":        {"50.0", "Column/Row/Page", "How `spreadmiddle` or `spreadcenter` spreads extra at top/bottom or left/right. Useful for positioning one item 1/3 of the way down the page instead of at the center."},
-	"sort":                  {"none", "Column/Row/Page/Book", "Sort consecutive images. `date` sorts by date first and then by filename, `filename` sorts only by filename, `none` or the empty string retains the given order."},
+	"sort":                  {"none", "Column/Row/Page/Book", "Sort consecutive images. `date` sorts by date first and then by filename, `filename` sorts only by filename, `none` or the empty string retains the given order. A number seeds a hash function and pseudorandomly sorts. Two numbers separated by commas selects the best-arranged layout. Suffixed with ',all' sorts at the book level."},
 
 	// image or text (or similar related settings)
 	"item-align":   {"center", "Image/Text", "How to align this item in a column versus other items in the colum.  One of: `left`, `center`, `right`. `binding`, `edge`."},

@@ -388,7 +388,7 @@ Column/Row/Page-Level Settings
 
 Column/Row/Page/Book-Level Settings
 -----------------------------------
-* `sort`: Sort consecutive images. `date` sorts by date first and then by filename, `filename` sorts only by filename, `none` or the empty string retains the given order. [none]
+* `sort`: Sort consecutive images. `date` sorts by date first and then by filename, `filename` sorts only by filename, `none` or the empty string retains the given order. A number seeds a hash function and pseudorandomly sorts. Two numbers separated by commas selects the best-arranged layout. Suffixed with ',all' sorts at the book level. [none]
 
 Image/Text-Level Settings
 -------------------------
@@ -460,7 +460,6 @@ Book-Level Options
 * `cache-mode`: Controls Image Cache. 0=Do not cache, 1=Cache during a run but flush cache at beginning of run, 2=Fully cache image measurements across runs. [0]
 * `deduplicate`: Deletes duplicate images. [false]
 * `page-range`: Include the specified pages in the output. `*` means only changed pages, `$` means changed pages but update PDF.  Examples: `1-10,50-`, `1-2,*`. [$]
-* `seed`: Random Seed. [1]
 * `watch`: Regenerate the output when the input file changes, versus generate the output once and then exit. [true]
 * `verbose`: Zero or more of D, P, X, L.  D=Details, P=Print, X=Print with comments, L=Verbose Logging. [D]
 

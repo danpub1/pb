@@ -665,28 +665,15 @@ func compareItemsByFilename(a PbItem, b PbItem) int {
 	return compareFilenames(a.Setting("image"), b.Setting("image"))
 }
 
-var _seed = ""
+func compareItemsByHash(seed string) func(a PbItem, b PbItem) int {
+	return func(a PbItem, b PbItem) int {
+		hashbytes := sha256.Sum256([]byte(a.Setting("image") + seed))
+		ahash := hex.EncodeToString(hashbytes[:])
+		hashbytes = sha256.Sum256([]byte(b.Setting("image") + seed))
+		bhash := hex.EncodeToString(hashbytes[:])
 
-func seed(item *PbItem) string {
-	if len(_seed) == 0 {
-		_seed = item.BookSetting("seed")
-		if len(_seed) == 0 {
-			_seed = fmt.Sprint(time.Now().UnixNano())
-			if Opts.Verbose("DD") {
-				log.Printf("Seed: %v", _seed)
-			}
-		}
+		return strings.Compare(ahash, bhash)
 	}
-	return _seed
-}
-
-func compareItemsByHash(a PbItem, b PbItem) int {
-	hashbytes := sha256.Sum256([]byte(a.Setting("image") + seed(&a)))
-	ahash := hex.EncodeToString(hashbytes[:])
-	hashbytes = sha256.Sum256([]byte(b.Setting("image") + seed(&b)))
-	bhash := hex.EncodeToString(hashbytes[:])
-
-	return strings.Compare(ahash, bhash)
 }
 
 // was: ([0-9]{4,4})([0-9]{2,2})([0-9]{2,2})_([0-9]{2,2})([0-9]{2,2})([0-9]{2,2})
@@ -767,10 +754,53 @@ func compareItemsByDate(a PbItem, b PbItem) int {
 	return compareItemsByFilename(a, b)
 }
 
-func sortItems(items []PbItem) {
+func sortItems(items []PbItem, sortSetting string, verbose bool) {
 	startItem := -1
 	endItem := -1
-	sortSetting := ""
+
+	// Explicit Book-level sorting of everything, leaving non-image items in place
+	if len(sortSetting) > 0 {
+		// already determined by caller
+		sortSetting, _ = strings.CutSuffix(sortSetting, ",all")
+
+		justImages := make([]PbItem, 0)
+		for ii := range items {
+			if items[ii].itemType == ItemTypeImage {
+				justImages = append(justImages, items[ii])
+			}
+		}
+
+		if len(justImages) > 0 {
+			switch sortSetting {
+			case "none":
+			default:
+				slices.SortFunc(justImages, compareItemsByHash(sortSetting))
+				if verbose && Opts.Verbose("D") {
+					log.Printf("Sorted %v items", len(justImages))
+				}
+			case "filename":
+				slices.SortFunc(justImages, compareItemsByFilename)
+				if verbose && Opts.Verbose("D") {
+					log.Printf("Sorted %v items", len(justImages))
+				}
+			case "date":
+				slices.SortFunc(justImages, compareItemsByDate)
+				if verbose && Opts.Verbose("D") {
+					log.Printf("Sorted %v items", len(justImages))
+				}
+			}
+
+			jj := 0
+			for ii := range items {
+				if items[ii].itemType == ItemTypeImage {
+					items[ii] = justImages[jj]
+					jj++
+				}
+			}
+		}
+		return
+	}
+
 	for ii := range items {
 		if items[ii].itemType == ItemTypeImage && startItem == -1 {
 			sortSetting = items[ii].ColumnSetting("sort")
@@ -783,19 +813,20 @@ func sortItems(items []PbItem) {
 		if items[ii].itemType != ItemTypeImage || ii+1 == len(items) {
 			if endItem > startItem {
 				switch sortSetting {
-				case "hash":
-					slices.SortFunc(items[startItem:endItem+1], compareItemsByHash)
-					if Opts.Verbose("D") {
+				case "none":
+				default:
+					slices.SortFunc(items[startItem:endItem+1], compareItemsByHash(sortSetting))
+					if verbose && Opts.Verbose("D") {
 						log.Printf("Sorted items[%v:%v]", startItem, endItem+1)
 					}
 				case "filename":
 					slices.SortFunc(items[startItem:endItem+1], compareItemsByFilename)
-					if Opts.Verbose("D") {
+					if verbose && Opts.Verbose("D") {
 						log.Printf("Sorted items[%v:%v]", startItem, endItem+1)
 					}
 				case "date":
 					slices.SortFunc(items[startItem:endItem+1], compareItemsByDate)
-					if Opts.Verbose("D") {
+					if verbose && Opts.Verbose("D") {
 						log.Printf("Sorted items[%v:%v]", startItem, endItem+1)
 					}
 				}
