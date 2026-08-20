@@ -4,7 +4,10 @@
 * Tip for making a collage
 * Add pack-aspects to keep pictures from getting too elongated or too square
 * After packing, center items in remaining space
+* Add `sort:value,all` to sort all images in a file, keeping texts in place
+* Add `sort:#,#,all` to find best sort for a file within a range of sort seeds
 ### Changed
+* Replace `seed:#` and `sort:hash` with `sort:#`
 ### Deprecated
 ### Removed
 ### Fixed
