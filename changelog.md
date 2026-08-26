@@ -6,10 +6,14 @@
 * After packing, center items in remaining space
 * Add `sort:value,all` to sort all images in a file, keeping texts in place
 * Add `sort:#,#,all` to find best sort for a file within a range of sort seeds
+* Add definition of external image conversion commands and output formatters as specific style names
+* Add `convert` to apply external image conversion commands
 ### Changed
 * Replace `seed:#` and `sort:hash` with `sort:#`
+* Add `{{%page%}}` to output filename format instead of trying to decide when to add a number or not
 ### Deprecated
 ### Removed
+* `output-mozjpeg` and `output-mozjpeg-sampling`, replaced by external image conversion commands
 ### Fixed
 * Fix crop rectangle calculation
 * Do not break out of subsequent iterations with page-range:$

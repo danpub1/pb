@@ -1258,11 +1258,24 @@ func BasePath(fileName string) string {
 	return basePath
 }
 
-func ReadPbFile(inFiles []string, args []string) []PbItem {
+var rxExternalConvert, _ = regexp.Compile("^external-[a-z0-9]+(-[A-Z0-9]+){2,}$")
+
+func ReadPbFile(inFiles []string, args []string) ([]PbItem, map[string][]string) {
 	items := make([]PbItem, 0)
+	conversions := map[string][]string{}
 	for _, inFile := range inFiles {
-		oneItems, _ := readInputFile(inFile, map[string]string{})
+		oneItems, styles := readInputFile(inFile, map[string]string{})
 		items = append(items, oneItems...)
+		for name, style := range styles {
+			if rxExternalConvert.MatchString(name) {
+				parts := strings.Split(style, " ")
+				if len(parts) > 1 {
+					name = strings.TrimPrefix(name, "external-")
+					conversions[name] = parts
+				}
+
+			}
+		}
 	}
 
 	bookIdxs := make([]int, 0)
@@ -1318,5 +1331,5 @@ func ReadPbFile(inFiles []string, args []string) []PbItem {
 
 	ApplyDefaultCaptions(items)
 
-	return items
+	return items, conversions
 }

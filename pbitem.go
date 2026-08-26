@@ -349,6 +349,18 @@ func (item *PbItem) Size() (float64, float64) {
 	return 0, 0
 }
 
+func (item *PbItem) ConversionSetting() [][]string {
+	rv := make([][]string, 0)
+	conversions := strings.Split(item.Setting("convert"), ";")
+	if len(conversions) > 0 && len(conversions[0]) > 0 {
+		for _, conversion := range conversions {
+			rv = append(rv, strings.Split(conversion, ","))
+		}
+	}
+
+	return rv
+}
+
 func (item *PbItem) SigmoidalSetting() (float64, float64) {
 	// factor (-10-10), midpoint (0.5)
 	parts := strings.SplitN(item.Setting("sigmoidal"), ",", 2)
@@ -1286,18 +1298,18 @@ func packAspect(aspectString string, aspect float64) float64 {
 
 var defaultSettings = map[string]DefaultSetting{
 	// book
-	"units":                   {"pt", "Book", "The units of measure used in laying out the book.  One of `in`, `cm`, `mm`, `pt`"},
-	"density":                 {"2.0", "Book", "Pixels per unit when converting the content to a page bitmap.  2 pixels per pt (144 ppi) could be considered for a preview quality, and 5 pixels per pt (360 ppi) could be appropriate for printing."},
-	"binding":                 {"none", "Page", "The book's binding location, one of `side`, `top`, `none`.  Controls if margins are alternated by even/odd pages."},
-	"output-gamma":            {"1.0", "Book", "Apply a gamma correction to the page bitmap. This is useful to lighten or darken printed output so it better matches the onscreen experience."},
-	"output-sharpen":          {"0.0", "Book", "Apply sharpening to the page bitmap after resizing is complete."},
-	"output-compression":      {"92", "Book", "The jpeg compression level when creating the page bitmap"},
-	"output-mozjpeg":          {"false", "Book", "Use the mozjpeg compressor to create the page bitmap. Slower, but produces smaller files at the same quality."},
-	"output-mozjpeg-sampling": {"1x1", "Book", "The subsampling used by mozjpeg. Typically one of: `1x1` (4:4:4), `1x2` (4:4:0), `2x1` (4:2:2), `2x2` (4:2:0), `4x1` (4:1:1), `4x2` (4:1:0)."},
-	"day-headers":             {"", "Book", "Either `auto` or a named text to use as day headers."},
-	"title":                   {"", "Book", "Title."},
-	"subtitle":                {"", "Book", "Subtitle."},
-	"max-pages":               {"0", "Book", "Maximum number of pages per PDF file"},
+	"units":              {"pt", "Book", "The units of measure used in laying out the book.  One of `in`, `cm`, `mm`, `pt`"},
+	"density":            {"2.0", "Book", "Pixels per unit when converting the content to a page bitmap.  2 pixels per pt (144 ppi) could be considered for a preview quality, and 5 pixels per pt (360 ppi) could be appropriate for printing."},
+	"binding":            {"none", "Page", "The book's binding location, one of `side`, `top`, `none`.  Controls if margins are alternated by even/odd pages."},
+	"output-gamma":       {"1.0", "Book", "Apply a gamma correction to the page bitmap. This is useful to lighten or darken printed output so it better matches the onscreen experience."},
+	"output-sharpen":     {"0.0", "Book", "Apply sharpening to the page bitmap after resizing is complete."},
+	"output-compression": {"92", "Book", "The jpeg compression level when creating the page bitmap"},
+	// "output-mozjpeg":          {"false", "Book", "Use the mozjpeg compressor to create the page bitmap. Slower, but produces smaller files at the same quality."},
+	// "output-mozjpeg-sampling": {"1x1", "Book", "The subsampling used by mozjpeg. Typically one of: `1x1` (4:4:4), `1x2` (4:4:0), `2x1` (4:2:2), `2x2` (4:2:0), `4x1` (4:1:1), `4x2` (4:1:0)."},
+	"day-headers": {"", "Book", "Either `auto` or a named text to use as day headers."},
+	"title":       {"", "Book", "Title."},
+	"subtitle":    {"", "Book", "Subtitle."},
+	"max-pages":   {"0", "Book", "Maximum number of pages per PDF file"},
 
 	// book level options
 	"verbose":     {"D", "Book Option", "Zero or more of D, P, X, L.  D=Details, P=Print, X=Print with comments, L=Verbose Logging"},
@@ -1379,6 +1391,7 @@ var defaultSettings = map[string]DefaultSetting{
 	"caption":    {"", "Image", "Caption Text. Typically not specified using this setting."},
 	"subject":    {"5050", "Image", "Subject location 1-9 horizontally, 1-9 vertically"},
 	"pack":       {"true", "Image", "Include this when packing"},
+	"convert":    {"", "Image", "Execute external image processing commands"},
 
 	// text
 	"caption-position":   {"below", "Text", "Caption position above or below"},

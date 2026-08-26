@@ -118,9 +118,9 @@ func ApplyRoundedCorners(picture image.Image, sCornerRadius string, density floa
 
 func writeHeader(outFilename string) (int, error) {
 	ext := filepath.Ext(outFilename)
-	format := strings.ToLower(ext)
+	format := strings.TrimPrefix(strings.ToLower(ext), ".")
 
-	if format == ".pdf" {
+	if format == "pdf" {
 		bytes := []byte("%PDF-1.7\n")
 		err := os.WriteFile(outFilename, bytes, 0666)
 		if err != nil {
@@ -134,9 +134,9 @@ func writeHeader(outFilename string) (int, error) {
 
 func writeNewline(outFilename string) (int, error) {
 	ext := filepath.Ext(outFilename)
-	format := strings.ToLower(ext)
+	format := strings.TrimPrefix(strings.ToLower(ext), ".")
 
-	if format == ".pdf" {
+	if format == "pdf" {
 		out, err := os.OpenFile(outFilename, os.O_WRONLY|os.O_APPEND, 0666)
 		if err != nil {
 			log.Print(err)
@@ -167,9 +167,9 @@ type PageInfo struct {
 
 func writeFooter(outFilename string, bytesWritten int, pageInfo []PageInfo) (int, error) {
 	ext := filepath.Ext(outFilename)
-	format := strings.ToLower(ext)
+	format := strings.TrimPrefix(strings.ToLower(ext), ".")
 
-	if format == ".pdf" {
+	if format == "pdf" {
 		buffer := strings.Builder{}
 		numPages := len(pageInfo)
 
@@ -282,12 +282,30 @@ func (writer *PdfJpegObjectWriter) Finish() (int, error) {
 	return bytesWritten, err
 }
 
-func writeImageFile(picture image.Image, outFilename string, format string, useMozJpeg bool, compressionLevel int, samplingFactor string, cjpegCmd string) (int, error) {
-	if len(format) == 0 {
-		ext := filepath.Ext(outFilename)
-		format = strings.ToLower(ext)
+func conversionForFormat(conversions map[string][]string, format string) ([]string, string) {
+	var conversion []string
+	outFormatRx, _ := regexp.Compile("^[A-Z0-9]+-")
+	outFormat := ""
+	for kk := range conversions {
+		if fmts, exists := strings.CutPrefix(kk, "write-"); exists {
+			if outFormat = outFormatRx.FindString(fmts); len(outFormat) > 0 {
+				fmts = strings.ToLower(strings.TrimPrefix(fmts, outFormat))
+				outFormat = strings.ToLower(strings.TrimSuffix(outFormat, "-"))
+				if fmts == format || strings.HasPrefix(fmts, format+"-") || strings.HasSuffix(fmts, "-"+format) || strings.Contains(fmts, "-"+format+"-") {
+					conversion = conversions[kk]
+					break
+				}
+			}
+		}
 	}
+	return conversion, outFormat
+}
 
+func writeImageFile(picture image.Image, outFilename string, compressionLevel int, conversions map[string][]string) (int, error) {
+	ext := filepath.Ext(outFilename)
+	format := strings.TrimPrefix(strings.ToLower(ext), ".")
+
+	conversion, outFormat := conversionForFormat(conversions, format)
 	out, err := os.Create(outFilename)
 	if err != nil {
 		log.Print(err)
@@ -295,9 +313,21 @@ func writeImageFile(picture image.Image, outFilename string, format string, useM
 	}
 	defer out.Close()
 
-	switch format {
-	case ".png":
-		if err := png.Encode(out, picture); err != nil {
+	switch {
+	case conversion != nil:
+		writeExternal(picture, outFormat, out, compressionLevel, conversion)
+	case format == "ppm":
+		if err := netpbm.Encode(out, picture, &netpbm.EncodeOptions{Format: netpbm.PPM}); err != nil {
+			log.Print(err)
+			return 0, err
+		}
+		if Opts.Verbose("D") {
+			log.Printf("Wrote PPM to %v\n", outFilename)
+		}
+		return 0, nil
+	case format == "png":
+		encoder := png.Encoder{CompressionLevel: png.CompressionLevel(compressionLevel)}
+		if err := encoder.Encode(out, picture); err != nil {
 			log.Print(err)
 			return 0, err
 		}
@@ -305,43 +335,30 @@ func writeImageFile(picture image.Image, outFilename string, format string, useM
 			log.Printf("Wrote PNG to %v\n", outFilename)
 		}
 		return 0, nil
-	case ".jpg", ".jpeg":
-		if useMozJpeg {
-			bytesWritten := 0
-			var err error
-			if bytesWritten, err = writeJPEG(picture, out, compressionLevel, samplingFactor, cjpegCmd); err != nil {
-				log.Print(err)
-				return 0, err
-			}
-			return bytesWritten, nil
-		} else {
-			options := jpeg.Options{Quality: compressionLevel}
-			if err := jpeg.Encode(out, picture, &options); err != nil {
-				log.Print(err)
-				return 0, err
-			}
-			if Opts.Verbose("D") {
-				log.Printf("Wrote JPEG to %v\n", outFilename)
-			}
-			return 0, nil
+	case format == "jpg" || format == "jpeg":
+		options := jpeg.Options{Quality: compressionLevel}
+		if err := jpeg.Encode(out, picture, &options); err != nil {
+			log.Print(err)
+			return 0, err
 		}
+		if Opts.Verbose("D") {
+			log.Printf("Wrote JPEG to %v\n", outFilename)
+		}
+		return 0, nil
 	}
 
 	return 0, nil
 }
 
-func writePage(img image.Image, objNum int, curPage int, outFilename string, isPageRangeMulti bool, compressionLevel int, useMozJpeg bool, samplingFactor string, cjpegCmd string) (int, error) {
+func writePage(img image.Image, objNum int, curPage int, outFilename string, compressionLevel int, conversions map[string][]string) (int, error) {
+	outFilename = strings.ReplaceAll(outFilename, "{{%page%}}", fmt.Sprintf("%v", curPage))
 	ext := filepath.Ext(outFilename)
-	format := strings.ToLower(ext)
-	if isPageRangeMulti && format != ".pdf" {
-		outFilename = strings.TrimSuffix(outFilename, ext)
-		outFilename = fmt.Sprintf(outFilename+"-%v"+ext, curPage)
-	}
+	format := strings.TrimPrefix(strings.ToLower(ext), ".")
 
 	switch format {
-	case ".png", ".jpg", ".jpeg":
-		return writeImageFile(img, outFilename, format, useMozJpeg, compressionLevel, samplingFactor, cjpegCmd)
-	case ".pdf":
+	default:
+		return writeImageFile(img, outFilename, compressionLevel, conversions)
+	case "pdf":
 		var out *os.File
 		var err error
 		out, err = os.OpenFile(outFilename, os.O_WRONLY|os.O_APPEND, 0666)
@@ -354,9 +371,10 @@ func writePage(img image.Image, objNum int, curPage int, outFilename string, isP
 		writer := PdfJpegObjectWriter{}
 		writer.Start(out, objNum, img.Bounds().Dx(), img.Bounds().Dy())
 
-		if useMozJpeg {
-			var err error
-			if _, err = writeJPEG(img, writer, compressionLevel, samplingFactor, cjpegCmd); err != nil {
+		conversion, outFormat := conversionForFormat(conversions, "jpg")
+
+		if len(conversion) > 0 {
+			if _, err = writeExternal(img, outFormat, writer, compressionLevel, conversion); err != nil {
 				log.Print(err)
 				return 0, err
 			}
@@ -373,8 +391,6 @@ func writePage(img image.Image, objNum int, curPage int, outFilename string, isP
 
 		return writer.Finish()
 	}
-
-	return 0, nil
 }
 
 func scaleToRect(picture image.Image, item *PbItem) image.Image {
@@ -507,11 +523,19 @@ func tilt(picture image.Image, angle float64) (image.Image, int, int) {
 	return picture, (newWidth - orgWidth) / 2, (newHeight - orgHeight) / 2
 }
 
-func convertImage(picture image.Image) image.Image {
+func convertImage(picture image.Image, outFormat string, inFormat string, command string, params []string) image.Image {
 	// this is too slow for regular use
 	// may be able to adapt to use imagmagick or mozjpeg to create quality jpegs for final output
-	log.Print("executing convert")
-	cmd := exec.Command("convert", "-", "-adaptive-sharpen", "x5", "PPM:-")
+
+	// 	cmd := exec.Command("convert", "-", "-adaptive-sharpen", "x5", "PPM:-")
+
+	if Opts.Verbose("D") {
+		log.Printf("executing: %v %v", command, strings.Join(params, " "))
+	}
+	cmd := exec.Command(command, params...)
+
+	outFormat = strings.ToLower(outFormat)
+	inFormat = strings.ToLower(inFormat)
 
 	stdin, err1 := cmd.StdinPipe()
 	if err1 != nil {
@@ -519,33 +543,51 @@ func convertImage(picture image.Image) image.Image {
 		log.Print(err1)
 		return picture
 	}
+	defer stdin.Close()
 
 	stdout, err2 := cmd.StdoutPipe()
 	if err2 != nil {
-		stdin.Close()
 		log.Print("Error opening stdout")
 		log.Print(err2)
 		return picture
 	}
+	defer stdout.Close()
 
 	var wg sync.WaitGroup
 
 	wg.Add(1)
 	go func() {
-		defer stdin.Close()
 		defer wg.Done()
-		err := netpbm.Encode(stdin, picture, &netpbm.EncodeOptions{Format: netpbm.PPM})
+		var err error
+		switch outFormat {
+		case "ppm":
+			err = netpbm.Encode(stdin, picture, &netpbm.EncodeOptions{Format: netpbm.PPM})
+		case "jpg":
+			err = jpeg.Encode(stdin, picture, &jpeg.Options{Quality: 98})
+		default:
+			encoder := png.Encoder{CompressionLevel: png.BestSpeed}
+			err = encoder.Encode(stdin, picture)
+		}
 		if err != nil {
 			log.Print("Error encoding image")
 			log.Print(err)
 		}
+		stdin.Close()
 	}()
 
 	wg.Add(1)
 	go func() {
-		defer stdout.Close()
 		defer wg.Done()
-		newpicture, err := netpbm.Decode(stdout, &netpbm.DecodeOptions{})
+		var err error
+		var newpicture image.Image
+		switch inFormat {
+		case "ppm":
+			newpicture, err = netpbm.Decode(stdout, &netpbm.DecodeOptions{})
+		case "png":
+			newpicture, err = png.Decode(stdout)
+		default:
+			newpicture, _, err = image.Decode(stdout)
+		}
 		if err != nil {
 			log.Print("Error decoding image")
 			log.Print(err)
@@ -562,15 +604,23 @@ func convertImage(picture image.Image) image.Image {
 	}
 
 	wg.Wait()
-	log.Print("executed convert")
 	return picture
 }
 
-func writeJPEG(picture image.Image, out io.Writer, compressionLevel int, samplingFactor string, cjpegCmd string) (int, error) {
-	if len(cjpegCmd) == 0 {
-		cjpegCmd = "/home/dms/programming/mozjpeg-4.1.1/mozjpeg-4.1.1/cjpeg-static"
+func writeExternal(picture image.Image, intermediateFormat string, out io.Writer, compressionLevel int, conversion []string) (int, error) {
+	// if len(cjpegCmd) == 0 {
+	// 	cjpegCmd = "/home/dms/programming/mozjpeg-4.1.1/mozjpeg-4.1.1/cjpeg-static"
+	// }
+	// cmd := exec.Command(cjpegCmd, "-quality", fmt.Sprintf("%v", compressionLevel), "-sample", samplingFactor)
+
+	sCompressionLevel := fmt.Sprintf("%v", compressionLevel)
+	params := make([]string, 0, len(conversion)-1)
+	for ii := range conversion[1:] {
+		param := strings.ReplaceAll(conversion[ii+1], "{{%compressionLevel%}}", sCompressionLevel)
+		params = append(params, param)
 	}
-	cmd := exec.Command(cjpegCmd, "-quality", fmt.Sprintf("%v", compressionLevel), "-sample", samplingFactor)
+
+	cmd := exec.Command(conversion[0], params...)
 
 	bytesWritten := 0
 	var errReturn error
@@ -583,6 +633,7 @@ func writeJPEG(picture image.Image, out io.Writer, compressionLevel int, samplin
 		log.Print(err1)
 		return 0, err1
 	}
+	defer stdin.Close()
 
 	stdout, err2 := cmd.StdoutPipe()
 	if err2 != nil {
@@ -590,24 +641,33 @@ func writeJPEG(picture image.Image, out io.Writer, compressionLevel int, samplin
 		log.Print(err2)
 		return 0, err2
 	}
+	defer stdout.Close()
 
 	var wg sync.WaitGroup
 
 	wg.Add(1)
 	go func() {
-		defer stdin.Close()
 		defer wg.Done()
-		err := netpbm.Encode(stdin, picture, &netpbm.EncodeOptions{Format: netpbm.PPM})
+		var err error
+		switch intermediateFormat {
+		case "ppm":
+			err = netpbm.Encode(stdin, picture, &netpbm.EncodeOptions{Format: netpbm.PPM})
+		case "jpg":
+			err = jpeg.Encode(stdin, picture, &jpeg.Options{Quality: 98})
+		default:
+			encoder := png.Encoder{CompressionLevel: png.BestSpeed}
+			err = encoder.Encode(stdin, picture)
+		}
 		if err != nil {
 			log.Print("Error encoding image")
 			log.Print(err)
 			errReturn = err
 		}
+		stdin.Close()
 	}()
 
 	wg.Add(1)
 	go func() {
-		defer stdout.Close()
 		defer wg.Done()
 		p := make([]byte, 1024*64)
 		for {
@@ -617,6 +677,7 @@ func writeJPEG(picture image.Image, out io.Writer, compressionLevel int, samplin
 				if err2 != nil {
 					log.Print("error writing output file")
 					log.Print(err2)
+					stdout.Close()
 					errReturn = err2
 					break
 				}
@@ -628,8 +689,9 @@ func writeJPEG(picture image.Image, out io.Writer, compressionLevel int, samplin
 			}
 			if err != nil {
 				if err != io.EOF {
-					log.Print("Error readig input stream")
+					log.Printf("Error reading input stream: %v", err)
 					log.Print(err)
+					stdout.Close()
 					errReturn = err
 				}
 				break
@@ -646,9 +708,7 @@ func writeJPEG(picture image.Image, out io.Writer, compressionLevel int, samplin
 
 	wg.Wait()
 
-	if errReturn == nil {
-		log.Printf("%v: %v bytes", cmd.String(), bytesWritten)
-	} else {
+	if errReturn != nil {
 		log.Printf("%v: %v bytes, %v", cmd.String(), bytesWritten, errReturn)
 	}
 	return bytesWritten, errReturn
@@ -873,7 +933,7 @@ func Outline(picture image.Image, width int, height int, density float64, sOutli
 	return newPicture, newWidth, newHeight, -offset, -offset
 }
 
-func GetNamedImage(sImage string, left float64, top float64, density float64, pbBook *PbBook, cache []BackgroundCacheItem) (*BackgroundCacheItem, []BackgroundCacheItem) {
+func GetNamedImage(sImage string, left float64, top float64, density float64, pbBook *PbBook, cache []BackgroundCacheItem, conversions map[string][]string) (*BackgroundCacheItem, []BackgroundCacheItem) {
 	cacheItem := FindBackgroundCacheItem(cache, sImage)
 	if cacheItem == nil {
 		var backgroundItem *PbItem
@@ -884,7 +944,7 @@ func GetNamedImage(sImage string, left float64, top float64, density float64, pb
 			}
 		}
 		if backgroundItem != nil {
-			picture, xDots, yDots, deltaXtilt, deltaYtilt, imageWidthDots, imageHeightDots, newCache := renderImage(backgroundItem, left, top, density, pbBook, cache)
+			picture, xDots, yDots, deltaXtilt, deltaYtilt, imageWidthDots, imageHeightDots, newCache := renderImage(backgroundItem, left, top, density, pbBook, cache, conversions)
 			if picture != nil {
 				cache = newCache
 				cacheItem = &BackgroundCacheItem{sImage, picture, xDots, yDots, deltaXtilt, deltaYtilt, imageWidthDots, imageHeightDots}
@@ -895,7 +955,7 @@ func GetNamedImage(sImage string, left float64, top float64, density float64, pb
 	return cacheItem, cache
 }
 
-func ApplyFrame(picture image.Image, item *PbItem, density float64, pbBook *PbBook, cache []BackgroundCacheItem) (image.Image, int, int, []BackgroundCacheItem) {
+func ApplyFrame(picture image.Image, item *PbItem, density float64, pbBook *PbBook, cache []BackgroundCacheItem, conversions map[string][]string) (image.Image, int, int, []BackgroundCacheItem) {
 	frameInfo := item.ImageFrame()
 	if frameInfo.color.A == 0 && len(frameInfo.name) == 0 {
 		return picture, 0, 0, cache
@@ -913,7 +973,7 @@ func ApplyFrame(picture image.Image, item *PbItem, density float64, pbBook *PbBo
 
 	if !frameInfo.above && len(frameInfo.name) > 0 {
 		var cacheItem *BackgroundCacheItem
-		cacheItem, cache = GetNamedImage(frameInfo.name, 0, 0, density, pbBook, cache)
+		cacheItem, cache = GetNamedImage(frameInfo.name, 0, 0, density, pbBook, cache, conversions)
 		if cacheItem != nil {
 			framePic := imaging.Resize(cacheItem.picture, newWidth, newHeight, imaging.Lanczos)
 			draw.Draw(newPicture, image.Rect(0, 0, newWidth, newHeight), framePic, image.Point{}, draw.Over)
@@ -926,7 +986,7 @@ func ApplyFrame(picture image.Image, item *PbItem, density float64, pbBook *PbBo
 
 	if frameInfo.above && len(frameInfo.name) > 0 {
 		var cacheItem *BackgroundCacheItem
-		cacheItem, cache = GetNamedImage(frameInfo.name, 0, 0, density, pbBook, cache)
+		cacheItem, cache = GetNamedImage(frameInfo.name, 0, 0, density, pbBook, cache, conversions)
 		if cacheItem != nil {
 			framePic := imaging.Resize(cacheItem.picture, newWidth, newHeight, imaging.Lanczos)
 			draw.Draw(newPicture, image.Rect(0, 0, newWidth, newHeight), framePic, image.Point{}, draw.Over)
@@ -936,7 +996,7 @@ func ApplyFrame(picture image.Image, item *PbItem, density float64, pbBook *PbBo
 	return newPicture, xOffset, yOffset, cache
 }
 
-func renderImage(item *PbItem, left float64, top float64, density float64, pbBook *PbBook, cache []BackgroundCacheItem) (image.Image, int, int, int, int, int, int, []BackgroundCacheItem) {
+func renderImage(item *PbItem, left float64, top float64, density float64, pbBook *PbBook, cache []BackgroundCacheItem, conversions map[string][]string) (image.Image, int, int, int, int, int, int, []BackgroundCacheItem) {
 	picture := item.GetImage()
 	if picture == nil {
 		return nil, 0, 0, 0, 0, 0, 0, cache
@@ -978,6 +1038,42 @@ func renderImage(item *PbItem, left float64, top float64, density float64, pbBoo
 	factor, midpoint := item.SigmoidalSetting()
 	if factor != 0 {
 		picture = imaging.AdjustSigmoid(picture, midpoint, factor)
+	}
+
+	conversionsToDo := item.ConversionSetting()
+	for _, conversionToDo := range conversionsToDo {
+		if len(conversionToDo) > 0 {
+			matcher, compiled := regexp.Compile("^" + conversionToDo[0] + "-([A-Z0-9]+)-([A-Z0-9]+)$")
+			var theConversion []string
+			var inputFormat string
+			var outputFormat string
+			if compiled == nil {
+				for kk := range conversions {
+					if matches := matcher.FindStringSubmatch(kk); len(matches) == 3 {
+						theConversion = conversions[kk]
+						inputFormat = matches[1]
+						outputFormat = matches[2]
+						break
+					}
+				}
+			}
+			if len(theConversion) > 0 {
+				var params []string
+				if len(theConversion) > 1 {
+					params = make([]string, 0, len(theConversion)-1)
+					for _, param := range theConversion[1:] {
+						params = append(params, param)
+					}
+					for ii, replacement := range conversionToDo[1:] {
+						replacementValue := fmt.Sprintf("{{%%%v%%}}", ii+1)
+						for jj := range params {
+							params[jj] = strings.ReplaceAll(params[jj], replacementValue, replacement)
+						}
+					}
+				}
+				picture = convertImage(picture, inputFormat, outputFormat, theConversion[0], params)
+			}
+		}
 	}
 
 	flip := strings.ToLower(item.Setting("flip"))
@@ -1023,7 +1119,7 @@ func renderImage(item *PbItem, left float64, top float64, density float64, pbBoo
 	picture = ApplyRoundedCorners(picture, item.Setting("corner-radius"), density)
 
 	frameXOffset, frameYOffset := 0, 0
-	picture, frameXOffset, frameYOffset, cache = ApplyFrame(picture, item, density, pbBook, cache)
+	picture, frameXOffset, frameYOffset, cache = ApplyFrame(picture, item, density, pbBook, cache, conversions)
 	imageWidthDots = picture.Bounds().Dx()
 	imageHeightDots = picture.Bounds().Dy()
 
@@ -1135,7 +1231,7 @@ func maxOutFileName(item *PbItem, outFileInfo map[string]OutFileInfo) string {
 	outFileName := item.PageSetting("output-file")
 
 	ext := path.Ext(outFileName)
-	if strings.ToLower(ext) != ".pdf" {
+	if strings.TrimPrefix(strings.ToLower(ext), ".") != "pdf" {
 		return outFileName
 	}
 
@@ -1181,10 +1277,8 @@ func freeObject(pages []PageInfo) int {
 	return objNum
 }
 
-func renderPages(pbBook *PbBook, outPageRange string, firstIteration bool, pageHashes []string) {
+func renderPages(pbBook *PbBook, outPageRange string, firstIteration bool, pageHashes []string, conversions map[string][]string) {
 	outFileInfo := make(map[string]OutFileInfo, 0)
-
-	isPageRangeMulti := isPageRangeMulti(outPageRange, firstIteration, pbBook)
 
 	backgroundCache := make([]BackgroundCacheItem, 0)
 	usedObjs := make(map[string][]int)
@@ -1280,7 +1374,7 @@ func renderPages(pbBook *PbBook, outPageRange string, firstIteration bool, pageH
 			} else {
 				if len(sBackground) > 0 {
 					var cacheItem *BackgroundCacheItem
-					cacheItem, backgroundCache = GetNamedImage(sBackground, left, top, density, pbBook, backgroundCache)
+					cacheItem, backgroundCache = GetNamedImage(sBackground, left, top, density, pbBook, backgroundCache, conversions)
 					if cacheItem != nil {
 						draw.Draw(dst, image.Rect(cacheItem.xDots-cacheItem.deltaXtilt, cacheItem.yDots-cacheItem.deltaYtilt, cacheItem.xDots+cacheItem.imageWidthDots+cacheItem.deltaXtilt, cacheItem.yDots+cacheItem.imageHeightDots+cacheItem.deltaYtilt), cacheItem.picture, image.Point{}, draw.Over)
 					}
@@ -1312,7 +1406,7 @@ func renderPages(pbBook *PbBook, outPageRange string, firstIteration bool, pageH
 						}
 
 						if item.itemType == ItemTypeImage {
-							picture, xDots, yDots, deltaXtilt, deltaYtilt, imageWidthDots, imageHeightDots, newCache := renderImage(item, left, top, density, pbBook, backgroundCache)
+							picture, xDots, yDots, deltaXtilt, deltaYtilt, imageWidthDots, imageHeightDots, newCache := renderImage(item, left, top, density, pbBook, backgroundCache, conversions)
 							backgroundCache = newCache
 							if picture != nil {
 								draw.Draw(dst, image.Rect(xDots-deltaXtilt, yDots-deltaYtilt, xDots+imageWidthDots+deltaXtilt, yDots+imageHeightDots+deltaYtilt), picture, image.Point{}, draw.Over)
@@ -1375,7 +1469,7 @@ func renderPages(pbBook *PbBook, outPageRange string, firstIteration bool, pageH
 			w, h := item.PageSizePts()
 			info.offsets = append(info.offsets, PageInfo{info.n, w, h, pp, objNum, pageHashes[pp]})
 
-			thisn, thisErr := writePage(dst, objNum, pp, thisOutFilename, isPageRangeMulti, item.IntPageSetting("output-compression"), item.BoolPageSetting("output-mozjpeg"), item.PageSetting("output-mozjpeg-sampling"), item.PageSetting("cjpeg-command"))
+			thisn, thisErr := writePage(dst, objNum, pp, thisOutFilename, item.IntPageSetting("output-compression"), conversions)
 			if thisErr != nil {
 				lastOutFileInfo = nil
 				return
@@ -1427,7 +1521,7 @@ func renderPages(pbBook *PbBook, outPageRange string, firstIteration bool, pageH
 	lastOutFileInfo = outFileInfo
 }
 
-func renderTextImages(pbBook *PbBook) {
+func renderTextImages(pbBook *PbBook, conversions map[string][]string) {
 	for pp := range pbBook.pages {
 		page := &pbBook.pages[pp]
 
@@ -1452,7 +1546,7 @@ func renderTextImages(pbBook *PbBook) {
 						if sOutputFile := item.Setting("text-output-file"); len(sOutputFile) > 0 {
 							textImage, _, _ := renderText(item, item.textBlockLayouts, 0, 0, density)
 							if textImage != nil {
-								_, err := writeImageFile(textImage, sOutputFile, "", item.BoolSetting("output-mozjpeg"), item.IntSetting("output-compression"), item.Setting("output-mozjpeg-sampling"), item.PageSetting("cjpeg-command"))
+								_, err := writeImageFile(textImage, sOutputFile, item.IntSetting("output-compression"), conversions)
 								if err != nil {
 									log.Printf("Error writing text image: %v", err)
 								}

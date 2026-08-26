@@ -414,6 +414,55 @@ This allows breaking the output into multiple files, each with a title page
     * {{WW}} is replaced by the four digit year and week number, e.g. 2006-W1
     * {{WEEK}} is replaced by the textual week number, e.g. Week 1, 2006
 
+## External Commands
+
+External commands are defined as styles with specific names
+
+The style value is the space-separated command used that is invoked.
+
+### External Output Formatters
+
+Style name: external-write-FMT-FMT[-FMT...]  
+
+Defines an external file-writer, like ImageMagick or cjpeg.
+The first FMT is the format `pb` needs to write to send to the external command, and must be one of PPM, JPG, or PNG.
+The other format(s) are what it writes.
+The command may define one replaceable parameter, `{{%compressionLevel%}}`, which is replaced by the value of the `output-compression` setting.
+
+Output a PPM-format to the cjpeg utility's stdin and use it to compress JPG and JPEG files:
+```
+$$$ external-write-PPM-JPEG-JPG cjpeg -quality {{%compressionLevel%}} -sample 1x1
+```
+
+(This replaces the `output-mozjpeg` and `output-mozjpeg-samplng` settings.)
+
+### External Image Converters
+
+Style name: external-command-FMT-FMT
+
+Defines an external image converter.  The output is written in the first FMT and the result is read back in the second FMT, and they must be one of PPM, JPG, or PNG.  JPG is written with 98 quality and PNG is written with fastest compression.
+
+Replaceable parameters may be defined in the format {{%1%}}
+
+```
+$$$ external-sharp-PNG-PNG convert PNG:- -adaptive-sharpen x{{%1%}} PNG:-
+$$$ external-clahe-PPM-PPM convert - -colorspace LAB -channel 0 -clahe {{%1%}}x{{%1%}}%+256+{{%2}}% +channel -colorspace sRGB PPM:-
+$$$ external-blursharp-PPM-PPM gmic input -.ppm blur 3,0 sharpen 10 output -.ppm
+```
+
+External image converters are applied to an image using the `convert` setting, which has the format:
+
+```
+convert:name[,param...][;name[,param...]...]
+```
+
+In other words, sets of comma-separated values, separated by semicolons.  The first value in each set is the name of an external command,
+and the remaining values are its parameters.
+
+```
+convert:sharp,5;clahe,25,2
+```
+
 ## Command Line Options
 
 * `input-file`: Specify the input `.pb` file, or list `.jpg` or `.png` files.  Multiple files may be specified and are processed in the order listed.  `.zip` files may be specified and are treated as a container of images.
@@ -527,7 +576,7 @@ Use `--norender` to test various `--size` and `--sort` settings.  In general, in
   * Problems when title pages were first, like first page cannot have some or all settings. Also first row, column, item???
   * text-background does not work with text-outline
   * Column overflow creates endless loop
-  * Moz-jpeg output errors out, especially when it takes less time
+  * External files and conversion errors out, especially when it takes less time
   * Text breaking probably not calculated correctly in presence of newlines
 * Refactor & clean up
   * Break up large files
@@ -536,19 +585,9 @@ Use `--norender` to test various `--size` and `--sort` settings.  In general, in
   * Any other go-novice mistakes
 * Consolidate `subject` and similar concepts in `trim` and `crop`
 * Calendar pages
-* External tool integration (e.g. Imagemagick) - 
-  * various places in the rendering pipeline that external image processing tool could be called
-  * Input file conversion
-  * Output formats?
-* Image Processing
-  * Sigmoidal brightness/lightness Adjustment? (i.e. sigmoidal but on a different channel)
-  * Highlights, midtones, shadows Adjustment
-  * HSL Adjustment
-  * Input Colorspace
-* Everything supported with drag and drop: Redirect verbose:P and verbose:PP output with a book-level setting - to create both pdf and .pb files in one command without options.
-* Input and output handlers for more file types
+* More complete support with drag and drop: Redirect verbose:P and verbose:PP output with a book-level setting - to create both pdf and .pb files in one command without options.
+* Input handlers for more file types
 * Powerpoint output
 * Image, font https://... downloaded and then cached (in a zip file?)
-* Output colorspace
 * Greater than 8-bits per sample
-* UI of its own - ebitengine, fyne.io, or web browser-based?  Launch pdf or image viewer?
+* UI of its own - ebitengine, fyne.io, or web browser-based? Launch pdf or image viewer?

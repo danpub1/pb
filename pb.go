@@ -243,7 +243,7 @@ func main() {
 	var firstIteration = true
 
 	for {
-		items := ReadPbFile(inFiles, args)
+		items, conversions := ReadPbFile(inFiles, args)
 
 		Opts.Set(items)
 
@@ -323,8 +323,8 @@ func main() {
 		}
 
 		numImages := getImageDimensions(items)
-		if Opts.Verbose("D") {
-			log.Printf("Sorting with sortSetting = %v", sortSetting)
+		if Opts.Verbose("D") && len(sortSetting) > 0 && sortSetting != "none" {
+			log.Printf("Sorting with sort:%v", sortSetting)
 		}
 		sortItems(items, sortSetting, true)
 		items = deduplicate(items)
@@ -384,8 +384,8 @@ func main() {
 			fmt.Println(printItems(items, true))
 		}
 
-		renderTextImages(pbBook)
-		renderPages(pbBook, pageRange, firstIteration, flat)
+		renderTextImages(pbBook, conversions)
+		renderPages(pbBook, pageRange, firstIteration, flat, conversions)
 		assemble(items)
 
 		if !hasFilesToWatch(inFiles) || !Opts.Watch() {
