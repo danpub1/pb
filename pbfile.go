@@ -1269,11 +1269,13 @@ func ReadPbFile(inFiles []string, args []string) ([]PbItem, map[string][]string)
 		for name, style := range styles {
 			if rxExternalConvert.MatchString(name) {
 				parts := strings.Split(style, " ")
+				for ii := range parts {
+					parts[ii] = unescape(parts[ii])
+				}
 				if len(parts) > 1 {
 					name = strings.TrimPrefix(name, "external-")
 					conversions[name] = parts
 				}
-
 			}
 		}
 	}

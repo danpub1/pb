@@ -418,7 +418,8 @@ This allows breaking the output into multiple files, each with a title page
 
 External commands are defined as styles with specific names
 
-The style value is the space-separated command used that is invoked.
+The style value is the space-separated command used that is invoked.  If a space needs to be embedded in the command or its parameters,
+replace it with `` `_ ``, as with settings.
 
 ### External Output Formatters
 

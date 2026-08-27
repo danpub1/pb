@@ -8,12 +8,12 @@ Uses:
 * Make contact sheets of all the photos in a folder
 * Print some pictures
   * Make a nicely arranged collection of all the photos in a folder - not as small as a contact sheet, but not as finished as a photo book
-  * Layout pictures on a page in specific sizes for printing, so you can frame it
+  * Layout pictures on a page in specific sizes for printing, so you can frame them
   * Use rounded corners on a picture to make it circular for putting in a Christmas ornament photo frame
   * Just print some pictures without firing up The GIMP or LibreOffice, etc
 * Create a collage
   * Calendar page
-  * Greeting card
+  * Christmas card
   * Poster
 * Create slides for a presentation
 * Create pictures decorated with text for a photo frame
@@ -26,7 +26,7 @@ A photobook is made up of pages, each of which has rows. Each row has columns, a
 
 ## Content: Images and Text
 
-At its simplest, the input file is a list of images, one per line.
+At its simplest, the input file is a list of images, one per line. (Actually, at its very simplest, there's no input file, just a command line specifying some images and a bunch of settings. [More on that later.](#command-line-options))
 
 A line with the name of an image file causes the image to be laid out on the current page.
 
@@ -105,7 +105,7 @@ Any line beginning with three forward slashes should be ignored, so it can be us
 
 The backtick or grave accent, `` ` ``, is used to escape a few special cases:
 * If an image filename starts with a directive (`***`, `+++`, `---`, `...`, `$$$`, `@@@`, `///`), add a `` ` `` before the first character
-* A space in an image filename before `$` or `#` must be replaced with `` `_ ``
+* If an image filename contains a space followed by `$` or `#`, the space must be replaced with `` `_ ``
 * A space in a setting value  must be replaced with `` `_ `` (Possible in font name.)
 * Backtick must be replaced with two backticks ``` `` ``` in image filenames or settings.
 * Internally, `` `_ `` is replaced with space. Anything else after a backtick is replaced with that thing.
@@ -323,7 +323,7 @@ The three settings take the following values:
 * There are different ways of specifying size:
   * An explicit number of units, `size:250`
   * A percentage of the page size, `size:25%`
-  * A size relative to the default size
+  * A size relative to the default size (i.e. the size specified at the column, row, page, or book level)
     * `size:scale:#` - the default size times a scale factor
     * `size:normal` - equivalent to `size:scale:1`
     * `size:larger` - equivalent to `size:scale:1.25`
@@ -351,10 +351,8 @@ Book-Level Settings
 * `density`: Pixels per unit when converting the content to a page bitmap.  2 pixels per pt (144 ppi) could be considered for a preview quality, and 5 pixels per pt (360 ppi) could be appropriate for printing. [2.0]
 * `subtitle`: Subtitle. []
 * `output-compression`: The jpeg compression level when creating the page bitmap. [92]
-* `output-mozjpeg-sampling`: The subsampling used by mozjpeg. Typically one of: `1x1` (4:4:4), `1x2` (4:4:0), `2x1` (4:2:2), `2x2` (4:2:0), `4x1` (4:1:1), `4x2` (4:1:0). [1x1]
 * `units`: The units of measure used in laying out the book.  One of `in`, `cm`, `mm`, `pt`. [pt]
 * `title`: Title. []
-* `output-mozjpeg`: Use the mozjpeg compressor to create the page bitmap. Slower, but produces smaller files at the same quality. [false]
 
 Page-Level Settings
 -------------------
@@ -412,6 +410,7 @@ Image-Level Settings
 * `sharpen`: Adjust image's sharpness. [0.0]
 * `blur`: Blur the image. [0.0]
 * `caption`: Caption Text. Typically not specified using this setting. []
+* `convert`: Execute external image processing commands. []
 * `flip`: Flip the image either horizontally (H) or vertically (V). []
 * `size-mode`: How to interpret size: as `width` or as width relative to `area` of square. [area]
 * `image-background`: Image background color. [#0000]
@@ -544,9 +543,59 @@ This allows breaking the output into multiple files, each with a title page
     * {{WW}} is replaced by the four digit year and week number, e.g. 2006-W1
     * {{WEEK}} is replaced by the textual week number, e.g. Week 1, 2006
 
+## External Commands
+
+External commands are defined as styles with specific names
+
+The style value is the space-separated command used that is invoked.  If a space needs to be embedded in the command or its parameters,
+replace it with `` `_ ``, as with settings.
+
+### External Output Formatters
+
+Style name: external-write-FMT-FMT[-FMT...]  
+
+Defines an external file-writer, like ImageMagick or cjpeg.
+The first FMT is the format `pb` needs to write to send to the external command, and must be one of PPM, JPG, or PNG.
+The other format(s) are what it writes.
+The command may define one replaceable parameter, `{{%compressionLevel%}}`, which is replaced by the value of the `output-compression` setting.
+
+Output a PPM-format to the cjpeg utility's stdin and use it to compress JPG and JPEG files:
+```
+$$$ external-write-PPM-JPEG-JPG cjpeg -quality {{%compressionLevel%}} -sample 1x1
+```
+
+(This replaces the `output-mozjpeg` and `output-mozjpeg-samplng` settings.)
+
+### External Image Converters
+
+Style name: external-command-FMT-FMT
+
+Defines an external image converter.  The output is written in the first FMT and the result is read back in the second FMT, and they must be one of PPM, JPG, or PNG.  JPG is written with 98 quality and PNG is written with fastest compression.
+
+Replaceable parameters may be defined in the format {{%1%}}
+
+```
+$$$ external-sharp-PNG-PNG convert PNG:- -adaptive-sharpen x{{%1%}} PNG:-
+$$$ external-clahe-PPM-PPM convert - -colorspace LAB -channel 0 -clahe {{%1%}}x{{%1%}}%+256+{{%2}}% +channel -colorspace sRGB PPM:-
+$$$ external-blursharp-PPM-PPM gmic input -.ppm blur 3,0 sharpen 10 output -.ppm
+```
+
+External image converters are applied to an image using the `convert` setting, which has the format:
+
+```
+convert:name[,param...][;name[,param...]...]
+```
+
+In other words, sets of comma-separated values, separated by semicolons.  The first value in each set is the name of an external command,
+and the remaining values are its parameters.
+
+```
+convert:sharp,5;clahe,25,2
+```
+
 ## Command Line Options
 
-* `input-file`: Specify the input `.pb` file.  Multiple files may be specified and are processed in the order listed.  Zip files may be specified and are treated as a container of images.
+* `input-file`: Specify the input `.pb` file, or list `.jpg` or `.png` files.  Multiple files may be specified and are processed in the order listed.  `.zip` files may be specified and are treated as a container of images.
 * Any setting may be applied at the book level by prepending it with two hypens.  For example: `--page-size:576x576`
 
 ## Processing
@@ -559,7 +608,7 @@ This allows breaking the output into multiple files, each with a title page
     * Sort, deduplicate images
     * Add day headers and title pages
     * Measure texts
-1. Paginate: break into pages, rows, columns
+1. Paginate: break into pages, rows, columns.  What fits on a page is determined by either its explicit size or the default size specified at the column, row, page, or book level.
 1. Resize images to fill pages
 1. Layout pages - spread/justify content, columns, rows
 1. Render output into image files or PDFs
@@ -646,11 +695,10 @@ Whether generated by listing specific images in a `.pb` file, or by specifying `
 ### Making a collage / poster
 
 ```
-pb "*.jpg" --verbose:DD --margin:24 --pack-page --page-size:2160x1440 --nowatch --output-file:poster2.pdf --sort:hash --norender --seed:10 --size:14.8% 
+pb "*.jpg" --verbose:DD --margin:24 --pack-page --page-size:2160x1440 --nowatch --output-file:poster2.pdf --sort:10 --norender --size:14.8% 
 ```
 
-Use `--norender` to test various `--size` and `--seed` settings.  `--verbose:DD` shows the ratio of longest row to shortest row, 
-which is probably a reasonable stand-in for "balanced layout", where a larger number is better.  
+Use `--norender` to test various `--size` and `--sort` settings.  In general, increase the size to where only some layouts are the right number of pages. Then use `--sort:#,#,all` to find the best one.
 
 ## Things to Do
 
@@ -658,7 +706,7 @@ which is probably a reasonable stand-in for "balanced layout", where a larger nu
   * Problems when title pages were first, like first page cannot have some or all settings. Also first row, column, item???
   * text-background does not work with text-outline
   * Column overflow creates endless loop
-  * Moz-jpeg output errors out, especially when it takes less time
+  * External files and conversion errors out, especially when it takes less time
   * Text breaking probably not calculated correctly in presence of newlines
 * Refactor & clean up
   * Break up large files
@@ -667,20 +715,10 @@ which is probably a reasonable stand-in for "balanced layout", where a larger nu
   * Any other go-novice mistakes
 * Consolidate `subject` and similar concepts in `trim` and `crop`
 * Calendar pages
-* External tool integration (e.g. Imagemagick) - 
-  * various places in the rendering pipeline that external image processing tool could be called
-  * Input file conversion
-  * Output formats?
-* Image Processing
-  * Sigmoidal brightness/lightness Adjustment? (i.e. sigmoidal but on a different channel)
-  * Highlights, midtones, shadows Adjustment
-  * HSL Adjustment
-  * Input Colorspace
-* Everything supported with drag and drop: Redirect verbose:P and verbose:PP output with a book-level setting - to create both pdf and .pb files in one command without options.
-* Input and output handlers for more file types
+* More complete support with drag and drop: Redirect verbose:P and verbose:PP output with a book-level setting - to create both pdf and .pb files in one command without options.
+* Input handlers for more file types
 * Powerpoint output
 * Image, font https://... downloaded and then cached (in a zip file?)
-* Output colorspace
 * Greater than 8-bits per sample
-* UI of its own - ebitengine, fyne.io, or web browser-based?  Launch pdf or image viewer?
+* UI of its own - ebitengine, fyne.io, or web browser-based? Launch pdf or image viewer?
 
