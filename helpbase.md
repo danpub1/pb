@@ -243,6 +243,7 @@ There are several pre-defined styles, useful as part of texts in headers and foo
 * `{{ExifDate}}`: Replaced by the date as found in the EXIF metadata
 * `{{FileDate}}`: Replaced by the timestamp of the file
 * `{{ImageDate}}`: Replaced by the best-guess timestamp of the image - based on the filename, EXIF date, and modified time of the file
+* `{{ImageNumber}}`: Replaced by the number of the image in the file.
 * `{{PageNumber}}`: Replaced by the current page number, useable in headers or footers
 * `{{TotalPages}}`: Replaced by the total number of pages in the book, useable in headers or footers
 * `{{NextImageDate}}`: Replaced by the date only of the next image following the text.  For use with `day-headers`
@@ -390,6 +391,7 @@ The following settings have shortcuts:
     * `binding` / `edge`
     * `justify`
 * `verbose:H` => `help`
+* `out:file` => `output-file:file`
 
 ## Day Headers, Title, Subtitle
 
@@ -462,6 +464,15 @@ and the remaining values are its parameters.
 
 ```
 convert:sharp,5;clahe,25,2
+```
+
+### adjust-by-name
+
+This setting, mostly used when the input is a set of image files, adjusts the timestamp of the image by matching on the image name.
+This is useful when the time on a camera was not adjusted for a different timezone, or perhaps was just misconfigured.
+
+```
+--adjust-by-name:DSC,900+IMG,540
 ```
 
 ## Command Line Options
@@ -539,7 +550,7 @@ pb Selected.zip --page-break:true --font:Aptos.zip::Aptos.ttf --caption:{{Filena
 ### Full Collection by Date
 
 ```
-pb Collection1.zip Collection2.zip --caption:{{ImageName}} --nowatch --sort:date --day-headers:auto --max-size:75% --size-mode:area --distribute-rows:spreadtop
+pb --caption:auto --nowatch --sort:date --deduplicate --day-headers:auto --title:auto --adjust-by-name:DSC,900 "--out:European Vacation.pdf" Collection1.zip Collection2.zip
 ```
 
 ### Two Modes of Working

@@ -10,6 +10,7 @@ import (
 	"log"
 	"maps"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -345,6 +346,8 @@ func processSetting(setting string, theItem *PbItem) {
 		}
 	} else if len(pieces) == 2 {
 		switch pieces[0] {
+		case "out":
+			pieces[0] = "output-file"
 		case "trim", "fit", "squish":
 			pieces[1] = pieces[0] + "," + pieces[1]
 			pieces[0] = "rect"
@@ -907,10 +910,12 @@ func ApplyItemSpecificStyles(items []PbItem) {
 	today := time.Now()
 	date := today.Format("02-Jan-2006")
 	year := today.Format("2006")
+	imageNum := 0
 	for ii := range items {
 		if items[ii].itemType == ItemTypeImage || items[ii].itemType == ItemTypeText {
 			text := items[ii].Setting("text")
 			if items[ii].itemType == ItemTypeImage {
+				imageNum++
 				imageActualName := items[ii].Setting("image")
 				imageName := imageActualName
 				if imageNameParts := strings.SplitN(imageName, "::", 2); len(imageNameParts) == 2 {
@@ -924,6 +929,7 @@ func ApplyItemSpecificStyles(items []PbItem) {
 				text = strings.ReplaceAll(text, "{{ImageDate}}", itemTime(&items[ii]).Format(time.DateTime))
 				text = strings.ReplaceAll(text, "{{FileDate}}", time.Unix(items[ii].fileDate, 0).Format(time.DateTime))
 				text = strings.ReplaceAll(text, "{{ExifDate}}", items[ii].exifDate.Format(time.DateTime))
+				text = strings.ReplaceAll(text, "{{ImageNumber}}", fmt.Sprintf("#%v", imageNum))
 			}
 			if items[ii].itemType == ItemTypeText {
 				if strings.Contains(text, "{{NextImageDate}}") {
@@ -1072,6 +1078,26 @@ func addDayHeaders(items []PbItem) []PbItem {
 
 	dayHeaders := unescapeText(items[0].BookSetting("day-headers"))
 	title := unescapeText(items[0].BookSetting("title"))
+	if title == "auto" {
+		filename := items[0].Setting("output-file")
+		if filename != items[0].DefaultSetting("output-file") {
+			filename = path.Base(filename)
+			ext := path.Ext(filename)
+			if len(ext) > 0 {
+				filename = strings.TrimSuffix(filename, ext)
+			}
+			title = filename
+		} else {
+			wd, err := os.Getwd()
+			if err == nil {
+				base := path.Base(wd)
+				if len(base) > 0 && base != "." && base != string(os.PathSeparator) {
+					title = base
+				}
+			}
+		}
+	}
+
 	subtitle := unescapeText(items[0].BookSetting("subtitle"))
 	if dayHeaders == "" && title == "" && subtitle == "" {
 		return items
@@ -1180,6 +1206,10 @@ func ApplyDefaultCaptions(items []PbItem) {
 			if items[ii].itemType == ItemTypeImage {
 				caption := items[ii].Setting("caption")
 				if len(caption) != 0 && len(items[ii].Setting("text")) == 0 {
+					caption = unescapeText(caption)
+					if caption == "auto" {
+						caption = "{{ImageNumber}}: {{ImageName}}"
+					}
 					items[ii].Set("text", unescapeText(caption))
 				}
 			}

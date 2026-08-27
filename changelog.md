@@ -8,6 +8,9 @@
 * Add `sort:#,#,all` to find best sort for a file within a range of sort seeds
 * Add definition of external image conversion commands and output formatters as specific style names
 * Add `convert` to apply external image conversion commands
+* Add `out` alias for `output-file`
+* Add `auto` for `title` and `caption` settings
+* Add `{{ImageNumber}}` replacement for captions
 ### Changed
 * Replace `seed:#` and `sort:hash` with `sort:#`
 * Add `{{%page%}}` to output filename format instead of trying to decide when to add a number or not
