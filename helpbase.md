@@ -588,7 +588,6 @@ Use `--norender` to test various `--size` and `--sort` settings.  In general, in
   * Problems when title pages were first, like first page cannot have some or all settings. Also first row, column, item???
   * text-background does not work with text-outline
   * Column overflow creates endless loop
-  * External files and conversion errors out, especially when it takes less time
   * Text breaking probably not calculated correctly in presence of newlines
 * Refactor & clean up
   * Break up large files

@@ -597,13 +597,20 @@ func convertImage(picture image.Image, outFormat string, inFormat string, comman
 		}
 	}()
 
-	err2 = cmd.Run()
+	err2 = cmd.Start()
 	if err2 != nil {
-		log.Print("Error running command")
+		log.Print("Error starting command")
 		log.Print(err2)
 	}
 
 	wg.Wait()
+
+	err2 = cmd.Wait()
+	if err2 != nil {
+		log.Print("Error waiting for command")
+		log.Print(err2)
+	}
+
 	return picture
 }
 
@@ -699,14 +706,21 @@ func writeExternal(picture image.Image, intermediateFormat string, out io.Writer
 		}
 	}()
 
-	err2 = cmd.Run()
+	err2 = cmd.Start()
 	if err2 != nil {
-		log.Print("Error running command")
+		log.Print("Error starting command")
 		log.Print(err2)
 		errReturn = err2
 	}
 
 	wg.Wait()
+
+	err2 = cmd.Wait()
+	if err2 != nil {
+		log.Print("Error waiting for command")
+		log.Print(err2)
+		errReturn = err2
+	}
 
 	if errReturn != nil {
 		log.Printf("%v: %v bytes, %v", cmd.String(), bytesWritten, errReturn)
