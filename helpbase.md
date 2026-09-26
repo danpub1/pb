@@ -589,6 +589,7 @@ Use `--norender` to test various `--size` and `--sort` settings.  In general, in
   * text-background does not work with text-outline
   * Column overflow creates endless loop
   * Text breaking probably not calculated correctly in presence of newlines
+  * `\b` in text leads to infinite loop while parskng
 * Refactor & clean up
   * Break up large files
   * Latest dependencies
