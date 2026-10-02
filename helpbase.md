@@ -248,22 +248,22 @@ There are several pre-defined styles, useful as part of texts in headers and foo
 * `{{TotalPages}}`: Replaced by the total number of pages in the book, useable in headers or footers
 * `{{NextImageDate}}`: Replaced by the date only of the next image following the text.  For use with `day-headers`
 
-## Special Texts
-
-A text with a setting `name` is not part of the layout, but is used for various purposes, such as header and footer text:
-
-    #1E name:header-first {{title}}\t{{Date}}\t{{PageNumber}}
-    #1E name:footer-first Copyright {{Year}}, All rights reserved.
-
 ## Tabs
 
 `\t` in a text is a tab.  Two tabs are pre-defined: the first is a center tab, and the second is a right tab.
 Prefixing a text with one tab is the equivalent of `align:center`, and prefixing with two tabs is the equivalent of `align:right`.
 However, as shown in the example above, tabs are most useful when there is text before the tab.
 
-## Named Items
+## Named Texts
 
-An image or text with a setting `name` is not part of the layout, but is used for a page background or image frame, or for header or footer text.
+A text with a setting `name` is not part of the layout, but is used for various purposes, such as header and footer text:
+
+    #1E name:header-first {{title}}\t{{Date}}\t{{PageNumber}}
+    #1E name:footer-first Copyright {{Year}}, All rights reserved.
+
+## Named Images
+
+An image with a setting `name` is not part of the layout, but may used for various purposes, such as a page background or image frame.
 
 ## Settings
 
@@ -272,9 +272,10 @@ Settings specified at the page level apply to all the content of the page.
 Settings specified at the row level apply to all the content in the row.  
 Settings specified at the column level apply to all the content in the column.  
 Settings specified for an individual image or text apply only to that content.  
-Some settings only apply at a higher level, and many not be specified lower down.
+Some settings only apply at a higher level, and may not be specified lower down.
 
-***NOTE:*** Settings specified at the page, row, or column level apply to subsequent automatically created pages, rows, or columns until explicitly ended with another page, row, or column directive.
+> ***NOTE:***  
+> ***Settings specified at the page, row, or column level apply to subsequent automatically created pages, rows, or columns until explicitly ended with another page, row, or column directive. If you want to apply different settings, an explicit page, row, or column break is required.***
 
 Setting values that are indicated as `yes` or `no` may equivalently be `on` or `off`, or `true` or `false`.
 
@@ -589,7 +590,7 @@ Use `--norender` to test various `--size` and `--sort` settings.  In general, in
   * text-background does not work with text-outline
   * Column overflow creates endless loop
   * Text breaking probably not calculated correctly in presence of newlines
-  * `\b` in text leads to infinite loop while parskng
+  * `\b` in text leads to infinite loop while parsing
 * Refactor & clean up
   * Break up large files
   * Latest dependencies
