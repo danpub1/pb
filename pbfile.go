@@ -180,32 +180,55 @@ func unescapeEscapee(text string, replacee string, replacement string) string {
 		escape = escape + escape
 	}
 	replacee = strings.Join(runes[1:], "")
-	if rex, rerr := regexp.Compile(fmt.Sprintf(`^(%[1]v%[2]v)`, escape, replacee)); rerr == nil {
+	regex := fmt.Sprintf(`^()(%[1]v%[2]v)`, escape, replacee)
+	if rex, rerr := regexp.Compile(regex); rerr == nil {
 		for {
 			if rex.MatchString(text) {
-				text = rex.ReplaceAllString(text, replacement)
+				newtext := rex.ReplaceAllString(text, replacement)
+				if newtext == text {
+					break
+				}
+				text = newtext
 			} else {
 				break
 			}
 		}
+	} else {
+		log.Printf("Error compiling regexp %v\n", rerr)
 	}
-	if rex, rerr := regexp.Compile(fmt.Sprintf(`([^%[1]v])(%[1]v%[2]v)`, escape, replacee)); rerr == nil {
+
+	regex = fmt.Sprintf(`([^%[1]v])(%[1]v%[2]v)`, escape, replacee)
+	if rex, rerr := regexp.Compile(regex); rerr == nil {
 		for {
 			if rex.MatchString(text) {
-				text = rex.ReplaceAllString(text, fmt.Sprintf("$1%v", replacement))
+				newtext := rex.ReplaceAllString(text, fmt.Sprintf("$1%v", replacement))
+				if newtext == text {
+					break
+				}
+				text = newtext
 			} else {
 				break
 			}
 		}
+	} else {
+		log.Printf("Error compiling regexp %v\n", rerr)
 	}
-	if rex, rerr := regexp.Compile(fmt.Sprintf(`((%[1]v%[1]v)+)(%[1]v%[2]v)`, escape, replacee)); rerr == nil {
+
+	regex = fmt.Sprintf(`((%[1]v%[1]v)+)(%[1]v%[2]v)`, escape, replacee)
+	if rex, rerr := regexp.Compile(regex); rerr == nil {
 		for {
 			if rex.MatchString(text) {
-				text = rex.ReplaceAllString(text, fmt.Sprintf("$1%v", replacement))
+				newtext := rex.ReplaceAllString(text, fmt.Sprintf("$1%v", replacement))
+				if newtext == text {
+					break
+				}
+				text = newtext
 			} else {
 				break
 			}
 		}
+	} else {
+		log.Printf("Error compiling regexp %v\n", rerr)
 	}
 	return text
 }

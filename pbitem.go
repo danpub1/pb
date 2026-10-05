@@ -1332,13 +1332,12 @@ var defaultSettings = map[string]DefaultSetting{
 	"pack-aspects":    {"2:1,1:1,1:2,1:1", "Page", "Aspect limits to restrict to when packing (landscape-max, landscape-min, portrait-min, portrait-max)"},
 
 	// page level options
-	"output-file":   {"out.pdf", "Page Option", ""},
-	"cjpeg-command": {"", "Page Option", "Path to cjpeg executable, e.g. `/usr/bin/cjpeg`."},
-	"noresize":      {"false", "Page Option", "For debugging. After distributing images to pages, do not resize them to fill the page."},
-	"nolayout":      {"false", "Page Option", "For debugging. After distributing images to pages, do not distribute them in the freee space."},
-	"norender":      {"false", "Page Option", "For debugging. Do not render this page to a bitmap."},
-	"noprocess":     {"false", "Page Option", "Do not layout, resize, or render the page"},
-	"current-page":  {"false", "Page", "Include this page in the output regardless of whether it included in the page range."},
+	"output-file":  {"out.pdf", "Page Option", ""},
+	"noresize":     {"false", "Page Option", "For debugging. After distributing images to pages, do not resize them to fill the page."},
+	"nolayout":     {"false", "Page Option", "For debugging. After distributing images to pages, do not distribute them in the freee space."},
+	"norender":     {"false", "Page Option", "For debugging. Do not render this page to a bitmap."},
+	"noprocess":    {"false", "Page Option", "Do not layout, resize, or render the page"},
+	"current-page": {"false", "Page", "Include this page in the output regardless of whether it included in the page range."},
 
 	// row
 	"distribute-columns": {"spreadcenter", "Row", "Horizontal spacing of columns in the row.  Specifies how extra space is distributed."},

@@ -17,6 +17,7 @@ Uses:
   * Poster
 * Create slides for a presentation
 * Create pictures decorated with text for a photo frame
+* Keep a photo journal (without spending time formatting it)
 
 ## Introduction
 
@@ -590,12 +591,12 @@ Use `--norender` to test various `--size` and `--sort` settings.  In general, in
   * text-background does not work with text-outline
   * Column overflow creates endless loop
   * Text breaking probably not calculated correctly in presence of newlines
-  * `\b` in text leads to infinite loop while parsing
 * Refactor & clean up
   * Break up large files
   * Latest dependencies
   * Tests
   * Any other go-novice mistakes
+* Allow more flexibility with units: Convert all units specified in settings to points internally
 * Consolidate `subject` and similar concepts in `trim` and `crop`
 * Calendar pages
 * More complete support with drag and drop: Redirect verbose:P and verbose:PP output with a book-level setting - to create both pdf and .pb files in one command without options.

@@ -632,7 +632,9 @@ func writeExternal(picture image.Image, intermediateFormat string, out io.Writer
 	bytesWritten := 0
 	var errReturn error
 
-	log.Print(cmd.String())
+	if Opts.Verbose("D") {
+		log.Print(cmd.String())
+	}
 
 	stdin, err1 := cmd.StdinPipe()
 	if err1 != nil {
