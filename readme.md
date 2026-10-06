@@ -554,6 +554,8 @@ External commands are defined as styles with specific names
 The style value is the space-separated command used that is invoked.  If a space needs to be embedded in the command or its parameters,
 replace it with `` `_ ``, as with settings.
 
+External commands may use the replaceable parameter {{%InputFile%}} and {{%OutputFile%}} or may use stdin and stdout.
+
 ### External Output Formatters
 
 Style name: external-write-FMT-FMT[-FMT...]  
@@ -561,7 +563,7 @@ Style name: external-write-FMT-FMT[-FMT...]
 Defines an external file-writer, like ImageMagick or cjpeg.
 The first FMT is the format `pb` needs to write to send to the external command, and must be one of PPM, JPG, or PNG.
 The other format(s) are what it writes.
-The command may define one replaceable parameter, `{{%compressionLevel%}}`, which is replaced by the value of the `output-compression` setting.
+The command may define the replaceable parameter, `{{%compressionLevel%}}`, which is replaced by the value of the `output-compression` setting.
 
 Output a PPM-format to the cjpeg utility's stdin and use it to compress JPG and JPEG files:
 ```

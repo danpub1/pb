@@ -315,7 +315,7 @@ func writeImageFile(picture image.Image, outFilename string, compressionLevel in
 
 	switch {
 	case conversion != nil:
-		writeExternal(picture, outFormat, out, compressionLevel, conversion)
+		writeExternal(picture, outFormat, format, out, compressionLevel, conversion)
 	case format == "ppm":
 		if err := netpbm.Encode(out, picture, &netpbm.EncodeOptions{Format: netpbm.PPM}); err != nil {
 			log.Print(err)
@@ -374,7 +374,7 @@ func writePage(img image.Image, objNum int, curPage int, outFilename string, com
 		conversion, outFormat := conversionForFormat(conversions, "jpg")
 
 		if len(conversion) > 0 {
-			if _, err = writeExternal(img, outFormat, writer, compressionLevel, conversion); err != nil {
+			if _, err = writeExternal(img, outFormat, "jpg", writer, compressionLevel, conversion); err != nil {
 				log.Print(err)
 				return 0, err
 			}
@@ -523,103 +523,249 @@ func tilt(picture image.Image, angle float64) (image.Image, int, int) {
 	return picture, (newWidth - orgWidth) / 2, (newHeight - orgHeight) / 2
 }
 
-func convertImage(picture image.Image, outFormat string, inFormat string, command string, params []string) image.Image {
-	// this is too slow for regular use
-	// may be able to adapt to use imagmagick or mozjpeg to create quality jpegs for final output
+func doExternalCommand(picture image.Image, commandInputFormat string, commandOutputFormat string, command string, params []string, outWriter io.Writer) (image.Image, int, error) {
+	tempInput := ""
+	tempOutput := ""
+	var inFile *os.File
+	var outFile *os.File
+	var err error
+	var bytesWritten int = 0
 
-	// 	cmd := exec.Command("convert", "-", "-adaptive-sharpen", "x5", "PPM:-")
+	commandInputFormat = strings.ToLower(commandInputFormat)
+	commandOutputFormat = strings.ToLower(commandOutputFormat)
+
+	for ii := range params {
+		if strings.Contains(params[ii], "{{%InputFile%}}") {
+			if tempInput == "" {
+				inFile, err = os.CreateTemp("", "pb-*."+strings.ToLower(commandInputFormat))
+				if err != nil {
+					log.Printf("Error %v creating temporary input file", err)
+					return picture, bytesWritten, err
+				}
+				tempInput = inFile.Name()
+				defer os.Remove(tempInput)
+				defer inFile.Close()
+			}
+			params[ii] = strings.ReplaceAll(params[ii], "{{%InputFile%}}", tempInput)
+		}
+
+		if strings.Contains(params[ii], "{{%OutputFile%}}") {
+			if tempOutput == "" {
+				outFile, err = os.CreateTemp("", "pb-*."+strings.ToLower(commandOutputFormat))
+				if err != nil {
+					log.Printf("Error %v creating temporary output file", err)
+					return picture, bytesWritten, err
+				}
+				tempOutput = outFile.Name()
+				outFile.Close()
+				defer os.Remove(tempOutput)
+			}
+			params[ii] = strings.ReplaceAll(params[ii], "{{%OutputFile%}}", tempOutput)
+		}
+	}
 
 	if Opts.Verbose("D") {
 		log.Printf("executing: %v %v", command, strings.Join(params, " "))
 	}
 	cmd := exec.Command(command, params...)
 
-	outFormat = strings.ToLower(outFormat)
-	inFormat = strings.ToLower(inFormat)
-
-	stdin, err1 := cmd.StdinPipe()
-	if err1 != nil {
-		log.Print("Error opening stdin")
-		log.Print(err1)
-		return picture
+	var stdin io.WriteCloser
+	if tempInput == "" {
+		stdin, err = cmd.StdinPipe()
+		if err != nil {
+			log.Print("Error opening stdin")
+			log.Print(err)
+			return picture, bytesWritten, err
+		}
+		defer stdin.Close()
 	}
-	defer stdin.Close()
 
-	stdout, err2 := cmd.StdoutPipe()
-	if err2 != nil {
-		log.Print("Error opening stdout")
-		log.Print(err2)
-		return picture
+	var stdout io.ReadCloser
+	if tempOutput == "" {
+		stdout, err = cmd.StdoutPipe()
+		if err != nil {
+			log.Print("Error opening stdout")
+			log.Print(err)
+			return picture, bytesWritten, err
+		}
+		defer stdout.Close()
 	}
-	defer stdout.Close()
 
 	var wg sync.WaitGroup
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		var err error
-		switch outFormat {
+	if tempInput != "" {
+		switch commandInputFormat {
 		case "ppm":
-			err = netpbm.Encode(stdin, picture, &netpbm.EncodeOptions{Format: netpbm.PPM})
+			err = netpbm.Encode(inFile, picture, &netpbm.EncodeOptions{Format: netpbm.PPM})
 		case "jpg":
-			err = jpeg.Encode(stdin, picture, &jpeg.Options{Quality: 98})
+			err = jpeg.Encode(inFile, picture, &jpeg.Options{Quality: 98})
 		default:
 			encoder := png.Encoder{CompressionLevel: png.BestSpeed}
-			err = encoder.Encode(stdin, picture)
+			err = encoder.Encode(inFile, picture)
 		}
 		if err != nil {
 			log.Print("Error encoding image")
 			log.Print(err)
 		}
-		stdin.Close()
-	}()
+		inFile.Close()
+	} else {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			switch commandInputFormat {
+			case "ppm":
+				err = netpbm.Encode(stdin, picture, &netpbm.EncodeOptions{Format: netpbm.PPM})
+			case "jpg":
+				err = jpeg.Encode(stdin, picture, &jpeg.Options{Quality: 98})
+			default:
+				encoder := png.Encoder{CompressionLevel: png.BestSpeed}
+				err = encoder.Encode(stdin, picture)
+			}
+			if err != nil {
+				log.Print("Error encoding image")
+				log.Print(err)
+			}
+			stdin.Close()
+		}()
+	}
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		var err error
-		var newpicture image.Image
-		switch inFormat {
-		case "ppm":
-			newpicture, err = netpbm.Decode(stdout, &netpbm.DecodeOptions{})
-		case "png":
-			newpicture, err = png.Decode(stdout)
-		default:
-			newpicture, _, err = image.Decode(stdout)
-		}
-		if err != nil {
-			log.Print("Error decoding image")
-			log.Print(err)
-		}
-		if newpicture != nil && newpicture.Bounds().Dx() == picture.Bounds().Dx() && newpicture.Bounds().Dy() == picture.Bounds().Dy() {
-			picture = newpicture
-		}
-	}()
+	if tempOutput == "" {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
 
-	err2 = cmd.Start()
-	if err2 != nil {
+			if outWriter == nil {
+				var newpicture image.Image
+				var err1 error
+				switch commandOutputFormat {
+				case "ppm":
+					newpicture, err1 = netpbm.Decode(stdout, &netpbm.DecodeOptions{})
+				case "png":
+					newpicture, err1 = png.Decode(stdout)
+				default:
+					newpicture, _, err1 = image.Decode(stdout)
+				}
+				if err1 != nil {
+					log.Print("Error decoding image")
+					log.Print(err1)
+				}
+				if newpicture != nil && newpicture.Bounds().Dx() == picture.Bounds().Dx() && newpicture.Bounds().Dy() == picture.Bounds().Dy() {
+					picture = newpicture
+				}
+			} else {
+				p := make([]byte, 1024*64)
+				for {
+					n, err1 := stdout.Read(p)
+					if n > 0 {
+						m, err2 := outWriter.Write(p[:n])
+						if err2 != nil {
+							log.Print("error writing output file")
+							log.Print(err2)
+							stdout.Close()
+							err1 = err2
+							break
+						}
+						bytesWritten += m
+						if m != n {
+							log.Print("truncated write")
+							break
+						}
+					}
+					if err1 != nil {
+						if err1 != io.EOF {
+							log.Printf("Error reading input stream: %v", err1)
+							log.Print(err1)
+							stdout.Close()
+						}
+						break
+					}
+				}
+			}
+		}()
+	}
+
+	err = cmd.Start()
+	if err != nil {
 		log.Print("Error starting command")
-		log.Print(err2)
+		log.Print(err)
+		return picture, bytesWritten, err
 	}
 
 	wg.Wait()
 
-	err2 = cmd.Wait()
-	if err2 != nil {
+	err = cmd.Wait()
+	if err != nil {
 		log.Print("Error waiting for command")
-		log.Print(err2)
+		log.Print(err)
+		return picture, bytesWritten, err
 	}
 
-	return picture
+	if tempOutput != "" {
+		if outWriter != nil {
+			var err1 error
+			outFile, err1 = os.Open(tempOutput)
+			if err1 != nil {
+				log.Print("error opening output file")
+				log.Print(err1)
+			}
+			p := make([]byte, 1024*64)
+			for {
+				n, err := outFile.Read(p)
+				if n > 0 {
+					m, err2 := outWriter.Write(p[:n])
+					if err2 != nil {
+						log.Print("error writing output file")
+						log.Print(err2)
+						outFile.Close()
+						err1 = err2
+						break
+					}
+					bytesWritten += m
+					if m != n {
+						log.Print("truncated write")
+						break
+					}
+				}
+				if err != nil {
+					if err != io.EOF {
+						log.Printf("Error reading input stream: %v", err)
+						log.Print(err)
+						outFile.Close()
+						err1 = err
+					}
+					break
+				}
+			}
+		} else {
+			outFile, err := os.Open(tempOutput)
+			var newpicture image.Image
+			switch commandOutputFormat {
+			case "ppm":
+				newpicture, err = netpbm.Decode(outFile, &netpbm.DecodeOptions{})
+			case "png":
+				newpicture, err = png.Decode(outFile)
+			default:
+				newpicture, _, err = image.Decode(outFile)
+			}
+			if err != nil {
+				log.Print("Error decoding image")
+				log.Print(err)
+			}
+			if newpicture != nil && newpicture.Bounds().Dx() == picture.Bounds().Dx() && newpicture.Bounds().Dy() == picture.Bounds().Dy() {
+				picture = newpicture
+			}
+		}
+	}
+
+	return picture, bytesWritten, err
 }
 
-func writeExternal(picture image.Image, intermediateFormat string, out io.Writer, compressionLevel int, conversion []string) (int, error) {
-	// if len(cjpegCmd) == 0 {
-	// 	cjpegCmd = "/home/dms/programming/mozjpeg-4.1.1/mozjpeg-4.1.1/cjpeg-static"
-	// }
-	// cmd := exec.Command(cjpegCmd, "-quality", fmt.Sprintf("%v", compressionLevel), "-sample", samplingFactor)
+func convertImage(picture image.Image, outFormat string, inFormat string, command string, params []string) image.Image {
+	rv, _, _ := doExternalCommand(picture, outFormat, inFormat, command, params, nil)
+	return rv
+}
 
+func writeExternal(picture image.Image, intermediateFormat string, outFormat string, outWriter io.Writer, compressionLevel int, conversion []string) (int, error) {
 	sCompressionLevel := fmt.Sprintf("%v", compressionLevel)
 	params := make([]string, 0, len(conversion)-1)
 	for ii := range conversion[1:] {
@@ -627,107 +773,8 @@ func writeExternal(picture image.Image, intermediateFormat string, out io.Writer
 		params = append(params, param)
 	}
 
-	cmd := exec.Command(conversion[0], params...)
-
-	bytesWritten := 0
-	var errReturn error
-
-	if Opts.Verbose("D") {
-		log.Print(cmd.String())
-	}
-
-	stdin, err1 := cmd.StdinPipe()
-	if err1 != nil {
-		log.Print("Error opening stdin")
-		log.Print(err1)
-		return 0, err1
-	}
-	defer stdin.Close()
-
-	stdout, err2 := cmd.StdoutPipe()
-	if err2 != nil {
-		log.Print("Error opening stdout")
-		log.Print(err2)
-		return 0, err2
-	}
-	defer stdout.Close()
-
-	var wg sync.WaitGroup
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		var err error
-		switch intermediateFormat {
-		case "ppm":
-			err = netpbm.Encode(stdin, picture, &netpbm.EncodeOptions{Format: netpbm.PPM})
-		case "jpg":
-			err = jpeg.Encode(stdin, picture, &jpeg.Options{Quality: 98})
-		default:
-			encoder := png.Encoder{CompressionLevel: png.BestSpeed}
-			err = encoder.Encode(stdin, picture)
-		}
-		if err != nil {
-			log.Print("Error encoding image")
-			log.Print(err)
-			errReturn = err
-		}
-		stdin.Close()
-	}()
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		p := make([]byte, 1024*64)
-		for {
-			n, err := stdout.Read(p)
-			if n > 0 {
-				m, err2 := out.Write(p[:n])
-				if err2 != nil {
-					log.Print("error writing output file")
-					log.Print(err2)
-					stdout.Close()
-					errReturn = err2
-					break
-				}
-				bytesWritten += m
-				if m != n {
-					log.Print("truncated write")
-					break
-				}
-			}
-			if err != nil {
-				if err != io.EOF {
-					log.Printf("Error reading input stream: %v", err)
-					log.Print(err)
-					stdout.Close()
-					errReturn = err
-				}
-				break
-			}
-		}
-	}()
-
-	err2 = cmd.Start()
-	if err2 != nil {
-		log.Print("Error starting command")
-		log.Print(err2)
-		errReturn = err2
-	}
-
-	wg.Wait()
-
-	err2 = cmd.Wait()
-	if err2 != nil {
-		log.Print("Error waiting for command")
-		log.Print(err2)
-		errReturn = err2
-	}
-
-	if errReturn != nil {
-		log.Printf("%v: %v bytes, %v", cmd.String(), bytesWritten, errReturn)
-	}
-	return bytesWritten, errReturn
+	_, bytesWritten, err := doExternalCommand(picture, intermediateFormat, outFormat, conversion[0], params, outWriter)
+	return bytesWritten, err
 }
 
 func renderText(item *PbItem, textBlockLayouts []TextBlockLayout, left float64, top float64, density float64) (image.Image, int, int) {
