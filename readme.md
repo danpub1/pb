@@ -427,6 +427,7 @@ Image-Level Settings
 * `size`: Initial image size (before resizing). [auto:3x2,3x2]
 * `max-size`: Maximum image size (after resizing). [100%]
 * `recurse`: Recurse directories when matching wildcard images. [true]
+* `image-output-file`: Save the image to a file. []
 * `straighten`: Straighten the image by specified angle, maximizing the image's rectangle. [0.0]
 * `subject`: Subject location 1-9 horizontally, 1-9 vertically. [5050]
 

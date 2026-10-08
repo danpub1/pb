@@ -11,6 +11,8 @@
 * Add `out` alias for `output-file`
 * Add `auto` for `title` and `caption` settings
 * Add `{{ImageNumber}}` replacement for captions
+* Add `{{%InputFile%}}` and `{{%OutputFile%}}` for external commands
+* Add `image-output-file` similar to `text-output-file`
 ### Changed
 * Replace `seed:#` and `sort:hash` with `sort:#`
 * Add `{{%page%}}` to output filename format instead of trying to decide when to add a number or not
@@ -20,6 +22,8 @@
 ### Fixed
 * Fix crop rectangle calculation
 * Do not break out of subsequent iterations with page-range:$
+* Fix issue with external commands failing
+* Fix issue with parsing unrecognized escapes
 
 ## v2.0.0
 ### Overview

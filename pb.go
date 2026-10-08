@@ -384,8 +384,8 @@ func main() {
 			fmt.Println(printItems(items, true))
 		}
 
-		renderTextImages(pbBook, conversions)
-		renderPages(pbBook, pageRange, firstIteration, flat, conversions)
+		cache := renderImageFiles(pbBook, conversions, nil)
+		cache = renderPages(pbBook, pageRange, firstIteration, flat, conversions, cache)
 		assemble(items)
 
 		if !hasFilesToWatch(inFiles) || !Opts.Watch() {

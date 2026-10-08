@@ -1340,10 +1340,13 @@ func freeObject(pages []PageInfo) int {
 	return objNum
 }
 
-func renderPages(pbBook *PbBook, outPageRange string, firstIteration bool, pageHashes []string, conversions map[string][]string) {
+func renderPages(pbBook *PbBook, outPageRange string, firstIteration bool, pageHashes []string, conversions map[string][]string, backgroundCache []BackgroundCacheItem) []BackgroundCacheItem {
 	outFileInfo := make(map[string]OutFileInfo, 0)
 
-	backgroundCache := make([]BackgroundCacheItem, 0)
+	if backgroundCache == nil {
+		backgroundCache = make([]BackgroundCacheItem, 0)
+	}
+
 	usedObjs := make(map[string][]int)
 	if !firstIteration && lastOutFileInfo != nil {
 		for pp := range pbBook.pages {
@@ -1387,7 +1390,7 @@ func renderPages(pbBook *PbBook, outPageRange string, firstIteration bool, pageH
 		changed := false
 		if changed, _ = fileChanged(inFiles, lastModTime); changed && !firstIteration {
 			lastOutFileInfo = nil
-			return
+			return backgroundCache
 		}
 		page := &pbBook.pages[pp]
 
@@ -1503,7 +1506,7 @@ func renderPages(pbBook *PbBook, outPageRange string, firstIteration bool, pageH
 						n, err := writeNewline(thisOutFilename)
 						if err != nil {
 							lastOutFileInfo = nil
-							return
+							return backgroundCache
 						}
 						info.n += n
 					}
@@ -1512,7 +1515,7 @@ func renderPages(pbBook *PbBook, outPageRange string, firstIteration bool, pageH
 					n, err := writeHeader(thisOutFilename)
 					if err != nil {
 						lastOutFileInfo = nil
-						return
+						return backgroundCache
 					}
 					info.n = n
 				}
@@ -1535,7 +1538,7 @@ func renderPages(pbBook *PbBook, outPageRange string, firstIteration bool, pageH
 			thisn, thisErr := writePage(dst, objNum, pp, thisOutFilename, item.IntPageSetting("output-compression"), conversions)
 			if thisErr != nil {
 				lastOutFileInfo = nil
-				return
+				return backgroundCache
 			}
 
 			// if Opts.Verbose("D") {
@@ -1556,7 +1559,7 @@ func renderPages(pbBook *PbBook, outPageRange string, firstIteration bool, pageH
 							n, err := writeNewline(thisOutFilename)
 							if err != nil {
 								lastOutFileInfo = nil
-								return
+								return backgroundCache
 							}
 							info.n += n
 						} else {
@@ -1575,16 +1578,54 @@ func renderPages(pbBook *PbBook, outPageRange string, firstIteration bool, pageH
 		bytesWritten, endErr := writeFooter(outFilename, info.n, info.offsets)
 		if endErr != nil {
 			lastOutFileInfo = nil
-			return
+			return backgroundCache
 		}
 		info.n = bytesWritten
 		outFileInfo[outFilename] = info
 	}
 
 	lastOutFileInfo = outFileInfo
+	return backgroundCache
 }
 
-func renderTextImages(pbBook *PbBook, conversions map[string][]string) {
+func renderImageFile(item *PbItem, pbBook *PbBook, conversions map[string][]string, cache []BackgroundCacheItem, density float64) []BackgroundCacheItem {
+	switch item.itemType {
+	case ItemTypeText:
+		if sOutputFile := item.Setting("text-output-file"); len(sOutputFile) > 0 {
+			textImage, _, _ := renderText(item, item.textBlockLayouts, 0, 0, density)
+			if textImage != nil {
+				_, err := writeImageFile(textImage, sOutputFile, item.IntSetting("output-compression"), conversions)
+				if err != nil {
+					log.Printf("Error writing text image: %v", err)
+				}
+			}
+		}
+	case ItemTypeImage:
+		if sOutputFile := item.Setting("image-output-file"); len(sOutputFile) > 0 {
+			var image image.Image
+			image, _, _, _, _, _, _, cache = renderImage(item, 0, 0, density, pbBook, cache, conversions)
+			if image != nil {
+				_, err := writeImageFile(image, sOutputFile, item.IntSetting("output-compression"), conversions)
+				if err != nil {
+					log.Printf("Error writing text image: %v", err)
+				}
+			}
+		}
+	}
+
+	return cache
+}
+
+func renderImageFiles(pbBook *PbBook, conversions map[string][]string, cache []BackgroundCacheItem) []BackgroundCacheItem {
+	if cache == nil {
+		cache = make([]BackgroundCacheItem, 0)
+	}
+
+	for _, item := range pbBook.namedItems {
+		density := item.Density()
+		cache = renderImageFile(&item, pbBook, conversions, cache, density)
+	}
+
 	for pp := range pbBook.pages {
 		page := &pbBook.pages[pp]
 
@@ -1604,22 +1645,15 @@ func renderTextImages(pbBook *PbBook, conversions map[string][]string) {
 			for column := range page.rows[row].columns {
 				for columnItem := range page.rows[row].columns[column].items {
 					item = page.rows[row].columns[column].items[columnItem].item
-
-					if item.itemType == ItemTypeText {
-						if sOutputFile := item.Setting("text-output-file"); len(sOutputFile) > 0 {
-							textImage, _, _ := renderText(item, item.textBlockLayouts, 0, 0, density)
-							if textImage != nil {
-								_, err := writeImageFile(textImage, sOutputFile, item.IntSetting("output-compression"), conversions)
-								if err != nil {
-									log.Printf("Error writing text image: %v", err)
-								}
-							}
-						}
+					if len(item.Setting("name")) == 0 {
+						cache = renderImageFile(item, pbBook, conversions, cache, density)
 					}
 				}
 			}
 		}
 	}
+
+	return cache
 }
 
 type pdfFile struct {
