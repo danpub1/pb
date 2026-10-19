@@ -1,5 +1,5 @@
 # Changelog
-## Unreleased
+## v2.1.0
 ### Added
 * Tip for making a collage
 * Add pack-aspects to keep pictures from getting too elongated or too square
