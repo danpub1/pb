@@ -1,5 +1,9 @@
 # Changelog
+
 ## v2.1.0
+### Overview
+* Improve collage functionality by improving packing
+* Add external image conversion and improve external image writing 
 ### Added
 * Tip for making a collage
 * Add pack-aspects to keep pictures from getting too elongated or too square
@@ -17,6 +21,7 @@
 * Replace `seed:#` and `sort:hash` with `sort:#`
 * Add `{{%page%}}` to output filename format instead of trying to decide when to add a number or not
 ### Deprecated
+* Nothing
 ### Removed
 * `output-mozjpeg` and `output-mozjpeg-sampling`, replaced by external image conversion commands
 ### Fixed
@@ -71,7 +76,9 @@
 * Restructure command line processing to allow no input files when --assemble is present
 * Changed verbose modes to `D`, `DD` (new), and `DDD` (was `L`) and verbose output modes to `P` and `PP` was (`X`)
 ### Deprecated
+* Nothing
 ### Removed
+* Nothing
 ### Fixed
 * Recursing into zip files
 * Correctly use row-specific spread-percent when aligning rows
@@ -80,7 +87,8 @@
 
 
 ## v1.1.0
-
+### Overview
+* Improve editing workflow
 ### Added
 * Support `page-range:*` to select changed pages when using `watch`
 * Add `spread-percent`
@@ -92,6 +100,10 @@
 * Default `watch` to true, but do not watch if there is nothing to watch
 * Handle multiple books by merging into one
 * Help coded into default settings
+### Deprecated
+* Nothing
+### Removed
+* Nothing
 ### Fixed
 * Handle errors from `ImageReader.Reader()`
 * Check for existence of file before watching a file
