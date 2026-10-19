@@ -24,6 +24,9 @@
 * Do not break out of subsequent iterations with page-range:$
 * Fix issue with external commands failing
 * Fix issue with parsing unrecognized escapes
+* Fix default settings when using units other than points
+* Fix change detection when using page-range:$
+* Fix panic when measured text is too big 
 
 ## v2.0.0
 ### Overview

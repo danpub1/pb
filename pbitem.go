@@ -1296,6 +1296,51 @@ func packAspect(aspectString string, aspect float64) float64 {
 	return aspect
 }
 
+func adjustDefaultSettingsForUnits(units string) {
+	switch units {
+	case "pt":
+		defaultSettings["page-size"] = DefaultSetting{"612.0x792.0", defaultSettings["page-size"].section, defaultSettings["page-size"].description}
+		defaultSettings["margin"] = DefaultSetting{"24", defaultSettings["margin"].section, defaultSettings["margin"].description}
+		defaultSettings["row-gutter"] = DefaultSetting{"6.0", defaultSettings["row-gutter"].section, defaultSettings["row-gutter"].description}
+		defaultSettings["column-gutter"] = DefaultSetting{"6.0", defaultSettings["column-gutter"].section, defaultSettings["column-gutter"].description}
+		defaultSettings["item-gutter"] = DefaultSetting{"6.0", defaultSettings["item-gutter"].section, defaultSettings["item-gutter"].description}
+		defaultSettings["pack-gutter"] = DefaultSetting{"6.0", defaultSettings["pack-gutter"].section, defaultSettings["pack-gutter"].description}
+		defaultSettings["font-size"] = DefaultSetting{"11.0", defaultSettings["font-size"].section, defaultSettings["font-size"].description}
+		defaultSettings["padding"] = DefaultSetting{"3.5", defaultSettings["padding"].section, defaultSettings["padding"].description}
+		defaultSettings["density"] = DefaultSetting{"2.0", defaultSettings["density"].section, defaultSettings["density"].description}
+	case "in":
+		defaultSettings["page-size"] = DefaultSetting{"8.5x11.0", defaultSettings["page-size"].section, defaultSettings["page-size"].description}
+		defaultSettings["margin"] = DefaultSetting{"0.33333333333333333333", defaultSettings["margin"].section, defaultSettings["margin"].description}
+		defaultSettings["row-gutter"] = DefaultSetting{"0.08333333333333333333", defaultSettings["row-gutter"].section, defaultSettings["row-gutter"].description}
+		defaultSettings["column-gutter"] = DefaultSetting{"0.08333333333333333333", defaultSettings["column-gutter"].section, defaultSettings["column-gutter"].description}
+		defaultSettings["item-gutter"] = DefaultSetting{"0.08333333333333333333", defaultSettings["item-gutter"].section, defaultSettings["item-gutter"].description}
+		defaultSettings["pack-gutter"] = DefaultSetting{"0.08333333333333333333", defaultSettings["pack-gutter"].section, defaultSettings["pack-gutter"].description}
+		defaultSettings["font-size"] = DefaultSetting{"0.15277777777777777778", defaultSettings["font-size"].section, defaultSettings["font-size"].description}
+		defaultSettings["padding"] = DefaultSetting{"0.04861111111111111111", defaultSettings["padding"].section, defaultSettings["padding"].description}
+		defaultSettings["density"] = DefaultSetting{"144.0", defaultSettings["density"].section, defaultSettings["density"].description}
+	case "cm":
+		defaultSettings["page-size"] = DefaultSetting{"21.59x27.94", defaultSettings["page-size"].section, defaultSettings["page-size"].description}
+		defaultSettings["margin"] = DefaultSetting{"0.84666666666666666667", defaultSettings["margin"].section, defaultSettings["margin"].description}
+		defaultSettings["row-gutter"] = DefaultSetting{"0.21166666666666666667", defaultSettings["row-gutter"].section, defaultSettings["row-gutter"].description}
+		defaultSettings["column-gutter"] = DefaultSetting{"0.21166666666666666667", defaultSettings["column-gutter"].section, defaultSettings["column-gutter"].description}
+		defaultSettings["item-gutter"] = DefaultSetting{"0.21166666666666666667", defaultSettings["item-gutter"].section, defaultSettings["item-gutter"].description}
+		defaultSettings["pack-gutter"] = DefaultSetting{"0.21166666666666666667", defaultSettings["pack-gutter"].section, defaultSettings["pack-gutter"].description}
+		defaultSettings["font-size"] = DefaultSetting{"0.38805555555555555556", defaultSettings["font-size"].section, defaultSettings["font-size"].description}
+		defaultSettings["padding"] = DefaultSetting{"0.12347222222222222222", defaultSettings["padding"].section, defaultSettings["padding"].description}
+		defaultSettings["density"] = DefaultSetting{"56.69291338582677165354", defaultSettings["density"].section, defaultSettings["density"].description}
+	case "mm":
+		defaultSettings["page-size"] = DefaultSetting{"215.9x279.4", defaultSettings["page-size"].section, defaultSettings["page-size"].description}
+		defaultSettings["margin"] = DefaultSetting{"8.4666666666666666667", defaultSettings["margin"].section, defaultSettings["margin"].description}
+		defaultSettings["row-gutter"] = DefaultSetting{"2.1166666666666666667", defaultSettings["row-gutter"].section, defaultSettings["row-gutter"].description}
+		defaultSettings["column-gutter"] = DefaultSetting{"2.1166666666666666667", defaultSettings["column-gutter"].section, defaultSettings["column-gutter"].description}
+		defaultSettings["item-gutter"] = DefaultSetting{"2.1166666666666666667", defaultSettings["item-gutter"].section, defaultSettings["item-gutter"].description}
+		defaultSettings["pack-gutter"] = DefaultSetting{"2.1166666666666666667", defaultSettings["pack-gutter"].section, defaultSettings["pack-gutter"].description}
+		defaultSettings["font-size"] = DefaultSetting{"3.8805555555555555556", defaultSettings["font-size"].section, defaultSettings["font-size"].description}
+		defaultSettings["padding"] = DefaultSetting{"1.2347222222222222222", defaultSettings["padding"].section, defaultSettings["padding"].description}
+		defaultSettings["density"] = DefaultSetting{"5.66929133858267716535", defaultSettings["density"].section, defaultSettings["density"].description}
+	}
+}
+
 var defaultSettings = map[string]DefaultSetting{
 	// book
 	"units":              {"pt", "Book", "The units of measure used in laying out the book.  One of `in`, `cm`, `mm`, `pt`"},
@@ -1434,6 +1479,10 @@ func (item *PbItem) Set(setting string, value string) {
 	// 	item.settings = map[string]string{}
 	// }
 	item.settings[setting] = value
+
+	if setting == "units" {
+		adjustDefaultSettingsForUnits(value)
+	}
 }
 
 func (item *PbItem) BoolSetting(setting string) bool {

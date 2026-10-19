@@ -505,9 +505,6 @@ This is useful when the time on a camera was not adjusted for a different timezo
 ### Only one book item
 There is really only one book `***`.  If there are multiple books specified, they are merged into one in the order they are found.
 
-### Points are the default
-If using another base measurement, be sure to explicitly define everything in that measurement. Otherwise the default units will be used, which are in points
-
 ### Listing Wildcarded Files
 To quickly create a list of the files that match a wildcard, use the command line option `--verbose:P`, or the equivalent `verbose:P` in the file. Redirect the output to another file and cut and paste the listing.
 
@@ -598,7 +595,6 @@ Use `--norender` to test various `--size` and `--sort` settings.  In general, in
   * Latest dependencies
   * Tests
   * Any other go-novice mistakes
-* Allow more flexibility with units: Convert all units specified in settings to points internally
 * Consolidate `subject` and similar concepts in `trim` and `crop`
 * Calendar pages
 * More complete support with drag and drop: Redirect verbose:P and verbose:PP output with a book-level setting - to create both pdf and .pb files in one command without options.

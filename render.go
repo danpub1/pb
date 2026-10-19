@@ -1153,6 +1153,10 @@ func renderImage(item *PbItem, left float64, top float64, density float64, pbBoo
 		picture = imaging.FlipV(picture)
 	}
 
+	if density == 0 {
+		return picture, 0, 0, 0, 0, 0, 0, cache
+	}
+
 	if sSize := item.Setting("float"); sSize != "" {
 		if sSizeParts := strings.SplitN(sSize, ",", 4); len(sSizeParts) == 4 {
 			item.xOffset = Atof(sSizeParts[0]) - left
@@ -1340,7 +1344,7 @@ func freeObject(pages []PageInfo) int {
 	return objNum
 }
 
-func renderPages(pbBook *PbBook, outPageRange string, firstIteration bool, pageHashes []string, conversions map[string][]string, backgroundCache []BackgroundCacheItem) []BackgroundCacheItem {
+func renderPages(pbBook *PbBook, outPageRange string, firstIteration bool, incrementalPdf bool, pageHashes []string, conversions map[string][]string, backgroundCache []BackgroundCacheItem) ([]BackgroundCacheItem, bool) {
 	outFileInfo := make(map[string]OutFileInfo, 0)
 
 	if backgroundCache == nil {
@@ -1348,7 +1352,7 @@ func renderPages(pbBook *PbBook, outPageRange string, firstIteration bool, pageH
 	}
 
 	usedObjs := make(map[string][]int)
-	if !firstIteration && lastOutFileInfo != nil {
+	if incrementalPdf && !firstIteration && lastOutFileInfo != nil {
 		for pp := range pbBook.pages {
 			page := &pbBook.pages[pp]
 
@@ -1388,9 +1392,9 @@ func renderPages(pbBook *PbBook, outPageRange string, firstIteration bool, pageH
 
 	for pp := range pbBook.pages {
 		changed := false
-		if changed, _ = fileChanged(inFiles, lastModTime); changed && !firstIteration {
+		if changed, _ = fileChanged(inFiles, lastModTime); changed && (!incrementalPdf || firstIteration) {
 			lastOutFileInfo = nil
-			return backgroundCache
+			return backgroundCache, true
 		}
 		page := &pbBook.pages[pp]
 
@@ -1499,14 +1503,14 @@ func renderPages(pbBook *PbBook, outPageRange string, firstIteration bool, pageH
 			if info, exists = outFileInfo[thisOutFilename]; !exists {
 				info = OutFileInfo{}
 				found := false
-				if !firstIteration && lastOutFileInfo != nil {
+				if incrementalPdf && !firstIteration && lastOutFileInfo != nil {
 					if _, exists := lastOutFileInfo[thisOutFilename]; exists {
 						info.n = lastOutFileInfo[thisOutFilename].n
 						found = true
 						n, err := writeNewline(thisOutFilename)
 						if err != nil {
 							lastOutFileInfo = nil
-							return backgroundCache
+							return backgroundCache, true
 						}
 						info.n += n
 					}
@@ -1515,7 +1519,7 @@ func renderPages(pbBook *PbBook, outPageRange string, firstIteration bool, pageH
 					n, err := writeHeader(thisOutFilename)
 					if err != nil {
 						lastOutFileInfo = nil
-						return backgroundCache
+						return backgroundCache, true
 					}
 					info.n = n
 				}
@@ -1538,7 +1542,7 @@ func renderPages(pbBook *PbBook, outPageRange string, firstIteration bool, pageH
 			thisn, thisErr := writePage(dst, objNum, pp, thisOutFilename, item.IntPageSetting("output-compression"), conversions)
 			if thisErr != nil {
 				lastOutFileInfo = nil
-				return backgroundCache
+				return backgroundCache, true
 			}
 
 			// if Opts.Verbose("D") {
@@ -1548,7 +1552,7 @@ func renderPages(pbBook *PbBook, outPageRange string, firstIteration bool, pageH
 			info.n += thisn
 
 			outFileInfo[thisOutFilename] = info
-		} else if !firstIteration && lastOutFileInfo != nil {
+		} else if incrementalPdf && !firstIteration && lastOutFileInfo != nil {
 			if _, exists := lastOutFileInfo[thisOutFilename]; exists {
 				for ii, lastOffset := range lastOutFileInfo[thisOutFilename].offsets {
 					if lastOutFileInfo[thisOutFilename].offsets[ii].pageHash == pageHashes[pp] {
@@ -1559,7 +1563,7 @@ func renderPages(pbBook *PbBook, outPageRange string, firstIteration bool, pageH
 							n, err := writeNewline(thisOutFilename)
 							if err != nil {
 								lastOutFileInfo = nil
-								return backgroundCache
+								return backgroundCache, true
 							}
 							info.n += n
 						} else {
@@ -1578,14 +1582,14 @@ func renderPages(pbBook *PbBook, outPageRange string, firstIteration bool, pageH
 		bytesWritten, endErr := writeFooter(outFilename, info.n, info.offsets)
 		if endErr != nil {
 			lastOutFileInfo = nil
-			return backgroundCache
+			return backgroundCache, true
 		}
 		info.n = bytesWritten
 		outFileInfo[outFilename] = info
 	}
 
 	lastOutFileInfo = outFileInfo
-	return backgroundCache
+	return backgroundCache, false
 }
 
 func renderImageFile(item *PbItem, pbBook *PbBook, conversions map[string][]string, cache []BackgroundCacheItem, density float64) []BackgroundCacheItem {
@@ -1603,7 +1607,7 @@ func renderImageFile(item *PbItem, pbBook *PbBook, conversions map[string][]stri
 	case ItemTypeImage:
 		if sOutputFile := item.Setting("image-output-file"); len(sOutputFile) > 0 {
 			var image image.Image
-			image, _, _, _, _, _, _, cache = renderImage(item, 0, 0, density, pbBook, cache, conversions)
+			image, _, _, _, _, _, _, cache = renderImage(item, 0, 0, 0, pbBook, cache, conversions)
 			if image != nil {
 				_, err := writeImageFile(image, sOutputFile, item.IntSetting("output-compression"), conversions)
 				if err != nil {

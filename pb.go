@@ -349,6 +349,8 @@ func main() {
 
 		flat := pbBook.Flatten()
 		pageRange := Opts.PageRange()
+		firstIteration = pageRange != "$" || firstIteration
+		calculatedPageRange := pageRange
 		includePages := "0"
 		if lastIteration != nil {
 			for ii, pp := range flat {
@@ -357,36 +359,49 @@ func main() {
 				}
 			}
 		}
-		if !firstIteration {
-			pageRange = strings.ReplaceAll(pageRange, "$", includePages)
+
+		if pageRange == "$" {
+			if !firstIteration {
+				calculatedPageRange = strings.ReplaceAll(calculatedPageRange, "$", includePages)
+			} else {
+				calculatedPageRange = "-"
+			}
+		} else {
+			calculatedPageRange = strings.ReplaceAll(calculatedPageRange, "*", includePages)
 		}
-		pageRange = strings.ReplaceAll(pageRange, "*", includePages)
+
 		lastIteration = flat
 
 		// calculate sizes that fills available space
-		resizePages(pbBook, pageRange, firstIteration)
-		if Opts.Verbose("D") {
-			log.Printf("Resized pages")
-		}
+		resized := resizePages(pbBook, calculatedPageRange, firstIteration)
 
-		// determine positions on page
-		layoutPages(pbBook, pageRange, firstIteration)
-		if Opts.Verbose("D") {
-			log.Printf("Laid out pages")
-		}
+		// If resized was not aborted because of a file being saved
+		if !resized {
+			firstIteration = true
+		} else {
+			if Opts.Verbose("D") {
+				log.Printf("Resized pages")
+			}
 
-		packPages(pbBook, pageRange, firstIteration)
-		if Opts.Verbose("D") {
-			log.Printf("Packed pages")
-		}
+			// determine positions on page
+			layoutPages(pbBook, calculatedPageRange, firstIteration)
+			if Opts.Verbose("D") {
+				log.Printf("Laid out pages")
+			}
 
-		if Opts.Verbose("PP") {
-			fmt.Println(printItems(items, true))
-		}
+			packPages(pbBook, calculatedPageRange, firstIteration)
+			if Opts.Verbose("D") {
+				log.Printf("Packed pages")
+			}
 
-		cache := renderImageFiles(pbBook, conversions, nil)
-		cache = renderPages(pbBook, pageRange, firstIteration, flat, conversions, cache)
-		assemble(items)
+			if Opts.Verbose("PP") {
+				fmt.Println(printItems(items, true))
+			}
+
+			cache := renderImageFiles(pbBook, conversions, nil)
+			cache, firstIteration = renderPages(pbBook, calculatedPageRange, firstIteration, pageRange == "$", flat, conversions, cache)
+			assemble(items)
+		}
 
 		if !hasFilesToWatch(inFiles) || !Opts.Watch() {
 			break
@@ -399,10 +414,6 @@ func main() {
 		changed := false
 		for changed, lastModTime = fileChanged(inFiles, lastModTime); !changed; changed, lastModTime = fileChanged(inFiles, lastModTime) {
 			time.Sleep(time.Duration(int64(1) * 1000 * 1000 * 1000))
-		}
-
-		if pageRange == "$" {
-			firstIteration = false
 		}
 	}
 }

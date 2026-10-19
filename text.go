@@ -569,13 +569,15 @@ func MeasureText(text string, maxWidth float64, maxHeight float64, textInfo *Tex
 		if len(parts) > 0 {
 			textInfo.textAlign = TextAlignLeft
 			layout1 = MeasureText(parts[0], maxWidth, 0, textInfo)
-			maxLines = len(layout1[0].lines)
+			if len(layout1) > 0 {
+				maxLines = len(layout1[0].lines)
+			}
 			destLayout = layout1
 		}
 		if len(parts) > 1 {
 			textInfo.textAlign = TextAlignCenter
 			layout2 = MeasureText(parts[1], maxWidth, 0, textInfo)
-			if len(layout2[0].lines) > maxLines {
+			if len(layout2) > 0 && len(layout2[0].lines) > maxLines {
 				maxLines = len(layout2[0].lines)
 				destLayout = layout2
 			}
@@ -583,7 +585,7 @@ func MeasureText(text string, maxWidth float64, maxHeight float64, textInfo *Tex
 		if len(parts) > 2 {
 			textInfo.textAlign = TextAlignRight
 			layout3 = MeasureText(parts[2], maxWidth, 0, textInfo)
-			if len(layout3[0].lines) > maxLines {
+			if len(layout3) > 0 && len(layout3[0].lines) > maxLines {
 				maxLines = len(layout3[0].lines)
 				destLayout = layout3
 			}
@@ -591,15 +593,15 @@ func MeasureText(text string, maxWidth float64, maxHeight float64, textInfo *Tex
 
 		for ii := range maxLines {
 			var aline strings.Builder
-			if layout1 != nil && len(layout1[0].lines) > ii {
+			if len(layout1) > 0 && len(layout1[0].lines) > ii {
 				aline.WriteString(layout1[0].lines[ii].line)
 			}
 			aline.WriteString("\t")
-			if layout2 != nil && len(layout2[0].lines) > ii {
+			if len(layout2) > 0 && len(layout2[0].lines) > ii {
 				aline.WriteString(layout2[0].lines[ii].line)
 			}
 			aline.WriteString("\t")
-			if layout3 != nil && len(layout3[0].lines) > ii {
+			if len(layout3) > 0 && len(layout3[0].lines) > ii {
 				aline.WriteString(layout3[0].lines[ii].line)
 			}
 			destLayout[0].lines[ii].line = aline.String()

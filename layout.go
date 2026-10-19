@@ -515,14 +515,14 @@ func accrueRowLength(rowLengths []float64, row int, item *PbItem) []float64 {
 	return rowLengths
 }
 
-func resizePages(pb *PbBook, outPageRange string, firstIteration bool) {
+func resizePages(pb *PbBook, outPageRange string, firstIteration bool) bool {
 	resizeCache := loadResizeCache()
 
 	for pp := range pb.pages {
 		if isPageInRange(outPageRange, pp, firstIteration) || isCurrentPage(pb, pp) {
 			changed := false
 			if changed, _ = fileChanged(inFiles, lastModTime); changed {
-				break
+				return false
 			}
 			page := &pb.pages[pp]
 
@@ -561,6 +561,7 @@ func resizePages(pb *PbBook, outPageRange string, firstIteration bool) {
 	}
 
 	saveResizeCache(&resizeCache)
+	return true
 }
 
 func BindingAlign(align int, binding int, pageNum int) int {
@@ -1166,7 +1167,7 @@ func packPages(pbBook *PbBook, outPageRange string, firstIteration bool) {
 				amount := 0.5 / pageItem.Density()
 				gutter := pageItem.FloatPageSetting("pack-gutter")
 
-				firstIteration := true
+				firstPackIteration := true
 
 				for {
 					VerboseLog(fmt.Sprintf("Growing Page %v", pp))
@@ -1209,7 +1210,7 @@ func packPages(pbBook *PbBook, outPageRange string, firstIteration bool) {
 						}
 					}
 
-					if !grewItems && !firstIteration {
+					if !grewItems && !firstPackIteration {
 						break
 					}
 
@@ -1257,7 +1258,7 @@ func packPages(pbBook *PbBook, outPageRange string, firstIteration bool) {
 						break
 					}
 
-					firstIteration = false
+					firstPackIteration = false
 				}
 			}
 

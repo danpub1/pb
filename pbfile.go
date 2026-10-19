@@ -1314,6 +1314,7 @@ func BasePath(fileName string) string {
 var rxExternalConvert, _ = regexp.Compile("^external-[a-z0-9]+(-[A-Z0-9]+){2,}$")
 
 func ReadPbFile(inFiles []string, args []string) ([]PbItem, map[string][]string) {
+	adjustDefaultSettingsForUnits("pt") // Default to points
 	items := make([]PbItem, 0)
 	conversions := map[string][]string{}
 	for _, inFile := range inFiles {
