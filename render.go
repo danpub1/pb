@@ -1,6 +1,8 @@
 package main
 
 import (
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"image"
 	"image/color"
@@ -157,12 +159,12 @@ func writeNewline(outFilename string) (int, error) {
 }
 
 type PageInfo struct {
-	offset   int
-	width    float64
-	height   float64
-	pageNum  int
-	objNum   int
-	pageHash string
+	Offset   int
+	Width    float64
+	Height   float64
+	PageNum  int
+	ObjNum   int
+	PageHash string
 }
 
 func writeFooter(outFilename string, bytesWritten int, pageInfo []PageInfo) (int, error) {
@@ -175,7 +177,7 @@ func writeFooter(outFilename string, bytesWritten int, pageInfo []PageInfo) (int
 
 		objList := make([]PageInfo, 0)
 		objList = append(objList, pageInfo[:]...)
-		slices.SortFunc(objList, func(a PageInfo, b PageInfo) int { return a.objNum - b.objNum })
+		slices.SortFunc(objList, func(a PageInfo, b PageInfo) int { return a.ObjNum - b.ObjNum })
 
 		objList = append(objList, PageInfo{bytesWritten, 0, 0, 0, 0, ""})
 		n, err := buffer.WriteString(fmt.Sprintf("%v 0 obj\n<</Type/Catalog/Pages %v 0 R>>\nendobj\n", numPages+1, numPages+2))
@@ -196,14 +198,14 @@ func writeFooter(outFilename string, bytesWritten int, pageInfo []PageInfo) (int
 
 		for ii := range numPages {
 			objList = append(objList, PageInfo{bytesWritten, 0, 0, 0, 0, ""})
-			n, err = buffer.WriteString(fmt.Sprintf("%v 0 obj\n<</XObject<</I%v %v 0 R>>>>\nendobj\n", ii*3+numPages+3+0, pageInfo[ii].objNum, pageInfo[ii].objNum))
+			n, err = buffer.WriteString(fmt.Sprintf("%v 0 obj\n<</XObject<</I%v %v 0 R>>>>\nendobj\n", ii*3+numPages+3+0, pageInfo[ii].ObjNum, pageInfo[ii].ObjNum))
 			bytesWritten += n
 			objList = append(objList, PageInfo{bytesWritten, 0, 0, 0, 0, ""})
-			cmd := fmt.Sprintf("q %v 0 0 %v 0 0 cm /I%v Do Q", pageInfo[ii].width, pageInfo[ii].height, pageInfo[ii].objNum)
+			cmd := fmt.Sprintf("q %v 0 0 %v 0 0 cm /I%v Do Q", pageInfo[ii].Width, pageInfo[ii].Height, pageInfo[ii].ObjNum)
 			n, err = buffer.WriteString(fmt.Sprintf("%v 0 obj\n<</Length %v>>\nstream\n%v\nendstream\nendobj\n", ii*3+numPages+3+1, len(cmd), cmd))
 			bytesWritten += n
 			objList = append(objList, PageInfo{bytesWritten, 0, 0, 0, 0, ""})
-			n, err = buffer.WriteString(fmt.Sprintf("%v 0 obj\n<</Type/Page/MediaBox[0 0 %v %v]/Resources %v 0 R/Contents %v 0 R/Parent %v 0 R>>\nendobj\n", ii*3+numPages+3+2, pageInfo[ii].width, pageInfo[ii].height, ii*3+numPages+3+0, ii*3+numPages+3+1, numPages+2))
+			n, err = buffer.WriteString(fmt.Sprintf("%v 0 obj\n<</Type/Page/MediaBox[0 0 %v %v]/Resources %v 0 R/Contents %v 0 R/Parent %v 0 R>>\nendobj\n", ii*3+numPages+3+2, pageInfo[ii].Width, pageInfo[ii].Height, ii*3+numPages+3+0, ii*3+numPages+3+1, numPages+2))
 			bytesWritten += n
 		}
 
@@ -212,7 +214,7 @@ func writeFooter(outFilename string, bytesWritten int, pageInfo []PageInfo) (int
 		n, err = buffer.WriteString(fmt.Sprintf("xref\n0 %v\n0000000000 00001 f\n", numPages*4+3))
 		bytesWritten += n
 		for ii := range objList {
-			n, err = buffer.WriteString(fmt.Sprintf("%010d 00000 n\n", objList[ii].offset))
+			n, err = buffer.WriteString(fmt.Sprintf("%010d 00000 n\n", objList[ii].Offset))
 			bytesWritten += n
 		}
 
@@ -760,8 +762,65 @@ func doExternalCommand(picture image.Image, commandInputFormat string, commandOu
 	return picture, bytesWritten, err
 }
 
+type ConvertWriter struct {
+	mem *[]byte
+}
+
+// Write implements [io.Writer].
+func (writer ConvertWriter) Write(p []byte) (int, error) {
+	*writer.mem = append(*writer.mem, p...)
+	return len(p), nil
+}
+
+type ConvertCacheInput struct {
+	picture   []byte
+	outFormat string
+	inFormat  string
+	command   string
+	params    []string
+}
+
 func convertImage(picture image.Image, outFormat string, inFormat string, command string, params []string) image.Image {
+	inputData := ConvertWriter{&[]byte{}}
+	encoder := png.Encoder{CompressionLevel: png.BestSpeed}
+	if err := encoder.Encode(inputData, picture); err != nil {
+		log.Print(err)
+		return picture
+	}
+
+	*inputData.mem = append(*inputData.mem, []byte(outFormat)...)
+	*inputData.mem = append(*inputData.mem, []byte(inFormat)...)
+	*inputData.mem = append(*inputData.mem, []byte(command)...)
+	for _, param := range params {
+		*inputData.mem = append(*inputData.mem, []byte(param)...)
+	}
+
+	hashBytes := fnv128a(*inputData.mem)
+	fnvHash := hex.EncodeToString(hashBytes)
+	cacheFilename := fmt.Sprintf(".pb/%v", fnvHash)
+
+	file, err := os.Open(cacheFilename)
+	if err == nil {
+		rv, err := png.Decode(file)
+		file.Close()
+		if err == nil {
+			return rv
+		}
+	}
+
 	rv, _, _ := doExternalCommand(picture, outFormat, inFormat, command, params, nil)
+
+	ensureConfigExists()
+	encoder = png.Encoder{CompressionLevel: png.BestSpeed}
+	file, err = os.OpenFile(cacheFilename, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
+	if err == nil {
+		err = png.Encode(file, rv)
+		file.Close()
+		if err != nil {
+			os.Remove(cacheFilename)
+		}
+	}
+
 	return rv
 }
 
@@ -1288,11 +1347,11 @@ func AddBackgourndCacheItem(cache []BackgroundCacheItem, item *BackgroundCacheIt
 
 // This is what is needed for writing header, footer, pages
 type OutFileInfo struct {
-	offsets []PageInfo
-	n       int
+	Offsets  []PageInfo
+	N        int
+	FileSize uint64
+	FileDate int64
 }
-
-var lastOutFileInfo map[string]OutFileInfo
 
 func maxOutFileName(item *PbItem, outFileInfo map[string]OutFileInfo) string {
 	outFileName := item.PageSetting("output-file")
@@ -1317,7 +1376,7 @@ func maxOutFileName(item *PbItem, outFileInfo map[string]OutFileInfo) string {
 				} else {
 					maxOutFileNumber = 0
 				}
-				if len(vv.offsets) < maxPages || maxPages <= 0 {
+				if len(vv.Offsets) < maxPages || maxPages <= 0 {
 					outFileName = kk
 					maxOutFileNumber = -1
 					break
@@ -1336,7 +1395,7 @@ func maxOutFileName(item *PbItem, outFileInfo map[string]OutFileInfo) string {
 func freeObject(pages []PageInfo) int {
 	objNum := 1
 	for _, page := range pages {
-		if page.objNum != objNum {
+		if page.ObjNum != objNum {
 			break
 		}
 		objNum++
@@ -1344,7 +1403,45 @@ func freeObject(pages []PageInfo) int {
 	return objNum
 }
 
-func renderPages(pbBook *PbBook, outPageRange string, firstIteration bool, incrementalPdf bool, pageHashes []string, conversions map[string][]string, backgroundCache []BackgroundCacheItem) ([]BackgroundCacheItem, bool) {
+func loadOutFileInfo() (*map[string]OutFileInfo, bool) {
+	outFileInfo := map[string]OutFileInfo{}
+
+	bytes, err := os.ReadFile(".pb/.pbOutFileInfo")
+	if err == nil {
+		json.Unmarshal(bytes, &outFileInfo)
+	} else {
+		return nil, false
+	}
+
+	for filename, info := range outFileInfo {
+		if info.FileDate != fileDate(filename) || info.FileSize != fileSize(filename) {
+			return nil, false
+		}
+	}
+
+	return &outFileInfo, true
+}
+
+func saveOutFileInfo(outFileInfo *map[string]OutFileInfo) {
+	if outFileInfo == nil || len(*outFileInfo) == 0 {
+		os.Remove(".pb/.pbOutFileInfo")
+		return
+	}
+
+	for filename, info := range *outFileInfo {
+		info.FileDate = fileDate(filename)
+		info.FileSize = fileSize(filename)
+		(*outFileInfo)[filename] = info
+	}
+
+	bytes, err := json.Marshal(outFileInfo)
+	if err == nil {
+		ensureConfigExists()
+		os.WriteFile(".pb/.pbOutFileInfo", bytes, 0666)
+	}
+}
+
+func renderPages(pbBook *PbBook, outPageRange string, lastOutFileInfo *map[string]OutFileInfo, pageHashes []string, conversions map[string][]string, backgroundCache []BackgroundCacheItem) ([]BackgroundCacheItem, *map[string]OutFileInfo) {
 	outFileInfo := make(map[string]OutFileInfo, 0)
 
 	if backgroundCache == nil {
@@ -1352,7 +1449,7 @@ func renderPages(pbBook *PbBook, outPageRange string, firstIteration bool, incre
 	}
 
 	usedObjs := make(map[string][]int)
-	if incrementalPdf && !firstIteration && lastOutFileInfo != nil {
+	if lastOutFileInfo != nil {
 		for pp := range pbBook.pages {
 			page := &pbBook.pages[pp]
 
@@ -1364,7 +1461,7 @@ func renderPages(pbBook *PbBook, outPageRange string, firstIteration bool, incre
 				continue
 			}
 
-			if isPageInRange(outPageRange, pp, firstIteration) || isCurrentPage(pbBook, pp) {
+			if isPageInRange(outPageRange, pp, lastOutFileInfo == nil) || isCurrentPage(pbBook, pp) {
 				continue
 			}
 
@@ -1372,13 +1469,13 @@ func renderPages(pbBook *PbBook, outPageRange string, firstIteration bool, incre
 
 			thisOutFilename := item.PageSetting("output-file")
 
-			if _, exists := lastOutFileInfo[thisOutFilename]; exists {
-				for ii := range lastOutFileInfo[thisOutFilename].offsets {
-					if lastOutFileInfo[thisOutFilename].offsets[ii].pageHash == pageHashes[pp] {
+			if _, exists := (*lastOutFileInfo)[thisOutFilename]; exists {
+				for ii := range (*lastOutFileInfo)[thisOutFilename].Offsets {
+					if (*lastOutFileInfo)[thisOutFilename].Offsets[ii].PageHash == pageHashes[pp] {
 						if _, exists := usedObjs[thisOutFilename]; !exists {
 							usedObjs[thisOutFilename] = make([]int, 0)
 						}
-						usedObjs[thisOutFilename] = append(usedObjs[thisOutFilename], lastOutFileInfo[thisOutFilename].offsets[ii].objNum)
+						usedObjs[thisOutFilename] = append(usedObjs[thisOutFilename], (*lastOutFileInfo)[thisOutFilename].Offsets[ii].ObjNum)
 						break
 					}
 				}
@@ -1392,9 +1489,8 @@ func renderPages(pbBook *PbBook, outPageRange string, firstIteration bool, incre
 
 	for pp := range pbBook.pages {
 		changed := false
-		if changed, _ = fileChanged(inFiles, lastModTime); changed && (!incrementalPdf || firstIteration) {
-			lastOutFileInfo = nil
-			return backgroundCache, true
+		if changed, _ = fileChanged(inFiles, lastModTime); changed && lastOutFileInfo == nil {
+			return backgroundCache, nil
 		}
 		page := &pbBook.pages[pp]
 
@@ -1409,7 +1505,7 @@ func renderPages(pbBook *PbBook, outPageRange string, firstIteration bool, incre
 
 		thisOutFilename := maxOutFileName(item, outFileInfo)
 
-		if isPageInRange(outPageRange, pp, firstIteration) || isCurrentPage(pbBook, pp) {
+		if isPageInRange(outPageRange, pp, lastOutFileInfo == nil) || isCurrentPage(pbBook, pp) {
 			var top float64
 			var bottom float64
 			var left float64
@@ -1503,25 +1599,23 @@ func renderPages(pbBook *PbBook, outPageRange string, firstIteration bool, incre
 			if info, exists = outFileInfo[thisOutFilename]; !exists {
 				info = OutFileInfo{}
 				found := false
-				if incrementalPdf && !firstIteration && lastOutFileInfo != nil {
-					if _, exists := lastOutFileInfo[thisOutFilename]; exists {
-						info.n = lastOutFileInfo[thisOutFilename].n
+				if lastOutFileInfo != nil {
+					if _, exists := (*lastOutFileInfo)[thisOutFilename]; exists {
+						info.N = (*lastOutFileInfo)[thisOutFilename].N
 						found = true
 						n, err := writeNewline(thisOutFilename)
 						if err != nil {
-							lastOutFileInfo = nil
-							return backgroundCache, true
+							return backgroundCache, nil
 						}
-						info.n += n
+						info.N += n
 					}
 				}
 				if !found {
 					n, err := writeHeader(thisOutFilename)
 					if err != nil {
-						lastOutFileInfo = nil
-						return backgroundCache, true
+						return backgroundCache, nil
 					}
-					info.n = n
+					info.N = n
 				}
 				outFileInfo[thisOutFilename] = info
 			}
@@ -1537,39 +1631,37 @@ func renderPages(pbBook *PbBook, outPageRange string, firstIteration bool, incre
 			slices.Sort(usedObjs[thisOutFilename])
 
 			w, h := item.PageSizePts()
-			info.offsets = append(info.offsets, PageInfo{info.n, w, h, pp, objNum, pageHashes[pp]})
+			info.Offsets = append(info.Offsets, PageInfo{info.N, w, h, pp, objNum, pageHashes[pp]})
 
 			thisn, thisErr := writePage(dst, objNum, pp, thisOutFilename, item.IntPageSetting("output-compression"), conversions)
 			if thisErr != nil {
-				lastOutFileInfo = nil
-				return backgroundCache, true
+				return backgroundCache, nil
 			}
 
 			// if Opts.Verbose("D") {
 			// 	log.Printf("Wrote Page %v / %v to %v", pp+1, len(pbBook.pages), thisOutFilename)
 			// }
 
-			info.n += thisn
+			info.N += thisn
 
 			outFileInfo[thisOutFilename] = info
-		} else if incrementalPdf && !firstIteration && lastOutFileInfo != nil {
-			if _, exists := lastOutFileInfo[thisOutFilename]; exists {
-				for ii, lastOffset := range lastOutFileInfo[thisOutFilename].offsets {
-					if lastOutFileInfo[thisOutFilename].offsets[ii].pageHash == pageHashes[pp] {
+		} else if lastOutFileInfo != nil {
+			if _, exists := (*lastOutFileInfo)[thisOutFilename]; exists {
+				for ii, lastOffset := range (*lastOutFileInfo)[thisOutFilename].Offsets {
+					if (*lastOutFileInfo)[thisOutFilename].Offsets[ii].PageHash == pageHashes[pp] {
 						var info OutFileInfo
 						if _, exists := outFileInfo[thisOutFilename]; !exists {
 							info = OutFileInfo{}
-							info.n = lastOutFileInfo[thisOutFilename].n
+							info.N = (*lastOutFileInfo)[thisOutFilename].N
 							n, err := writeNewline(thisOutFilename)
 							if err != nil {
-								lastOutFileInfo = nil
-								return backgroundCache, true
+								return backgroundCache, nil
 							}
-							info.n += n
+							info.N += n
 						} else {
 							info = outFileInfo[thisOutFilename]
 						}
-						info.offsets = append(info.offsets, PageInfo{lastOffset.offset, lastOffset.width, lastOffset.height, pp, lastOffset.objNum, pageHashes[pp]})
+						info.Offsets = append(info.Offsets, PageInfo{lastOffset.Offset, lastOffset.Width, lastOffset.Height, pp, lastOffset.ObjNum, pageHashes[pp]})
 						outFileInfo[thisOutFilename] = info
 						break
 					}
@@ -1579,17 +1671,15 @@ func renderPages(pbBook *PbBook, outPageRange string, firstIteration bool, incre
 	}
 
 	for outFilename, info := range outFileInfo {
-		bytesWritten, endErr := writeFooter(outFilename, info.n, info.offsets)
+		bytesWritten, endErr := writeFooter(outFilename, info.N, info.Offsets)
 		if endErr != nil {
-			lastOutFileInfo = nil
-			return backgroundCache, true
+			return backgroundCache, nil
 		}
-		info.n = bytesWritten
+		info.N = bytesWritten
 		outFileInfo[outFilename] = info
 	}
 
-	lastOutFileInfo = outFileInfo
-	return backgroundCache, false
+	return backgroundCache, &outFileInfo
 }
 
 func renderImageFile(item *PbItem, pbBook *PbBook, conversions map[string][]string, cache []BackgroundCacheItem, density float64) []BackgroundCacheItem {

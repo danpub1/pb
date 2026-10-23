@@ -2,9 +2,9 @@ package main
 
 import (
 	"archive/zip"
-	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"hash/fnv"
 	"io"
 	"io/fs"
 	"log"
@@ -691,11 +691,17 @@ func compareItemsByFilename(a PbItem, b PbItem) int {
 	return compareFilenames(a.Setting("image"), b.Setting("image"))
 }
 
+func fnv128a(bytes []byte) []byte {
+	hasher := fnv.New128a()
+	hasher.Write(bytes)
+	return hasher.Sum(nil)
+}
+
 func compareItemsByHash(seed string) func(a PbItem, b PbItem) int {
 	return func(a PbItem, b PbItem) int {
-		hashbytes := sha256.Sum256([]byte(a.Setting("image") + seed))
+		hashbytes := fnv128a([]byte(a.Setting("image") + seed))
 		ahash := hex.EncodeToString(hashbytes[:])
-		hashbytes = sha256.Sum256([]byte(b.Setting("image") + seed))
+		hashbytes = fnv128a([]byte(b.Setting("image") + seed))
 		bhash := hex.EncodeToString(hashbytes[:])
 
 		return strings.Compare(ahash, bhash)

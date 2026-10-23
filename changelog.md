@@ -1,4 +1,16 @@
-# Changelog
+# 
+
+## Unreleased
+### Overview
+### Added
+* Cache output of convert commands
+### Changed
+* Write lastOutFileInfo to a file so it can survive runs rather than just being in memory
+* Move cache files to `.pb` folder
+* Use FNV-1a 128 instead of SHA256 for performance
+### Deprecated
+### Fixed
+### Removed
 
 ## v2.1.0
 ### Overview
@@ -22,8 +34,6 @@
 * Add `{{%page%}}` to output filename format instead of trying to decide when to add a number or not
 ### Deprecated
 * Nothing
-### Removed
-* `output-mozjpeg` and `output-mozjpeg-sampling`, replaced by external image conversion commands
 ### Fixed
 * Fix crop rectangle calculation
 * Do not break out of subsequent iterations with page-range:$
@@ -32,6 +42,8 @@
 * Fix default settings when using units other than points
 * Fix change detection when using page-range:$
 * Fix panic when measured text is too big 
+### Removed
+* `output-mozjpeg` and `output-mozjpeg-sampling`, replaced by external image conversion commands
 
 ## v2.0.0
 ### Overview
@@ -77,13 +89,13 @@
 * Changed verbose modes to `D`, `DD` (new), and `DDD` (was `L`) and verbose output modes to `P` and `PP` was (`X`)
 ### Deprecated
 * Nothing
-### Removed
-* Nothing
 ### Fixed
 * Recursing into zip files
 * Correctly use row-specific spread-percent when aligning rows
 * Margins & Binding
 * Don't truncate PDF page sizes to integers
+### Removed
+* Nothing
 
 
 ## v1.1.0
@@ -102,12 +114,12 @@
 * Help coded into default settings
 ### Deprecated
 * Nothing
-### Removed
-* Nothing
 ### Fixed
 * Handle errors from `ImageReader.Reader()`
 * Check for existence of file before watching a file
 * Don't localize paths to embedded files
+### Removed
+* Nothing
 
 ## v1.0.0
 

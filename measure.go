@@ -25,7 +25,7 @@ func loadImageCache() map[string]ImageCacheEntry {
 		return cache
 	}
 
-	bytes, err := os.ReadFile(".pbimagecache")
+	bytes, err := os.ReadFile(".pb/.pbimagecache")
 	if err == nil {
 		json.Unmarshal(bytes, &cache)
 	}
@@ -36,7 +36,8 @@ func loadImageCache() map[string]ImageCacheEntry {
 func saveImageCache(cache *map[string]ImageCacheEntry) {
 	bytes, err := json.Marshal(cache)
 	if err == nil {
-		os.WriteFile(".pbimagecache", bytes, 0666)
+		ensureConfigExists()
+		os.WriteFile(".pb/.pbimagecache", bytes, 0666)
 	}
 }
 

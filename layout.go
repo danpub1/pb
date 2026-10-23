@@ -1,7 +1,6 @@
 package main
 
 import (
-	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -335,7 +334,7 @@ func loadResizeCache() map[string]string {
 	// 	return cache
 	// }
 
-	// bytes, err := os.ReadFile(".pbresizecache")
+	// bytes, err := os.ReadFile(".pb/.pbresizecache")
 	// if err == nil {
 	// 	json.Unmarshal(bytes, &cache)
 	// }
@@ -346,12 +345,13 @@ func loadResizeCache() map[string]string {
 func saveResizeCache(cache *map[string]string) {
 	// bytes, err := json.Marshal(cache)
 	// if err == nil {
-	// 	os.WriteFile(".pbresizecache", bytes, 0666)
+	//  ensureConfigExists()
+	// 	os.WriteFile(".pb/.pbresizecache", bytes, 0666)
 	// }
 }
 
 func checkResizeCacheEntry(_ /*cache*/ *map[string]string, jsonValue string) (string, string) {
-	hashbytes := sha256.Sum256([]byte(jsonValue))
+	hashbytes := fnv128a([]byte(jsonValue))
 	jsonhash := hex.EncodeToString(hashbytes[:])
 	// if entry, exists := (*cache)[jsonhash]; exists {
 	// 	return entry, jsonhash

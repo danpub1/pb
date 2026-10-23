@@ -154,6 +154,10 @@ func hasFilesToWatch(filenames []string) bool {
 	return false
 }
 
+func ensureConfigExists() {
+	os.MkdirAll(".pb", 0750)
+}
+
 func fileChanged(filenames []string, lastModTime time.Time) (bool, time.Time) {
 
 	newModTime := time.Time{}
@@ -349,7 +353,12 @@ func main() {
 
 		flat := pbBook.Flatten()
 		pageRange := Opts.PageRange()
-		firstIteration = pageRange != "$" || firstIteration
+		lastOutFileInfo, incrementalPdf := loadOutFileInfo()
+		if incrementalPdf && pageRange != "$" {
+			saveOutFileInfo(nil)
+			lastOutFileInfo = nil
+		}
+		incrementalPdf = pageRange == "$" && incrementalPdf
 		calculatedPageRange := pageRange
 		includePages := "0"
 		if lastIteration != nil {
@@ -361,7 +370,7 @@ func main() {
 		}
 
 		if pageRange == "$" {
-			if !firstIteration {
+			if incrementalPdf {
 				calculatedPageRange = strings.ReplaceAll(calculatedPageRange, "$", includePages)
 			} else {
 				calculatedPageRange = "-"
@@ -373,23 +382,21 @@ func main() {
 		lastIteration = flat
 
 		// calculate sizes that fills available space
-		resized := resizePages(pbBook, calculatedPageRange, firstIteration)
+		resized := resizePages(pbBook, calculatedPageRange, !incrementalPdf)
 
 		// If resized was not aborted because of a file being saved
-		if !resized {
-			firstIteration = true
-		} else {
+		if resized {
 			if Opts.Verbose("D") {
 				log.Printf("Resized pages")
 			}
 
 			// determine positions on page
-			layoutPages(pbBook, calculatedPageRange, firstIteration)
+			layoutPages(pbBook, calculatedPageRange, !incrementalPdf)
 			if Opts.Verbose("D") {
 				log.Printf("Laid out pages")
 			}
 
-			packPages(pbBook, calculatedPageRange, firstIteration)
+			packPages(pbBook, calculatedPageRange, !incrementalPdf)
 			if Opts.Verbose("D") {
 				log.Printf("Packed pages")
 			}
@@ -399,7 +406,8 @@ func main() {
 			}
 
 			cache := renderImageFiles(pbBook, conversions, nil)
-			cache, firstIteration = renderPages(pbBook, calculatedPageRange, firstIteration, pageRange == "$", flat, conversions, cache)
+			cache, lastOutFileInfo = renderPages(pbBook, calculatedPageRange, lastOutFileInfo, flat, conversions, cache)
+			saveOutFileInfo(lastOutFileInfo)
 			assemble(items)
 		}
 

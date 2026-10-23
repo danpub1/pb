@@ -3,11 +3,11 @@ package main
 import (
 	"archive/zip"
 	"bufio"
-	"crypto/sha256"
 	_ "embed"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"hash/fnv"
 	"image"
 	"image/color"
 	"image/draw"
@@ -745,7 +745,7 @@ func (item *PbItem) HashImage() string {
 	}
 
 	buffer := make([]byte, 256*1024)
-	hash := sha256.New()
+	hash := fnv.New128a()
 
 	for {
 		n, err := reader.Read(buffer)
@@ -1682,7 +1682,7 @@ func (book *PbBook) Flatten() []string {
 			wholePage.WriteString("]}")
 		}
 		wholePage.WriteString("]}")
-		hashbytes := sha256.Sum256([]byte(wholePage.String()))
+		hashbytes := fnv128a([]byte(wholePage.String()))
 		pageHash := hex.EncodeToString(hashbytes[:])
 		rv = append(rv, pageHash)
 	}
