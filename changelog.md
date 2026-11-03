@@ -1,4 +1,4 @@
-# 
+# Change Log
 
 ## Unreleased
 ### Overview
@@ -10,6 +10,7 @@
 * Use FNV-1a 128 instead of SHA256 for performance
 ### Deprecated
 ### Fixed
+* Issue with duplicate pages
 ### Removed
 
 ## v2.1.0
