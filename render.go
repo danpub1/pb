@@ -1441,6 +1441,19 @@ func saveOutFileInfo(outFileInfo *map[string]OutFileInfo) {
 	}
 }
 
+func isUsed(usedObjs map[string][]int, thisOutFilename string, obj int) bool {
+	if thisUsedObjs, exists := usedObjs[thisOutFilename]; exists {
+		if len(thisUsedObjs) > 0 {
+			for ii := range thisUsedObjs {
+				if ii == obj {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
 func renderPages(pbBook *PbBook, outPageRange string, lastOutFileInfo *map[string]OutFileInfo, pageHashes []string, conversions map[string][]string, backgroundCache []BackgroundCacheItem) ([]BackgroundCacheItem, *map[string]OutFileInfo) {
 	outFileInfo := make(map[string]OutFileInfo, 0)
 
@@ -1471,7 +1484,7 @@ func renderPages(pbBook *PbBook, outPageRange string, lastOutFileInfo *map[strin
 
 			if _, exists := (*lastOutFileInfo)[thisOutFilename]; exists {
 				for ii := range (*lastOutFileInfo)[thisOutFilename].Offsets {
-					if (*lastOutFileInfo)[thisOutFilename].Offsets[ii].PageHash == pageHashes[pp] {
+					if (*lastOutFileInfo)[thisOutFilename].Offsets[ii].PageHash == pageHashes[pp] && !isUsed(usedObjs, thisOutFilename, (*lastOutFileInfo)[thisOutFilename].Offsets[ii].ObjNum) {
 						if _, exists := usedObjs[thisOutFilename]; !exists {
 							usedObjs[thisOutFilename] = make([]int, 0)
 						}
